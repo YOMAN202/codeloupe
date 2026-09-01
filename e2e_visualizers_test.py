@@ -178,13 +178,58 @@ with sync_playwright() as p:
     )
     run_case(page, "max-depth-binary-tree", correct_maxdepth, "Tree (correct max depth)", ["tree-node", "tree-canvas"])
 
+    buggy_maxdepth = tree_helpers + (
+        "def max_depth(values):\n"
+        "    root = build_tree(values)\n"
+        "    def helper(node):\n"
+        "        if node is None:\n"
+        "            return 0\n"
+        "        # bug: only ever descends left, right subtree never counted\n"
+        "        return 1 + helper(node.left)\n"
+        "    return helper(root)\n"
+    )
+    run_case(page, "max-depth-binary-tree", buggy_maxdepth, "Tree (buggy - ignores right subtree)", ["tree-node", "tree-canvas"])
+
     # ---- 5. Stacks / queues -------------------------------------------------
     correct_valid_paren = "def is_valid_parens(s):\n    stack = []\n    pairs = {')': '(', ']': '[', '}': '{'}\n    for c in s:\n        if c in pairs:\n            if not stack or stack.pop() != pairs[c]:\n                return False\n        else:\n            stack.append(c)\n    return not stack\n"
     run_case(page, "valid-parentheses", correct_valid_paren, "Stack (correct valid parens)", ["sq-stack", "sq-cell"])
 
+    buggy_valid_paren = "def is_valid_parens(s):\n    stack = []\n    pairs = {')': '(', ']': '[', '}': '{'}\n    for c in s:\n        if c in pairs:\n            # bug: never checks the popped value matches, just pops blindly\n            if stack:\n                stack.pop()\n        else:\n            stack.append(c)\n    return not stack\n"
+    run_case(page, "valid-parentheses", buggy_valid_paren, "Stack (buggy - doesn't check bracket type match)", ["sq-stack", "sq-cell"])
+
+    correct_recent_calls = (
+        "from collections import deque\n\n"
+        "def recent_counter_ops(pings):\n"
+        "    q = deque()\n"
+        "    result = []\n"
+        "    for p in pings:\n"
+        "        q.append(p)\n"
+        "        while q[0] < p - 3000:\n"
+        "            q.popleft()\n"
+        "        result.append(len(q))\n"
+        "    return result\n"
+    )
+    run_case(page, "number-of-recent-calls", correct_recent_calls, "Queue (correct recent-calls, deque)", ["sq-queue", "sq-cell"])
+
+    buggy_recent_calls = (
+        "from collections import deque\n\n"
+        "def recent_counter_ops(pings):\n"
+        "    q = deque()\n"
+        "    result = []\n"
+        "    for p in pings:\n"
+        "        q.append(p)\n"
+        "        # bug: wrong window bound, never evicts anything\n"
+        "        result.append(len(q))\n"
+        "    return result\n"
+    )
+    run_case(page, "number-of-recent-calls", buggy_recent_calls, "Queue (buggy - never evicts stale entries)", ["sq-queue", "sq-cell"])
+
     # ---- 6. Sorting -------------------------------------------------------
     correct_bubble = "def bubble_sort(arr):\n    n = len(arr)\n    for i in range(n):\n        for j in range(n - i - 1):\n            if arr[j] > arr[j + 1]:\n                arr[j], arr[j + 1] = arr[j + 1], arr[j]\n    return arr\n"
     run_case(page, "bubble-sort", correct_bubble, "Sorting (correct bubble sort)", ["sort-bars", "sort-bar"])
+
+    buggy_bubble = "def bubble_sort(arr):\n    n = len(arr)\n    for i in range(n):\n        for j in range(n - i - 1):\n            # bug: wrong comparison direction, sorts descending instead of ascending\n            if arr[j] < arr[j + 1]:\n                arr[j], arr[j + 1] = arr[j + 1], arr[j]\n    return arr\n"
+    run_case(page, "bubble-sort", buggy_bubble, "Sorting (buggy - sorts descending, wrong answer)", ["sort-bars", "sort-bar"])
 
     # ---- 7. Graphs (grid) --------------------------------------------------
     correct_flood = "def flood_fill(image, sr, sc, color):\n    old = image[sr][sc]\n    if old == color:\n        return image\n    def dfs(r, c):\n        if r < 0 or r >= len(image) or c < 0 or c >= len(image[0]) or image[r][c] != old:\n            return\n        image[r][c] = color\n        dfs(r+1, c); dfs(r-1, c); dfs(r, c+1); dfs(r, c-1)\n    dfs(sr, sc)\n    return image\n"
@@ -290,9 +335,15 @@ with sync_playwright() as p:
     correct_laststone = "import heapq\ndef last_stone_weight(stones):\n    heap = [-s for s in stones]\n    heapq.heapify(heap)\n    while len(heap) > 1:\n        a = -heapq.heappop(heap)\n        b = -heapq.heappop(heap)\n        if a != b:\n            heapq.heappush(heap, -(a - b))\n    return -heap[0] if heap else 0\n"
     run_case(page, "last-stone-weight", correct_laststone, "Heap (correct last stone weight)", ["tree-node", "heap-node"])
 
+    buggy_laststone = "import heapq\ndef last_stone_weight(stones):\n    # bug: heapifies the raw (positive) values, so heapq's min-heap gives\n    # the SMALLEST stones first instead of the largest -- wrong answer,\n    # but heap structure is still fully populated and traceable.\n    heap = list(stones)\n    heapq.heapify(heap)\n    while len(heap) > 1:\n        a = heapq.heappop(heap)\n        b = heapq.heappop(heap)\n        if a != b:\n            heapq.heappush(heap, abs(a - b))\n    return heap[0] if heap else 0\n"
+    run_case(page, "last-stone-weight", buggy_laststone, "Heap (buggy - min-heap instead of max-heap, wrong answer)", ["tree-node", "heap-node"])
+
     # ---- 9. DP tables ---------------------------------------------------
     correct_climb = "def climb_stairs(n):\n    if n <= 2:\n        return n\n    dp = [0] * (n + 1)\n    dp[1] = 1\n    dp[2] = 2\n    for i in range(3, n + 1):\n        dp[i] = dp[i - 1] + dp[i - 2]\n    return dp[n]\n"
     run_case(page, "climbing-stairs", correct_climb, "DP (correct climbing stairs)", ["dp-cell", "dp-view"], test_case_index=3)
+
+    buggy_climb = "def climb_stairs(n):\n    if n <= 2:\n        return n\n    dp = [0] * (n + 1)\n    dp[1] = 1\n    dp[2] = 2\n    for i in range(3, n + 1):\n        # bug: forgets dp[i-2], so the table fills with the wrong recurrence\n        dp[i] = dp[i - 1]\n    return dp[n]\n"
+    run_case(page, "climbing-stairs", buggy_climb, "DP (buggy - drops dp[i-2] term, wrong answer)", ["dp-cell", "dp-view"], test_case_index=3)
 
     print()
     print(f"Console errors captured: {len(console_errors)}")
