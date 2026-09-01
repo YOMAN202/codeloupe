@@ -86,7 +86,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full breakdown — sy
 
 ## Running it locally
 
-Requires **Python 3.11+** and **Node 18+**. No environment variables or API keys are required to run the app — everything (including `PORT`/`FLASK_DEBUG`/`VITE_API_BASE`) has a working default.
+Requires **Python 3.11+** and **Node 18+**. No environment variables or API keys are required to run the app — everything (including `PORT`/`FLASK_DEBUG`/`VITE_API_BASE`/`CORS_ORIGINS`) has a working default. Those four only matter for a non-default setup, e.g. deploying the frontend and backend on separate hosts — see `docs/architecture.md`'s "Deployment" section.
 
 **1. Clone and set up the backend:**
 ```bash

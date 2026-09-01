@@ -5,6 +5,15 @@
 # backend), and the root-level e2e_*.py Playwright suites invoked by
 # run_all_tests.sh (use `playwright`, which also needs its browser binaries --
 # see README.md's setup steps for the one-time `playwright install chromium`).
+#
+# playwright is pinned EXACTLY, not a range: Playwright's Python package and
+# its downloaded browser build are version-coupled (each release expects a
+# specific Chromium revision), so an open range can silently resolve to a
+# newer playwright than whatever browser build ends up cached/installed --
+# `playwright install chromium` then fetches a mismatched build and every
+# suite fails with "Executable doesn't exist" instead of a clear version
+# error. Pinned to the exact version this project's own test suite is
+# actually validated against.
 -r requirements.txt
 requests>=2.31,<3.0
-playwright>=1.40,<2.0
+playwright==1.56.0

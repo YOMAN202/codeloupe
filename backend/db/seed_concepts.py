@@ -2983,7 +2983,11 @@ CONCEPT_CHECKPOINTS = {
              choices_json=None,
              correct_answer="[1, 4]",
              explanation_markdown="1+8=9 (too small, left+=1) -> 2+8=10, match at left=1, right=4. Returns "
-                                   "[1, 4] -- the INDICES of the pair (values 2 and 8), not the values themselves."),
+                                   "[1, 4] -- the INDICES of the pair (values 2 and 8), not the values themselves. "
+                                   "Note this returns 0-indexed positions, same as `left`/`right` throughout this "
+                                   "walkthrough -- if you apply this exact pattern to the linked 'Two Sum II' "
+                                   "problem below, check its signature first: that one asks for 1-indexed "
+                                   "positions, so it needs `[left + 1, right + 1]` instead."),
         dict(kind="complexity",
              prompt_markdown="Once an array of size n is already sorted, what's the time complexity of the "
                               "opposite-direction two-pointer scan over it?",

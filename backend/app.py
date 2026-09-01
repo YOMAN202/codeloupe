@@ -34,7 +34,13 @@ _LESSON_STATUSES = {"not_started", "in_progress", "completed", "skipped", "known
 _DONE_STATUSES = {"completed", "skipped", "known"}  # "no longer pending" for resume/recommended-next purposes
 
 app = Flask(__name__)
-CORS(app)
+# Wide open (any origin) by default -- correct for local dev, where the
+# frontend's origin varies by whatever port Vite picked. Set CORS_ORIGINS
+# (comma-separated) to restrict this when the frontend and backend are
+# deployed on separate hosts -- see docs/architecture.md's "Deployment"
+# section. Unset/empty leaves today's behavior unchanged.
+_cors_origins = os.environ.get("CORS_ORIGINS", "").strip()
+CORS(app, origins=[o.strip() for o in _cors_origins.split(",") if o.strip()] or "*")
 
 
 def row_to_dict(row):

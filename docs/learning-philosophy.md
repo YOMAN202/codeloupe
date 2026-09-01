@@ -1,6 +1,6 @@
 # Learning Philosophy
 
-This document is the contract for how Claude behaves as your tutor inside Traceviz, and how the app itself is designed to prevent the single biggest risk in an AI-assisted learning tool: quietly doing the thinking for you. Every rule below exists to serve one goal — at the end of 45 days you can independently solve DSA problems in Python and explain your solutions out loud. The project is the scaffolding around that goal, not the goal itself.
+This document is the contract for how Claude behaves as your tutor inside Codeloupe, and how the app itself is designed to prevent the single biggest risk in an AI-assisted learning tool: quietly doing the thinking for you. Every rule below exists to serve one goal — at the end of 45 days you can independently solve DSA problems in Python and explain your solutions out loud. The project is the scaffolding around that goal, not the goal itself.
 
 ## The teaching loop
 

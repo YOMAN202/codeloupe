@@ -110,11 +110,24 @@ Two related but distinct pieces:
 
 ## Deployment
 
-Codeloupe currently ships as two dev servers, which is the right shape for its actual use case (one person, one machine, `npm run dev` + `python3 app.py`). For deploying it somewhere more permanent, the recommended shape — nothing here is built yet, this is guidance, not infrastructure the project imposes on you:
+Codeloupe currently ships as two dev servers, which is the right shape for its actual use case (one person, one machine, `npm run dev` + `python3 app.py`). For deploying it somewhere more permanent, the recommended shape — nothing heavyweight here is built into the project, this is guidance for composing existing, ordinary tools, not infrastructure Codeloupe imposes on you:
 
-- **Backend:** run `backend/app.py` behind a production WSGI server (e.g. `gunicorn`), not Flask's own dev server. It needs no database server (SQLite file) and no environment variables beyond the already-optional `PORT`.
-- **Frontend:** `npm run build` produces a static site (`frontend/dist/`) that can be served by any static host or CDN, or placed behind the same reverse proxy as the backend. Point it at the backend via `VITE_API_BASE` at build time if the two aren't on the same origin.
-- **Sandbox caveat:** if this is ever exposed to untrusted users rather than run locally by its owner, the execution sandbox described above needs to be hardened first (real container isolation, not just a subprocess with resource limits) — this is a genuine gap, not an oversight to gloss over.
+- **Backend:** run `backend/app.py` behind a production WSGI server, not Flask's own dev server (the dev server itself prints a warning to this effect on every start). `app` is the module-level Flask instance, so any standard WSGI server can point at it directly, e.g.:
+  ```bash
+  pip install gunicorn   # not a project dependency -- add it only for this
+  gunicorn -w 4 -b 0.0.0.0:5001 app:app
+  ```
+  It needs no database server (SQLite file) and no environment variables beyond the already-optional `PORT` (and, if the frontend is on a different origin, `CORS_ORIGINS` below).
+
+- **Frontend:** `npm run build` produces a static site (`frontend/dist/`) with no server-side rendering. Serve it with any static file server or CDN -- for example `npx serve frontend/dist`, or an `nginx`/Caddy config pointing its document root at that directory, or any static hosting provider (Netlify, Vercel, GitHub Pages, S3+CloudFront, etc.). Because routing is hash-based (`HashRouter`), no server-side SPA-fallback/rewrite rule is needed even on a plain static host -- every route already lives after the `#`, so any 200 response for `index.html` serves every page correctly.
+
+- **Frontend/backend on separate hosts:** two things need to agree, both handled by env vars rather than code changes:
+  1. **`VITE_API_BASE`**, set at *build* time (Vite inlines it into the static bundle), pointed at wherever the backend actually runs, e.g. `VITE_API_BASE=https://api.example.com/api npm run build`.
+  2. **`CORS_ORIGINS`** on the backend (comma-separated list of allowed origins, e.g. `CORS_ORIGINS=https://app.example.com`). Unset, it defaults to allowing any origin (`CORS(app)` with no restriction) -- the correct default for local dev, where the frontend's origin varies by whatever port Vite picked, but worth tightening to the frontend's real origin for any deployment reachable from outside your own machine.
+
+  When frontend and backend are deployed on the *same* origin (a reverse proxy routing `/api/*` to the backend and everything else to the static build), neither variable is needed.
+
+- **Sandbox caveat -- read this before exposing the app to anyone but yourself:** the execution sandbox (subprocess isolation, a timeout, and a memory cap) is scoped to "don't let my own typo hang the app," not "defend against a hostile stranger's exploit." It has no seccomp profile, no container boundary, and no network isolation beyond what a bare subprocess already lacks. If Codeloupe is ever deployed somewhere that accepts code from users other than its own operator, the sandbox needs real hardening first (a container per execution, gVisor or similar, a proper seccomp profile) -- that is a genuine, unaddressed gap for a multi-user deployment, not an oversight glossed over here. For its actual intended use -- one person running their own code on their own machine, or a single trusted operator's own deployment -- the current model is appropriate.
 
 ## Known limitations
 

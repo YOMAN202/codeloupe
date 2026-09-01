@@ -1,4 +1,4 @@
-# Traceviz — 45-Day Python + DSA Curriculum
+# Codeloupe — 45-Day Python + DSA Curriculum
 
 **Starting point:** zero Python, zero DSA except basic Big-O intuition.
 **Target:** independently solve placement-level DSA problems in Python and explain the solution out loud.
