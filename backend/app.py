@@ -14,7 +14,7 @@ from flask_cors import CORS
 
 from db.init_db import get_connection, ensure_db
 from execution.sandbox import run_code
-from execution.test_runner import run_against_tests
+from execution.test_runner import run_against_tests, _extract_function_name
 from execution.tracer import trace_code
 from logic.revision import compute_next_schedule
 from logic.analysis import estimate_complexity, generate_hint_from_code
@@ -138,13 +138,13 @@ def set_lesson_progress(day):
 
 _PROBLEM_LIST_FIELDS = (
     "id, slug, title, day, topic, pattern, difficulty, "
-    "interview_priority, estimated_solve_minutes, progression_stage"
+    "interview_priority, estimated_solve_minutes, progression_stage, path_tier"
 )
 _PROBLEM_DETAIL_FIELDS = (
     "id, slug, title, day, topic, pattern, difficulty, description_markdown, "
     "constraints_markdown, function_signature, starter_code, "
     "expected_time_complexity, expected_space_complexity, edge_cases, comparison_mode, "
-    "interview_priority, estimated_solve_minutes, progression_stage, canonical_reference"
+    "interview_priority, estimated_solve_minutes, progression_stage, canonical_reference, path_tier"
 )
 
 
@@ -152,6 +152,7 @@ _PROBLEM_DETAIL_FIELDS = (
 def list_problems():
     day = request.args.get("day")
     topic = request.args.get("topic")
+    path_tier = request.args.get("path_tier")  # 'core' | 'extended' | 'advanced'
     conn = get_connection()
     query = f"SELECT {_PROBLEM_LIST_FIELDS} FROM problems WHERE 1=1"
     params = []
@@ -161,7 +162,10 @@ def list_problems():
     if topic:
         query += " AND topic = ?"
         params.append(topic)
-    query += " ORDER BY day, id"
+    if path_tier:
+        query += " AND path_tier = ?"
+        params.append(path_tier)
+    query += " ORDER BY CASE path_tier WHEN 'core' THEN 0 WHEN 'extended' THEN 1 ELSE 2 END, day, id"
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
@@ -395,6 +399,25 @@ def progress():
             streak += 1
             expected -= _dt.timedelta(days=1)
 
+    # ---- Core 45-Day Path completion, separate from extended/advanced ----
+    # Surfaced so the dashboard/UI can clearly communicate that finishing
+    # the Core Path (Easy/Medium, required) is "job-ready", while Extended
+    # and Advanced (Hard) problems are optional add-ons that never gate
+    # that message -- see docs/problem-roadmap.md.
+    tier_counts = conn.execute(
+        """SELECT p.path_tier, COUNT(*) total,
+                  SUM(CASE WHEN EXISTS (
+                      SELECT 1 FROM attempts a WHERE a.problem_id = p.id AND a.passed = 1
+                  ) THEN 1 ELSE 0 END) solved
+           FROM problems p GROUP BY p.path_tier"""
+    ).fetchall()
+    path_tier_progress = {
+        row["path_tier"]: {"total": row["total"], "solved": row["solved"] or 0}
+        for row in tier_counts
+    }
+    for tier in ("core", "extended", "advanced"):
+        path_tier_progress.setdefault(tier, {"total": 0, "solved": 0})
+
     # ---- lesson navigation: recommended next / resume / status counts ----
     lesson_rows = conn.execute(
         """SELECT l.day, l.title, l.block, COALESCE(lp.status, 'not_started') AS status, lp.updated_at
@@ -425,6 +448,7 @@ def progress():
         "problems_due_for_revision": [dict(r) for r in revision_due],
         "average_solve_time_seconds": avg_time,
         "hint_usage_rate": hint_usage_rate,
+        "path_tier_progress": path_tier_progress,
         "lesson_status_counts": status_counts,
         "recommended_next_lesson": recommended_next,
         "resume_lesson": resume,
@@ -478,6 +502,56 @@ def trace():
     if not isinstance(code, str) or not code.strip():
         return jsonify({"error": "Request body must include non-empty 'code'"}), 400
     result = trace_code(code)
+    return jsonify(result)
+
+
+@app.route("/api/problems/<slug>/trace", methods=["POST"])
+def trace_problem(slug):
+    """Like /api/trace, but for a problem-workspace submission specifically:
+    the learner's code is normally JUST a function definition (that's what
+    starter_code gives them), so tracing it raw would only ever show the
+    `def` statement itself -- the function body never runs because nothing
+    calls it. This appends an actual call to the learner's function using
+    one of the problem's own visible test cases (selectable by index), so
+    "Trace my code" is useful out of the box without the learner having to
+    hand-write their own driver/print statement first."""
+    payload = request.get_json(silent=True) or {}
+    code = payload.get("code", "")
+    test_case_index = payload.get("test_case_index", 0)
+    if not isinstance(code, str) or not code.strip():
+        return jsonify({"error": "Request body must include non-empty 'code'"}), 400
+
+    conn = get_connection()
+    problem = conn.execute(
+        "SELECT id, function_signature FROM problems WHERE slug = ?", (slug,)
+    ).fetchone()
+    if problem is None:
+        conn.close()
+        return jsonify({"error": f"No problem '{slug}'"}), 404
+    test_case_rows = conn.execute(
+        "SELECT input_args_json FROM test_cases WHERE problem_id = ? AND is_hidden = 0 ORDER BY id",
+        (problem["id"],),
+    ).fetchall()
+    conn.close()
+
+    if not test_case_rows:
+        return jsonify({"error": "This problem has no visible test cases to trace against"}), 400
+    try:
+        fn_name = _extract_function_name(problem["function_signature"])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 500
+
+    idx = test_case_index if isinstance(test_case_index, int) and 0 <= test_case_index < len(test_case_rows) else 0
+    args = json.loads(test_case_rows[idx]["input_args_json"])
+    # repr(), not json.dumps(): JSON's true/false/null aren't valid Python
+    # syntax -- the exact same class of bug the grading harness already
+    # hit once and fixed the same way (see test_runner.py).
+    augmented_code = code.rstrip() + f"\n\n{fn_name}(*{args!r})\n"
+
+    result = trace_code(augmented_code)
+    result["traced_test_case_index"] = idx
+    result["traced_test_case_args"] = args
+    result["traced_test_case_count"] = len(test_case_rows)
     return jsonify(result)
 
 

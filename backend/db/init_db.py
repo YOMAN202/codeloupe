@@ -95,16 +95,16 @@ def _seed_problems(conn):
                 related_problem_slugs, prerequisite_topics, has_stress_test,
                 stress_test_generator, brute_force_reference, comparison_mode,
                 interview_priority, estimated_solve_minutes, progression_stage,
-                canonical_reference)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (p["slug"], p["title"], p["day"], p["topic"], p["pattern"], p["difficulty"],
+                canonical_reference, path_tier)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (p["slug"], p["title"], p.get("day"), p["topic"], p["pattern"], p["difficulty"],
              p["description"], p.get("constraints", ""), p["function_signature"],
              p["starter_code"], p["expected_time_complexity"], p["expected_space_complexity"],
              p["brute_force_approach"], p["optimal_approach"], p["common_mistakes"],
              p["edge_cases"], "", "", 0, None, p["reference_solution"],
              p.get("comparison_mode", "exact"), p.get("interview_priority"),
              p.get("estimated_solve_minutes"), p.get("progression_stage"),
-             p.get("canonical_reference")),
+             p.get("canonical_reference"), p.get("path_tier", "core")),
         )
         problem_id = cur.lastrowid
 

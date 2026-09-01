@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import CodeEditor from "../../components/Editor/CodeEditor";
 import TraceViewer from "../../components/TraceViewer/TraceViewer";
-import { DifficultyBadge, PriorityBadge } from "../../components/Badges/Badges";
+import { DifficultyBadge, PriorityBadge, TierBadge } from "../../components/Badges/Badges";
 import MultilineText from "../../components/MultilineText/MultilineText";
 import {
   fetchProblem,
@@ -12,7 +12,7 @@ import {
   runProblem,
   fetchComplexityEstimate,
   logAttempt,
-  traceCode,
+  traceProblem,
 } from "../../api/client";
 
 const TABS = ["Tests", "Hints", "Trace", "Complexity"];
@@ -40,6 +40,7 @@ export default function ProblemWorkspace() {
 
   const [trace, setTrace] = useState(null);
   const [tracing, setTracing] = useState(false);
+  const [traceTestCaseIndex, setTraceTestCaseIndex] = useState(0);
 
   const [startedAt, setStartedAt] = useState(Date.now());
   const [attemptFeedback, setAttemptFeedback] = useState(null);
@@ -53,6 +54,7 @@ export default function ProblemWorkspace() {
     setSolutionRevealed(false);
     setComplexity(null);
     setTrace(null);
+    setTraceTestCaseIndex(0);
     setAttemptFeedback(null);
     setStartedAt(Date.now());
     setTab("Tests");
@@ -139,7 +141,11 @@ export default function ProblemWorkspace() {
     setTracing(true);
     setTrace(null);
     try {
-      const result = await traceCode(code);
+      // Traces against a real test case (not the bare code as-typed) --
+      // starter code is just a function signature with no call to it, so
+      // without this the trace would never actually enter the function
+      // body. See client.js's traceProblem / app.py's /trace docstring.
+      const result = await traceProblem(slug, code, traceTestCaseIndex);
       setTrace(result);
     } catch (e) {
       setError(e.message);
@@ -159,6 +165,7 @@ export default function ProblemWorkspace() {
           <div className="page-header">
             <div className="lesson-detail-title">
               <h2>{problem.title}</h2>
+              <TierBadge tier={problem.path_tier} />
               <DifficultyBadge difficulty={problem.difficulty} />
               <PriorityBadge priority={problem.interview_priority} />
             </div>
@@ -166,9 +173,15 @@ export default function ProblemWorkspace() {
               {problem.topic} &middot; {problem.pattern}
               {problem.canonical_reference && <> &middot; {problem.canonical_reference}</>}
             </p>
-            <Link to={`/lessons/${problem.day}`} className="muted small">
-              &larr; back to Day {problem.day}
-            </Link>
+            {problem.day != null ? (
+              <Link to={`/lessons/${problem.day}`} className="muted small">
+                &larr; back to Day {problem.day}
+              </Link>
+            ) : (
+              <Link to="/problems" className="muted small">
+                &larr; back to problem bank
+              </Link>
+            )}
           </div>
 
           <MultilineText text={problem.description_markdown} />
@@ -309,9 +322,30 @@ export default function ProblemWorkspace() {
 
             {tab === "Trace" && (
               <div>
+                {problem.visible_test_cases?.length > 1 && (
+                  <label className="trace-testcase-picker">
+                    Trace against:{" "}
+                    <select
+                      value={traceTestCaseIndex}
+                      onChange={(e) => setTraceTestCaseIndex(Number(e.target.value))}
+                    >
+                      {problem.visible_test_cases.map((tc, i) => (
+                        <option key={i} value={i}>
+                          test case {i + 1}: {JSON.stringify(tc.args)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <button className="chip" onClick={runTrace} disabled={tracing}>
                   {tracing ? "Tracing..." : "Trace my code"}
                 </button>
+                {trace?.traced_test_case_args && (
+                  <p className="muted small">
+                    Traced with: <code>{problem.function_signature.match(/def\s+(\w+)/)?.[1]}(
+                    {trace.traced_test_case_args.map((a) => JSON.stringify(a)).join(", ")})</code>
+                  </p>
+                )}
                 <TraceViewer trace={trace} />
               </div>
             )}

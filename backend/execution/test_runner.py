@@ -13,6 +13,19 @@ from execution.sandbox import run_code
 
 _COMPARE_HELPERS = '''
 def __traceviz_compare(actual, expected, mode):
+    if mode == "float_close":
+        # A handful of Hard/Advanced problems (e.g. Median of Two Sorted
+        # Arrays) have a float answer that can legitimately be computed via
+        # a different but mathematically-equivalent sequence of operations,
+        # producing a tiny floating-point rounding difference from the
+        # seeded reference solution's exact bit pattern. Exact "==" would
+        # unfairly fail a correct submission in that case, so this mode
+        # tolerates a very small epsilon instead.
+        import math
+        try:
+            return math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-9)
+        except TypeError:
+            return actual == expected
     if mode == "unordered_list":
         try:
             return sorted(actual) == sorted(expected)

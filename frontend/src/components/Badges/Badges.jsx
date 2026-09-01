@@ -25,3 +25,21 @@ export function DifficultyBadge({ difficulty }) {
   if (!difficulty) return null;
   return <span className={`badge difficulty-${difficulty}`}>{difficulty}</span>;
 }
+
+const TIER_META = {
+  core: { emoji: "🔥", label: "Core 45-Day Path" },
+  extended: { emoji: "⭐", label: "Extended Practice" },
+  advanced: { emoji: "🏆", label: "Advanced Challenge" },
+};
+
+export function TierBadge({ tier }) {
+  const meta = TIER_META[tier];
+  if (!meta) return null;
+  return (
+    <span className={`badge tier-${tier}`}>
+      {meta.emoji} {meta.label}
+    </span>
+  );
+}
+
+export { TIER_META };

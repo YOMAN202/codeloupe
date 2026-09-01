@@ -12,6 +12,36 @@ traces arbitrary Python reasonably well for typical DSA-style code
 deeply nested C-extension calls, threads, and pathological code (huge
 loops, deep recursion) are capped rather than fully captured. See
 MAX_STEPS below and docs/decisions.md.
+
+Core design principle: Traceviz traces what the learner's code ACTUALLY
+does, bugs included -- it is not a canned animation of a correct
+algorithm. That means the trace must stay useful when the submitted code
+is wrong, not just when it's correct. Concretely, `status` in the return
+value distinguishes five outcomes a learner can hit:
+  - "completed"      ran to the end without error. Might still be a wrong
+                      answer -- that's the grading endpoint's job to say,
+                      not the tracer's; the trace itself is just faithful.
+  - "runtime_error"   the submission raised an exception mid-execution
+                      (IndexError, TypeError, etc). `steps` holds every
+                      step captured before the crash, and `error` holds
+                      the exception type/message/line, so the learner can
+                      see exactly what their code did up to the failure.
+  - "truncated"       hit MAX_STEPS (almost always an infinite loop/
+                      unbounded recursion). `steps` holds the first
+                      MAX_STEPS captured, so the learner can see the
+                      pattern that's looping, not just a blank timeout.
+  - "syntax_error"    the code didn't compile at all -- no execution, no
+                      steps, `error` holds the parse error and line.
+  - "crashed"         a lower-level failure outside the above (sandbox
+                      process killed by wall-clock timeout before the
+                      trace payload could be printed, or output the
+                      parent process couldn't parse). Rare in practice --
+                      MAX_STEPS catches almost all infinite loops well
+                      before the wall-clock timeout fires -- but a single
+                      pathologically slow line within the step budget can
+                      still hit it. `steps` is empty here, which is the
+                      one case this tracer cannot show partial progress
+                      for.
 """
 import json
 import textwrap
@@ -21,12 +51,16 @@ from execution.sandbox import run_code
 MAX_STEPS = 2000
 
 _TRACER_HARNESS = textwrap.dedent('''
-    import sys, json as __tv_json, types as __tv_types
+    import sys, json as __tv_json, types as __tv_types, traceback as __tv_traceback
 
     __tv_steps = []
     __tv_depth = [0]
     __tv_truncated = [False]
+    __tv_error = [None]
     __tv_filename = "<submission>"
+
+    class __TVStepLimitExceeded(Exception):
+        pass
 
     def __tv_safe_value(v, depth=0, seen=None):
         if seen is None:
@@ -62,12 +96,22 @@ _TRACER_HARNESS = textwrap.dedent('''
         return repr(v)[:200]
 
     __tv_skip_frames = set()
+    __tv_exception_frames = set()
 
     def __tv_tracer(frame, event, arg):
         if len(__tv_steps) >= {max_steps}:
             __tv_truncated[0] = True
             sys.settrace(None)
-            return None
+            # Raising here (rather than just returning None) unwinds exec()
+            # immediately instead of letting an infinite loop keep running
+            # untraced in the background until the sandbox's wall-clock
+            # timeout eventually kills the whole process -- which would
+            # silently throw away every step already captured. Raising
+            # from inside the trace function itself propagates exactly as
+            # if the exception occurred at the currently-executing line of
+            # the traced code (verified via a standalone sys.settrace
+            # reproduction), so the steps collected so far survive intact.
+            raise __TVStepLimitExceeded()
         if frame.f_code.co_filename != __tv_filename:
             return __tv_tracer
         # A `class Foo:` block executes as its own frame (CPython runs the
@@ -104,24 +148,57 @@ _TRACER_HARNESS = textwrap.dedent('''
                 "function": frame.f_code.co_name, "call_depth": __tv_depth[0],
                 "locals": locs,
             }})
+        elif event == "exception":
+            # An exception is propagating OUT of this frame. Python still
+            # sends a "return" event right after this (with arg=None) as
+            # the frame unwinds -- that's not a real return, and recording
+            # it as one would misleadingly show every function on the call
+            # stack as having "returned None" right as the program crashed.
+            # Mark this frame so the return branch below can tell the
+            # difference and skip the fake step.
+            __tv_exception_frames.add(id(frame))
         elif event == "return":
-            __tv_steps.append({{
-                "event": "return", "line": frame.f_lineno,
-                "function": frame.f_code.co_name, "call_depth": __tv_depth[0],
-                "return_value": __tv_safe_value(arg),
-            }})
+            if id(frame) in __tv_exception_frames:
+                __tv_exception_frames.discard(id(frame))
+            else:
+                __tv_steps.append({{
+                    "event": "return", "line": frame.f_lineno,
+                    "function": frame.f_code.co_name, "call_depth": __tv_depth[0],
+                    "return_value": __tv_safe_value(arg),
+                }})
             __tv_depth[0] = max(0, __tv_depth[0] - 1)
         return __tv_tracer
 
-    __tv_code_obj = compile({user_code!r}, __tv_filename, "exec")
-    sys.settrace(__tv_tracer)
     try:
-        exec(__tv_code_obj, {{"__name__": "__main__"}})
-    finally:
-        sys.settrace(None)
+        __tv_code_obj = compile({user_code!r}, __tv_filename, "exec")
+    except SyntaxError as __tv_se:
+        __tv_code_obj = None
+        __tv_error[0] = {{"kind": "syntax_error", "type": "SyntaxError",
+                          "message": str(__tv_se), "line": __tv_se.lineno}}
+
+    if __tv_code_obj is not None:
+        sys.settrace(__tv_tracer)
+        try:
+            exec(__tv_code_obj, {{"__name__": "__main__"}})
+        except __TVStepLimitExceeded:
+            pass  # truncated -- already flagged via __tv_truncated, steps preserved
+        except Exception as __tv_exc:
+            # A genuine bug in the learner's own code (wrong array logic,
+            # a broken linked-list pointer, an off-by-one index, etc) --
+            # NOT a tracer failure. Capture what/where and fall through to
+            # print whatever steps were captured before the crash, so the
+            # frontend can show execution right up to the failure point.
+            __tv_tb_entries = __tv_traceback.extract_tb(__tv_exc.__traceback__)
+            __tv_submission_frames = [e for e in __tv_tb_entries if e.filename == __tv_filename]
+            __tv_crash_line = (__tv_submission_frames[-1].lineno if __tv_submission_frames
+                                else (__tv_tb_entries[-1].lineno if __tv_tb_entries else None))
+            __tv_error[0] = {{"kind": "runtime_error", "type": type(__tv_exc).__name__,
+                              "message": str(__tv_exc), "line": __tv_crash_line}}
+        finally:
+            sys.settrace(None)
 
     print("__TRACEVIZ_TRACE_START__")
-    print(__tv_json.dumps({{"steps": __tv_steps, "truncated": __tv_truncated[0]}}))
+    print(__tv_json.dumps({{"steps": __tv_steps, "truncated": __tv_truncated[0], "error": __tv_error[0]}}))
     print("__TRACEVIZ_TRACE_END__")
 ''')
 
@@ -135,23 +212,49 @@ def trace_code(user_code: str, timeout: int = 8) -> dict:
         payload = stdout.split("__TRACEVIZ_TRACE_START__")[1].split("__TRACEVIZ_TRACE_END__")[0].strip()
         try:
             data = json.loads(payload)
+            error = data.get("error")
+            truncated = data["truncated"]
+            # See the module docstring for what each status means. Order
+            # matters: a syntax error means zero steps ever ran; a runtime
+            # error takes priority over "truncated" since it's a more
+            # specific/actionable outcome (though the two are mutually
+            # exclusive in practice -- you can't both hit MAX_STEPS and
+            # raise on the very next line).
+            if error and error.get("kind") == "syntax_error":
+                status = "syntax_error"
+            elif error and error.get("kind") == "runtime_error":
+                status = "runtime_error"
+            elif truncated:
+                status = "truncated"
+            else:
+                status = "completed"
             return {
                 "steps": data["steps"],
-                "truncated": data["truncated"],
+                "truncated": truncated,
+                "error": error,
+                "status": status,
                 "stderr": exec_result["stderr"],
                 "crashed": False,
                 "limitations": (
                     "Traces only frames belonging to your submitted code (not library "
                     "internals). Values are captured by snapshot at each step, deeply "
                     f"nested objects are truncated past 4 levels, and tracing stops "
-                    f"after {MAX_STEPS} steps to keep this responsive."
+                    f"after {MAX_STEPS} steps to keep this responsive -- if your code "
+                    "hits that limit it's almost always an infinite loop or unbounded "
+                    "recursion, and the steps captured up to that point are shown below."
                 ),
             }
         except (json.JSONDecodeError, KeyError):
             pass
 
+    # The harness itself never got to print its markers -- e.g. the sandbox's
+    # wall-clock timeout killed the process while still inside a single slow
+    # line (rare: MAX_STEPS normally catches infinite loops first), or the
+    # process was killed some other way. No partial steps are recoverable
+    # in this specific case -- see the module docstring's "crashed" status.
     return {
-        "steps": [], "truncated": False, "stderr": exec_result["stderr"],
+        "steps": [], "truncated": False, "error": None, "status": "crashed",
+        "stderr": exec_result["stderr"],
         "crashed": True, "timed_out": exec_result.get("timed_out", False),
         "limitations": "Execution did not complete (crashed or timed out) -- see stderr.",
     }

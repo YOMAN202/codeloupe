@@ -70,7 +70,43 @@ The section above was written before any code existed, as a planning target. Wha
 - **Revision** = the existing adaptive spaced-repetition system (unchanged from the section above) -- a problem already solved comes back at 1/3/7/14-day intervals, compressed if hint-assisted.
 - Each individual problem ALSO internally carries a brute-force-then-optimal progression (`brute_force_approach` explained, then `optimal_approach` -- the 3-rung hint ladder walks a learner from one to the other), so even a single-problem pattern isn't just "here's the answer."
 
-**Known, disclosed gap: two patterns are thinner than the rest.** Heaps has exactly one problem (`kth-largest-stream`, Easy) with no Medium follow-up. Graphs has three Medium problems (`number-of-islands`, `max-area-of-island`, `network-delay-time`) but no dedicated Easy warm-up. Both are real gaps, not oversights papered over -- closing them properly (a verified Easy heap problem, a verified Easy graph traversal problem) is a reasonable next addition and is listed in `decisions.md`.
+**Known, disclosed gap (as of the original 32-problem cut): two patterns were thinner than the rest.** Heaps had exactly one problem with no Medium follow-up. Graphs had Medium problems but no dedicated Easy warm-up. Both were closed in the expansion documented in the next section.
+
+## Expansion: 32 -> 76 problems, three explicit tiers (Core / Extended / Advanced)
+
+Once Phase 1's end-to-end frontend was verified (see `decisions.md`'s "Non-linear curriculum navigation" and the E2E test suite), the problem bank was expanded from 32 to **76 problems**, organized by a new `path_tier` column (`'core'` | `'extended'` | `'advanced'`) rather than one flat list. Every new reference solution followed the same two-pass verification the original 32 did: standalone correctness checks before being written into `seed_problems.py`, then a live-API pass (`verify_all_live.py`) re-running every problem's own reference solution through the real grading endpoint after seeding.
+
+**1. Total Core problems: 51** (`path_tier='core'`, each tied to a specific curriculum day 8-42). This is the required 45-day path -- completing it is the "job-ready" bar the dashboard's Core Path progress bar tracks against.
+
+**2. Total Extended problems: 19** (`path_tier='extended'`, `day=NULL`). Optional Easy/Medium reinforcement, not required within 45 days, filterable via `GET /api/problems?path_tier=extended`.
+
+Plus a third tier added on explicit request, sitting outside both: **Advanced Challenges: 6 Hard problems** (`path_tier='advanced'`, `day=NULL`) -- Trapping Rain Water, Median of Two Sorted Arrays, Merge k Sorted Lists, Serialize/Deserialize Binary Tree, Word Ladder, and Edit Distance. Curated one per topic area that was thinnest at the Hard tier, not added to pad the count. Strictly optional: never tied to a day, never counted in Core Path completion, and the dashboard/problem-browser UI is explicit that Easy/Medium mastery (Core + Extended) is the primary goal.
+
+**3. Breakdown by topic (core / extended / advanced / total):**
+
+| Topic | Core | Extended | Advanced | Total |
+|---|---|---|---|---|
+| arrays | 4 | 3 | 1 | 8 |
+| binary-search | 3 | 2 | 1 | 6 |
+| dynamic-programming | 5 | 3 | 1 | 9 |
+| graphs | 6 | 1 | 1 | 8 |
+| hashing | 4 | 1 | 0 | 5 |
+| heaps | 4 | 0 | 1 | 5 |
+| linked-lists | 4 | 2 | 0 | 6 |
+| queues | 1 | 0 | 0 | 1 |
+| recursion | 4 | 1 | 0 | 5 |
+| sliding-window | 2 | 1 | 0 | 3 |
+| sorting | 4 | 0 | 0 | 4 |
+| stacks | 2 | 1 | 0 | 3 |
+| strings | 1 | 0 | 0 | 1 |
+| trees | 4 | 3 | 1 | 8 |
+| two-pointer | 3 | 1 | 0 | 4 |
+
+**4. Breakdown by difficulty (all 76):** Easy = 31, Medium = 39, Hard = 6 (all 6 Hard problems are `advanced`-tier and excluded from the required 51-problem Core Path -- 0 Hard problems appear in Core or Extended). Within Core + Extended (the 70 Easy/Medium problems), every topic above has at least one Easy AND one Medium entry except `queues` (1 Medium only) and `strings` (1 Easy only) -- both intentionally thin because most queue- and string-heavy interview patterns are categorized under `sliding-window`, `two-pointer`, and `arrays` instead (e.g. sliding-window and two-pointer problems are almost all string/array problems in practice); this is a categorization choice, disclosed here rather than left implicit.
+
+**5. Remaining weak coverage areas, disclosed honestly:** `queues` and `strings` as standalone topic labels (see above -- not a real coverage gap once sliding-window/two-pointer/arrays are counted, but worth knowing if filtering the problem browser by topic specifically). No topic has zero Extended-tier reinforcement except `sorting`, `heaps`, and `queues`/`strings` -- a reasonable next addition if further expansion happens, but not blocking: every topic already has full Core-tier Easy-to-Medium progression.
+
+**6. Trace/visualization support by topic:** every problem across all three tiers gets the generic trace viewer (step-through debugger with locals at each step) plus the auto-detected array/pointer view (any list-typed local rendered as indexed boxes, with matching int-typed locals shown as pointer tags) -- this already gives arrays, two-pointer, sliding-window, sorting, and binary-search a genuinely useful picture for free, and works identically whether the traced code is correct or buggy (see `decisions.md`'s section on tracing incorrect code). No topic has a bespoke, topic-aware visualizer yet (a dedicated linked-list node/pointer diagram, a real tree render, a graph node/edge diagram, a call-stack view for recursion, or a DP state table) -- that's the explicitly-deferred Phase 3 work, to be built progressively now that the problem bank and generic tracer are both verified end-to-end for correct AND incorrect code.
 
 **Stress testing / brute-force comparison (Phase 4, `has_stress_test`/`stress_test_generator` columns) is schema-ready but not populated** for any of the 32 problems yet -- every row currently has `has_stress_test=0`. This is an honest placeholder for a real, not-yet-built feature, not a silently-broken one: the columns exist so it can be added per-problem without a schema migration, but no stress-test generator functions have been written. See `decisions.md`.
 

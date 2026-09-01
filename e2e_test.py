@@ -173,6 +173,88 @@ def reverse_list(values):
         check("Resume callout appears on curriculum map after marking a lesson in_progress",
               page.locator(".callout-resume").count() > 0)
 
+        # Problem bank tier structure (Core 45-Day Path / Extended Practice /
+        # Advanced Challenges) -- covers the path_tier expansion.
+        page.goto(f"{BASE}/problems", wait_until="networkidle")
+        page.wait_for_selector(".tier-section-heading", timeout=10000)
+        tier_headings = page.locator(".tier-section-heading h3").all_inner_texts()
+        check("Problem browser shows all 3 tier sections (Core/Extended/Advanced)",
+              any("Core" in h for h in tier_headings) and any("Extended" in h for h in tier_headings)
+              and any("Advanced" in h for h in tier_headings), tier_headings)
+
+        # Extended/Advanced-tier problems have day=None -- regression check
+        # for a real bug this caught: the workspace used to render a raw
+        # "back to Day null" link and a dead /lessons/null route for them.
+        page.goto(f"{BASE}/problems/single-number", wait_until="networkidle")
+        page.wait_for_selector(".workspace-page", timeout=10000)
+        back_link = page.locator(".page-header a").first.inner_text()
+        check("Extended-tier (day=None) problem page has no leaked 'null' in its back-link",
+              "null" not in back_link.lower(), back_link)
+        check("Extended-tier problem shows the Extended tier badge",
+              page.locator(".tier-extended").count() > 0)
+
+        # Dashboard surfaces Core Path completion distinctly from optional tiers
+        page.goto(f"{BASE}/dashboard", wait_until="networkidle")
+        page.wait_for_selector(".core-path-progress", timeout=10000)
+        core_header = page.locator(".core-path-progress-header h3").inner_text()
+        check("Dashboard shows Core 45-Day Path completion", "Core 45-Day Path" in core_header, core_header)
+
+        check("No console errors across the extended tier-structure checks", len(console_errors) == 0, console_errors)
+
+        # Traceviz's core promise: the trace/visualization must stay useful
+        # for INCORRECT code too, not only correct solutions -- a learner's
+        # own bugs (wrong logic, crashes) are exactly what they need to see
+        # step-by-step. Exercise a runtime-error submission end-to-end.
+        page.goto(f"{BASE}/problems/contains-duplicate", wait_until="networkidle")
+        page.wait_for_selector(".monaco-editor", timeout=15000)
+        page.wait_for_timeout(500)
+        # Deliberately just the bare function body -- exactly what a
+        # learner actually types, with no manual call/print of their own.
+        # The trace endpoint must inject a real call using one of the
+        # problem's own test cases, or nothing would ever execute.
+        buggy_code = (
+            "def contains_duplicate(nums):\n"
+            "    for i in range(len(nums) + 1):  # BUG: off-by-one, walks past the end\n"
+            "        if nums[i] == nums[i + 1]:\n"
+            "            return True\n"
+            "    return False\n"
+        )
+        page.evaluate("(code) => window.__tracevizEditor.setValue(code)", buggy_code)
+        page.get_by_role("button", name="Trace", exact=True).click()
+        page.wait_for_timeout(300)
+        page.get_by_role("button", name="Trace my code").click()
+        page.wait_for_selector(".trace-status-banner", timeout=10000)
+        banner_text = page.locator(".trace-status-banner").inner_text()
+        check("Buggy code (IndexError) shows a runtime_error trace status banner",
+              "Crashed" in banner_text and "IndexError" in banner_text, banner_text)
+        check("Runtime-error banner shows a 'Jump to failure point' control",
+              page.get_by_text("Jump to failure point").count() > 0)
+        # The trace itself must still show real step data leading up to the
+        # crash, not an empty/blank trace -- this is the actual bug-fix
+        # being verified (previously, a runtime error discarded all steps).
+        check("Trace steps were preserved up to the crash (not empty)",
+              page.locator(".trace-step-info").count() > 0)
+
+        # An infinite loop must be caught by the step-limit and still show
+        # a preserved (truncated) trace, not hang or silently show nothing.
+        infinite_loop_code = (
+            "def contains_duplicate(nums):\n"
+            "    x = 0\n"
+            "    while True:  # BUG: no termination condition\n"
+            "        x += 1\n"
+            "    return False\n"
+        )
+        page.evaluate("(code) => window.__tracevizEditor.setValue(code)", infinite_loop_code)
+        page.get_by_role("button", name="Trace my code").click()
+        page.wait_for_selector(".trace-status-banner", timeout=15000)
+        banner_text2 = page.locator(".trace-status-banner").inner_text()
+        check("Infinite loop shows a truncated (step-limit) trace status banner, not a hang",
+              "Step limit reached" in banner_text2, banner_text2)
+        check("Truncated trace still shows step data (not discarded)",
+              page.locator(".trace-step-info").count() > 0)
+
+        check("No console errors after incorrect-code trace checks", len(console_errors) == 0, console_errors)
+
         browser.close()
 
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchProgress } from "../../api/client";
+import { TIER_META } from "../../components/Badges/Badges";
 
 function Stat({ label, value }) {
   return (
@@ -35,6 +36,41 @@ export default function Dashboard() {
         <h2>Dashboard</h2>
         <p className="muted">Where you actually stand -- no points, no streak badges, just data.</p>
       </div>
+
+      {progress.path_tier_progress && (
+        <section className="core-path-progress">
+          <div className="core-path-progress-header">
+            <h3>
+              {TIER_META.core.emoji} Core 45-Day Path: {progress.path_tier_progress.core.solved} /{" "}
+              {progress.path_tier_progress.core.total} solved
+            </h3>
+            <span className="muted small">
+              This is the required, job-ready foundation. Extended and Advanced below are optional
+              add-ons -- they never count against Core Path completion.
+            </span>
+          </div>
+          <div className="core-path-progress-bar">
+            <div
+              className="core-path-progress-fill"
+              style={{
+                width: `${pct(progress.path_tier_progress.core.solved, progress.path_tier_progress.core.total)}%`,
+              }}
+            />
+          </div>
+          <div className="core-path-tier-mini-stats">
+            <span>
+              {TIER_META.extended.emoji} Extended: {progress.path_tier_progress.extended.solved} /{" "}
+              {progress.path_tier_progress.extended.total}{" "}
+              <span className="muted">(optional reinforcement)</span>
+            </span>
+            <span>
+              {TIER_META.advanced.emoji} Advanced: {progress.path_tier_progress.advanced.solved} /{" "}
+              {progress.path_tier_progress.advanced.total}{" "}
+              <span className="muted">(optional Hard challenges)</span>
+            </span>
+          </div>
+        </section>
+      )}
 
       <div className="stat-grid">
         <Stat label="Problems attempted" value={progress.total_problems_attempted} />

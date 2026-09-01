@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS problems (
     id INTEGER PRIMARY KEY,
     slug TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
-    day INTEGER NOT NULL,          -- curriculum day this belongs to
+    day INTEGER,                   -- curriculum day this belongs to; NULL for
+                                    -- extended-practice problems not tied to a
+                                    -- specific required day (see path_tier)
     topic TEXT NOT NULL,           -- e.g. "arrays", "hashing"
     pattern TEXT,                  -- e.g. "two-pointer", "sliding-window"
     difficulty TEXT NOT NULL,      -- Easy / Medium / Hard
@@ -46,11 +48,12 @@ CREATE TABLE IF NOT EXISTS problems (
     has_stress_test INTEGER NOT NULL DEFAULT 0,
     stress_test_generator TEXT,    -- python source for generate(n) -> args tuple, or NULL
     brute_force_reference TEXT,    -- python source for a reference solution used in stress testing, or NULL
-    comparison_mode TEXT NOT NULL DEFAULT 'exact',  -- 'exact' | 'unordered_list' | 'unordered_list_of_lists'
+    comparison_mode TEXT NOT NULL DEFAULT 'exact',  -- 'exact' | 'float_close' | 'unordered_list' | 'unordered_list_of_lists' | 'unordered_list_of_sorted_lists'
     interview_priority TEXT,       -- 'Core' | 'Important' | 'Optional' -- interview-frequency curation, see problem-roadmap.md
     estimated_solve_minutes INTEGER,
     progression_stage TEXT,        -- 'core' | 'variation' -- whether this is a topic's primary problem or a follow-up building the same pattern
-    canonical_reference TEXT       -- e.g. "LeetCode 1: Two Sum" -- citation only, never copied problem text
+    canonical_reference TEXT,      -- e.g. "LeetCode 1: Two Sum" -- citation only, never copied problem text
+    path_tier TEXT NOT NULL DEFAULT 'core'  -- 'core' (required 45-day path, tied to a day) | 'extended' (optional Easy/Medium reinforcement, day is NULL) | 'advanced' (optional curated Hard problems, day is NULL, never required for Core Path completion)
 );
 
 -- Per-lesson learning status, independent of the recommended day order.

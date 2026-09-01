@@ -45,6 +45,13 @@ export const fetchSolution = (slug) => get(`/problems/${slug}/solution`);
 export const runProblem = (slug, code) => send("POST", `/problems/${slug}/run`, { code });
 export const fetchComplexityEstimate = (slug, code) =>
   send("POST", `/problems/${slug}/complexity-estimate`, { code });
+// Traces the learner's code AGAINST one of the problem's own test cases
+// (appends a real call using that test case's args before tracing) -- see
+// backend app.py's /api/problems/<slug>/trace docstring for why this is
+// necessary: starter code is just a bare function definition, so tracing
+// it raw would never actually run the function body at all.
+export const traceProblem = (slug, code, testCaseIndex = 0) =>
+  send("POST", `/problems/${slug}/trace`, { code, test_case_index: testCaseIndex });
 
 // ---- attempts / progress ------------------------------------------------
 export const logAttempt = (attempt) => send("POST", "/attempts", attempt);
