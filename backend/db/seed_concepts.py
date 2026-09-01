@@ -931,6 +931,198 @@ CONCEPT_LESSONS = [
             "directly, or `O(n log n)` for a heap-based approach to the same problem."
         ),
     ),
+    # ---- Batch 5: item 7 of the curriculum-ordered expansion -- recursion
+    # and backtracking (Days 23-24). Back to the pilot's topic+pattern
+    # split (6 curated problems share pattern_family_for's existing
+    # "Backtracking" rule -- comparable scale to Two Pointers). See
+    # docs/decisions.md "Teaching system expansion: batch 5" for the
+    # walkthrough-format decision this batch made (a hand-authored call
+    # stack rendered as an ordinary array, NOT CallStackView).
+    dict(
+        slug="recursion",
+        kind="topic",
+        topic="recursion",
+        pattern_family=None,
+        title="Recursion",
+        display_order=1,
+        estimated_minutes=18,
+        summary="A function that calls itself on a smaller version of the same problem, until a base case "
+                "stops it -- the foundation trees, backtracking, and DP all build on.",
+        prerequisite_slugs="arrays",
+        what_markdown=(
+            "A recursive function calls itself on a smaller version of the same problem, until it reaches a "
+            "**base case** simple enough to answer directly without calling itself again. Every call gets its "
+            "own separate set of local variables -- they don't share or overwrite each other -- and Python "
+            "tracks all the currently-active (not-yet-returned) calls on the **call stack**, one frame per "
+            "call, growing with every call and shrinking with every return."
+        ),
+        why_markdown=(
+            "Some problems have a structure that's naturally self-similar: a tree's subtree is itself a "
+            "smaller tree; \"all ways to arrange the rest of the list\" is the same kind of problem as \"all "
+            "ways to arrange the whole list\", just smaller. Recursion lets the code mirror that structure "
+            "directly -- solve the small piece, trust that the recursive call correctly solves the "
+            "smaller-still piece inside it, combine the results -- instead of manually managing an explicit "
+            "stack or queue of what's left to do."
+        ),
+        recognize_markdown=(
+            "The tell is a problem that's naturally defined IN TERMS OF a smaller version of itself: tree and "
+            "graph traversal (a node's subtree is a smaller tree), \"generate every possible X\" (backtracking "
+            "-- the rest of the choices form the same kind of problem as all the choices), and any \"solve for "
+            "n using the answer for n-1 or smaller\" relationship (which also often signals dynamic "
+            "programming once overlapping subproblems show up). If you find yourself writing \"and then do the "
+            "same thing again, but smaller,\" that's recursion."
+        ),
+        intuition_markdown=(
+            "Every recursive function needs two things: a **base case** (input small/simple enough to answer "
+            "directly, no further recursion) and a **recursive case** that makes GENUINE progress toward that "
+            "base case with each call (a smaller number, a shorter list, one fewer choice left to make) and "
+            "combines its own work with the recursive call's result. Trust the recursive call: don't try to "
+            "mentally unroll the whole chain of calls at once -- assume the recursive call correctly solves "
+            "the smaller problem, and focus only on how THIS call uses that result. Code placed AFTER a "
+            "recursive call only runs once that call (and everything it calls) has fully returned -- that's "
+            "why a call stack unwinds in the exact reverse order it grew."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `factorial(4)` -- watch the call stack grow one frame per call as it recurses toward the "
+            "base case, then shrink one frame per return as it unwinds back out, each frame finishing its own "
+            "multiplication using the value the call below it returned."
+        ),
+        walkthrough_code=(
+            "def factorial(n):\n"
+            "    if n <= 1:\n"
+            "        return 1\n"
+            "    return n * factorial(n - 1)"
+        ),
+        walkthrough_frames=[
+            dict(caption="factorial(4) is called. n=4 is not the base case (n <= 1), so it must call factorial(3) before it can return anything itself. The call stack grows by one frame.",
+                 locals={"call_stack": ["factorial(4)"]}),
+            dict(caption="factorial(3) is called, and itself needs factorial(2) before IT can finish. The stack keeps growing -- each call is 'on hold', waiting for the one below it to return first.",
+                 locals={"call_stack": ["factorial(4)", "factorial(3)"]}),
+            dict(caption="factorial(2) needs factorial(1) before it can finish.",
+                 locals={"call_stack": ["factorial(4)", "factorial(3)", "factorial(2)"]}),
+            dict(caption="factorial(1) is called. n=1 -- THIS is the base case. It returns 1 immediately, with no further recursive call. This is the bottom of the recursion; the stack now starts unwinding.",
+                 locals={"call_stack": ["factorial(4)", "factorial(3)", "factorial(2)", "factorial(1)"]}),
+            dict(caption="factorial(1) returned 1. factorial(2) resumes exactly where it left off, computes 2 * 1 = 2, and returns 2. Its frame is popped off the stack.",
+                 locals={"call_stack": ["factorial(4)", "factorial(3)"]}),
+            dict(caption="factorial(3) resumes, computes 3 * 2 = 6, and returns 6. Its frame is popped.",
+                 locals={"call_stack": ["factorial(4)"]}),
+            dict(caption="factorial(4) resumes, computes 4 * 6 = 24, and returns 24. The stack is empty -- every call has now returned, in the exact REVERSE order they were made.",
+                 locals={"call_stack": []}),
+        ],
+        common_mistakes_markdown=(
+            "Missing or wrong base case -- the recursion never stops, and Python's call-stack depth limit "
+            "eventually raises `RecursionError` (rather than looping forever the way a bad `while` would). The "
+            "recursive case not making genuine progress toward the base case (e.g. calling `factorial(n)` "
+            "again instead of `factorial(n - 1)`) -- same infinite-recursion symptom, subtler cause. Expecting "
+            "code placed AFTER a recursive call to run before deeper calls finish -- it doesn't; that line "
+            "only runs once the recursive call (and everything IT calls) has fully returned. And confusing "
+            "recursion with a loop that shares one mutable slot across iterations -- each call gets its OWN "
+            "copy of its local variables, they don't overwrite each other the way a loop variable does."
+        ),
+        complexity_markdown=(
+            "Linear recursion (each call makes at most one further recursive call, like `factorial`): `O(n)` "
+            "time, `O(n)` space -- the space comes from the call stack itself, one frame per still-active "
+            "call, unlike an equivalent loop's `O(1)` space. Branching recursion (each call makes 2+ further "
+            "calls, e.g. naive Fibonacci recomputing the same values repeatedly) can blow up to `O(2^n)` time "
+            "-- covered in more depth in Backtracking and Dynamic Programming."
+        ),
+    ),
+    dict(
+        slug="backtracking",
+        kind="pattern",
+        topic="recursion",
+        pattern_family="Backtracking",
+        title="Backtracking",
+        display_order=2,
+        estimated_minutes=20,
+        summary="Recursion with an undo step: choose one option, recurse with it, then un-choose it before "
+                "trying the next -- exhaustive search that shares work across branches instead of restarting.",
+        prerequisite_slugs="recursion",
+        what_markdown=(
+            "Backtracking is recursion with an UNDO step. Build a partial solution one choice at a time, "
+            "recurse deeper with that choice in place, and once that branch is fully explored (a complete "
+            "answer was found, it was proven invalid, or every option from here was tried) -- undo the last "
+            "choice (**backtrack**) before trying the next option at the same position."
+        ),
+        why_markdown=(
+            "Problems asking for EVERY possible arrangement (every subset, permutation, valid combination) "
+            "have no shortcut around exploring the space -- but building each candidate from scratch, from an "
+            "empty list every time, wastes all the work shared between similar candidates. Backtracking builds "
+            "ONE shared partial solution, extends it, and un-extends it to try the next option: the recursion "
+            "tree IS the search space, and the call stack tracks exactly where you currently are inside it."
+        ),
+        recognize_markdown=(
+            "The tell is being asked to enumerate ALL of something -- every subset, every permutation, every "
+            "valid combination or arrangement meeting some constraint (N-Queens, valid parentheses) -- not "
+            "just find one, and not just COUNT them without listing them (that's more often a dynamic-"
+            "programming question). If you're building up a list of choices one at a time, and once a branch "
+            "is a dead end or complete you need to step back and try a different choice at that SAME position, "
+            "that stepping-back is backtracking."
+        ),
+        intuition_markdown=(
+            "The shape is always the same: choose one option, recurse with it added to the current partial "
+            "solution, then UN-choose it (remove it, so the next sibling option starts from a clean partial "
+            "solution) before trying the next option. That un-choose step is what makes it backtracking rather "
+            "than plain recursion -- skip it, and the partial solution silently corrupts every branch explored "
+            "afterward with whatever the previous branch left behind. A base case (the partial solution is "
+            "complete) records it and returns; everything else is \"try each remaining option, recurse, then "
+            "undo.\""
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `subsets([1, 2])` -- every subset of a 2-element list, built by choosing to include or "
+            "exclude each element in turn. `path` (the current partial subset) is shown below; `i` is narrated "
+            "in each caption since it never becomes a meaningful array position on its own."
+        ),
+        walkthrough_code=(
+            "def subsets(nums):\n"
+            "    result = []\n"
+            "    path = []\n"
+            "    def backtrack(i):\n"
+            "        if i == len(nums):\n"
+            "            result.append(path[:])   # a COPY -- not path itself\n"
+            "            return\n"
+            "        path.append(nums[i])         # choose: include nums[i]\n"
+            "        backtrack(i + 1)\n"
+            "        path.pop()                   # un-choose\n"
+            "        backtrack(i + 1)              # choose: exclude nums[i]\n"
+            "    backtrack(0)\n"
+            "    return result"
+        ),
+        walkthrough_frames=[
+            dict(caption="backtrack(0): i=0, not yet at the end (len(nums)=2). Choose to include nums[0]=1. path=[1]. Recurse deeper: backtrack(1).",
+                 locals={"path": [1]}),
+            dict(caption="backtrack(1): i=1, still not at the end. Choose to include nums[1]=2. path=[1, 2]. Recurse deeper: backtrack(2).",
+                 locals={"path": [1, 2]}),
+            dict(caption="backtrack(2): i=2 == len(nums) -- base case! Record a COPY of path: [1, 2] is one full subset. Return, unwinding one level.",
+                 locals={"path": [1, 2]}),
+            dict(caption="Back in backtrack(1): the include-2 branch is done. UN-choose: pop 2 off path. path=[1]. Now try the exclude-2 branch: recurse again as backtrack(2), without re-adding 2.",
+                 locals={"path": [1]}),
+            dict(caption="backtrack(2) again: i=2 == len(nums) -- base case. Record path as-is: [1] is another subset. Return.",
+                 locals={"path": [1]}),
+            dict(caption="Back in backtrack(0): the include-1 branch is fully done. UN-choose: pop 1 off path. path=[]. Now try the exclude-1 branch: recurse as backtrack(1), with 1 never having been added.",
+                 locals={"path": []}),
+            dict(caption="backtrack(1) chooses to include nums[1]=2 (path=[2], records [2], then un-chooses back to path=[]), then excludes it too (records []). All four subsets found: [1, 2], [1], [2], [].",
+                 locals={"path": []}),
+        ],
+        common_mistakes_markdown=(
+            "Forgetting the UN-choose step itself (e.g. forgetting `path.pop()`) -- leaves stale state in "
+            "`path` that corrupts every branch explored after it. Appending `path` directly to `result` "
+            "instead of a COPY (`path[:]` or `list(path)`) -- `path` is the SAME mutable list reused "
+            "throughout the whole search, so every recorded answer ends up pointing at that one object; later "
+            "mutations silently change already-recorded answers too (by the end, everything in `result` "
+            "reflects `path`'s FINAL state, not what it looked like when recorded). Not handling duplicate "
+            "input values (e.g. Subsets II) -- naive backtracking over a list with repeats produces duplicate "
+            "answers; the fix is sorting first and skipping a choice that repeats the immediately-preceding "
+            "sibling choice at the same recursion depth. And a missing or wrong base case, same as with plain "
+            "recursion -- the search either never terminates or terminates one level early or late."
+        ),
+        complexity_markdown=(
+            "Exponential in general, because the answer itself is that large: enumerating every subset of an "
+            "`n`-element set is `O(2^n)` (there are exactly `2^n` subsets); every permutation of `n` elements "
+            "is `O(n!)`. The recursion's OWN depth -- and therefore its stack space -- is only `O(n)` though: "
+            "one frame per element currently included in the partial solution, not one frame per final answer."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -1380,6 +1572,97 @@ CONCEPT_CHECKPOINTS = {
                                    "across the entire scan -- at most a constant multiple of n operations "
                                    "total, not n operations nested inside another n."),
     ],
+    "recursion": [
+        dict(kind="predict_output",
+             prompt_markdown="What does this print?",
+             code="def count_down(n):\n"
+                  "    if n == 0:\n"
+                  "        return\n"
+                  "    print(n)\n"
+                  "    count_down(n - 1)\n"
+                  "    print('done', n)\n\n"
+                  "count_down(3)",
+             choices_json=None,
+             correct_answer="3, 2, 1, done 1, done 2, done 3 (each on its own line)",
+             explanation_markdown="The first print (n) happens BEFORE the recursive call, so 3, 2, 1 print "
+                                   "on the way down. The second print ('done', n) happens AFTER the recursive "
+                                   "call, so it only runs once that call has fully returned -- which happens "
+                                   "in reverse order as the stack unwinds: done 1, then done 2, then done 3."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to count down from n to 0, but it never finishes. What's the bug?",
+             code="def countdown(n):\n"
+                  "    if n == 0:\n"
+                  "        return\n"
+                  "    print(n)\n"
+                  "    countdown(n)",
+             choices_json=None,
+             correct_answer="The recursive call is countdown(n) -- it passes n unchanged instead of n - 1. "
+                             "n never gets closer to the base case (n == 0), so the recursion never "
+                             "terminates.",
+             explanation_markdown="A base case alone isn't enough -- the recursive case also has to make "
+                                   "GENUINE progress toward it every call. Since n is the same every time, "
+                                   "the base case (n == 0) is never reached, and Python eventually raises "
+                                   "RecursionError once the call stack hits its depth limit."),
+        dict(kind="complexity",
+             prompt_markdown="A recursive function where each call makes exactly one further recursive call "
+                              "(like factorial) processes n total calls before the first one returns. What's "
+                              "the SPACE complexity, and why isn't it O(1) like an equivalent loop?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n)",
+             explanation_markdown="Each active call keeps its own stack frame alive until it returns -- n "
+                                   "nested calls means n frames alive at once, at the deepest point, versus a "
+                                   "loop's single set of variables reused every iteration."),
+    ],
+    "backtracking": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need to list every possible subset of a list of n items (2^n total "
+                              "subsets). What's the right approach?",
+             code=None,
+             choices_json=[
+                 "Backtracking -- choose/recurse/un-choose each item",
+                 "A single loop with a running count",
+                 "Binary search",
+                 "Sort the items first",
+             ],
+             correct_answer="Backtracking -- choose/recurse/un-choose each item",
+             explanation_markdown="'Every possible X' with no shortcut around exploring the whole space is "
+                                   "the backtracking tell. Build one shared partial solution, extend it, "
+                                   "recurse, then un-extend it to try the next option -- instead of building "
+                                   "each subset from scratch."),
+        dict(kind="spot_bug",
+             prompt_markdown="This subsets() sometimes returns a list of what LOOKS like the right subsets, "
+                              "but every entry ends up identical (usually all empty). What's the bug?",
+             code="def subsets(nums):\n"
+                  "    result = []\n"
+                  "    path = []\n"
+                  "    def backtrack(i):\n"
+                  "        if i == len(nums):\n"
+                  "            result.append(path)\n"
+                  "            return\n"
+                  "        path.append(nums[i])\n"
+                  "        backtrack(i + 1)\n"
+                  "        path.pop()\n"
+                  "        backtrack(i + 1)\n"
+                  "    backtrack(0)\n"
+                  "    return result",
+             choices_json=None,
+             correct_answer="result.append(path) appends the SAME mutable list object every time, not a "
+                             "copy. path is reused and mutated throughout the entire search, so every entry "
+                             "in result ends up pointing at that one object -- by the end, they all reflect "
+                             "path's FINAL state, not what it looked like when each was recorded.",
+             explanation_markdown="Fix: result.append(path[:]) (or list(path)) -- a real copy, frozen at "
+                                   "that exact moment, unaffected by whatever path does afterward."),
+        dict(kind="complexity",
+             prompt_markdown="Enumerating every subset of an n-element list takes how much time, and why "
+                              "can't it be faster?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(2^n)",
+             explanation_markdown="There are exactly 2^n subsets of an n-element set, so any algorithm that "
+                                   "actually LISTS all of them must take at least that long -- the answer "
+                                   "itself is that size, regardless of how the search is implemented."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -1592,5 +1875,52 @@ CONCEPT_PRACTICE_EXERCISES = {
              hint_markdown="Only negative indices ever go in the deque, and they're always added in "
                             "increasing order -- so the front is always the FIRST negative number still "
                             "inside the window. Evict the front when its index is k or more behind i."),
+    ],
+    "recursion": [
+        dict(prompt_markdown="Write `sum_digits(n)` that returns the sum of a non-negative integer's digits "
+                              "using recursion -- no loops, and no converting to a string.",
+             starter_code="def sum_digits(n):\n    # base case: a single digit (n < 10) is its own digit sum\n"
+                          "    # recursive case: last digit (n % 10) + sum_digits of the rest (n // 10)\n    pass",
+             solution_code=(
+                 "def sum_digits(n):\n"
+                 "    if n < 10:\n"
+                 "        return n\n"
+                 "    return n % 10 + sum_digits(n // 10)"
+             ),
+             hint_markdown="n % 10 peels off the last digit; n // 10 is everything else, a strictly smaller "
+                            "number -- genuine progress toward the base case (a single digit)."),
+    ],
+    "backtracking": [
+        dict(prompt_markdown="Write `letter_combinations(digits)` that returns every letter combination a "
+                              "phone-keypad string of digits (2-9) could represent -- e.g. `'23'` -> "
+                              "`['ad','ae','af','bd','be','bf','cd','ce','cf']` (2='abc', 3='def'). Use "
+                              "backtracking.",
+             starter_code="def letter_combinations(digits):\n    if not digits:\n        return []\n"
+                          "    mapping = {'2':'abc','3':'def','4':'ghi','5':'jkl','6':'mno',\n"
+                          "               '7':'pqrs','8':'tuv','9':'wxyz'}\n"
+                          "    # for each digit's position, try every one of its letters,\n"
+                          "    # recurse into the next position, then un-choose\n    pass",
+             solution_code=(
+                 "def letter_combinations(digits):\n"
+                 "    if not digits:\n"
+                 "        return []\n"
+                 "    mapping = {'2':'abc','3':'def','4':'ghi','5':'jkl','6':'mno',\n"
+                 "               '7':'pqrs','8':'tuv','9':'wxyz'}\n"
+                 "    result = []\n"
+                 "    path = []\n"
+                 "    def backtrack(i):\n"
+                 "        if i == len(digits):\n"
+                 "            result.append(''.join(path))\n"
+                 "            return\n"
+                 "        for ch in mapping[digits[i]]:\n"
+                 "            path.append(ch)\n"
+                 "            backtrack(i + 1)\n"
+                 "            path.pop()\n"
+                 "    backtrack(0)\n"
+                 "    return result"
+             ),
+             hint_markdown="Unlike subsets' include/exclude (2 choices per position), here each position has "
+                            "as many choices as its digit has letters (3 or 4) -- loop over them, choosing "
+                            "and un-choosing each one before moving to the next position."),
     ],
 }

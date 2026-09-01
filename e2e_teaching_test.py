@@ -4,8 +4,9 @@ see backend/db/seed_concepts.py and docs/decisions.md "Teaching system
 content architecture"). Covers the original Arrays + Two Pointers pilot
 plus batch 1 (Prefix Sums, Strings, Hashing -- Days 9-12), batch 2
 (Sliding Window -- Days 15-16), batch 3 (Linked Lists, Fast/Slow
-Pointers -- Days 25-27), and batch 4 (Stacks, Queues -- Days 28-29) of
-the curriculum expansion.
+Pointers -- Days 25-27), batch 4 (Stacks, Queues -- Days 28-29), and
+batch 5 (Recursion, Backtracking -- Days 23-24) of the curriculum
+expansion.
 
 Covers: the Learn hub lists all lessons grouped by topic in the correct
 topic-before-pattern order; a concept lesson page renders every section
@@ -51,8 +52,8 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all ten concept lessons (pilot + batches 1-4)", cards.count() == 10)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues)",
+        check("Learn hub lists all twelve concept lessons (pilot + batches 1-5)", cards.count() == 12)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
@@ -60,7 +61,8 @@ def main():
               and page.locator("h3", has_text="sliding window").count() > 0
               and page.locator("h3", has_text="linked lists").count() > 0
               and page.locator("h3", has_text="stacks").count() > 0
-              and page.locator("h3", has_text="queues").count() > 0)
+              and page.locator("h3", has_text="queues").count() > 0
+              and page.locator("h3", has_text="recursion").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -335,6 +337,59 @@ def main():
         page.wait_for_selector("text=Day 29", timeout=10000)
         check("day-29 lesson page shows a 'Learn: Queues' callout",
               page.locator("a.callout", has_text="Learn: Queues").count() > 0)
+
+        # ---- batch 5: recursion lesson (call stack rendered as an array) ------
+        page.goto(f"{BASE}/#/learn/recursion", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Recursion')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("recursion walkthrough renders the call stack via the plain array view, not LinkedListView",
+              walkthrough.locator(".seq-boxes").count() > 0 and walkthrough.locator(".ll-chain").count() == 0)
+        check("recursion walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        check("deepest frame shows all four stack frames (factorial 4 down to 1)",
+              page.locator(".concept-walkthrough .seq-box").count() == 4)
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        check("final frame's caption confirms the stack unwound in reverse order",
+              "reverse order" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        check("final frame shows an empty call stack -- every frame has returned",
+              page.locator(".concept-walkthrough .seq-box").count() == 0)
+
+        # ---- batch 5: backtracking lesson (choose/recurse/un-choose) ----------
+        page.goto(f"{BASE}/#/learn/backtracking", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Backtracking')", timeout=10000)
+        check("backtracking prerequisite links to Recursion",
+              page.get_by_role("link", name="Recursion").count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("backtracking walkthrough renders (subsets via include/exclude)", walkthrough.count() > 0)
+        # step to the base-case "record" frame: path should hold both chosen elements
+        page.get_by_role("button", name=re.compile("Next")).click()
+        page.wait_for_timeout(120)
+        page.get_by_role("button", name=re.compile("Next")).click()
+        page.wait_for_timeout(120)
+        path_values = page.locator(".concept-walkthrough .seq-box-value").all_inner_texts()
+        check("record frame shows the full chosen path [1, 2], not a stale or empty path",
+              path_values == ["1", "2"])
+        reveal_btns = page.get_by_role("button", name="Reveal answer")
+        check("backtracking has reveal-style checkpoints", reveal_btns.count() > 0)
+        reveal_btns.first.click()
+        page.wait_for_timeout(150)
+        check("revealed checkpoint explanation mentions copying path, not sharing the same list object",
+              "copy" in page.locator(".checkpoint-explanation").first.inner_text().lower())
+
+        # ---- integration: day-23/24 link to their respective lessons ----------
+        page.goto(f"{BASE}/#/lessons/23", wait_until="networkidle")
+        page.wait_for_selector("text=Day 23", timeout=10000)
+        check("day-23 lesson page shows a 'Learn: Recursion' callout",
+              page.locator("a.callout", has_text="Learn: Recursion").count() > 0)
+        page.goto(f"{BASE}/#/lessons/24", wait_until="networkidle")
+        page.wait_for_selector("text=Day 24", timeout=10000)
+        check("day-24 lesson page shows callouts for both Recursion and Backtracking",
+              page.locator("a.callout", has_text="Learn: Recursion").count() > 0
+              and page.locator("a.callout", has_text="Learn: Backtracking").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 
