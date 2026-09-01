@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrayPointerView, LinkedListView, TreeView, HeapView, GridGraphView, GraphNodeView } from "../Visualizers/Visualizers";
+import { ArrayPointerView, LinkedListView, TreeView, HeapView, GridGraphView, GraphNodeView, DPTableView } from "../Visualizers/Visualizers";
 
 // A teaching walkthrough steps through a hand-authored, VERIFIED-BY-HAND
 // sequence of {caption, locals} frames (see backend/db/seed_concepts.py) --
@@ -114,6 +114,18 @@ export default function ConceptWalkthrough({ frames, topic, pattern }) {
   // through to ArrayPointerView like any other frame would.
   const isGraphGrid = topic === "graphs" && frame.locals && Array.isArray(frame.locals.grid);
   const isGraphNode = topic === "graphs" && frame.locals && Array.isArray(frame.locals.nodes);
+  // DPTableView is the first view here that needs more than the current
+  // frame's locals -- its cell-level "just changed" highlighting calls
+  // findPreviousValue(steps, index, name), which walks BACKWARD through a
+  // full steps array looking for the previous value of a named local. No
+  // new adapter function is needed for the DATA shape (a dp array/grid
+  // authored as frames.locals = {dp: [...]} needs no conversion, same as
+  // heap lessons' {heap: [...]}) -- the only new thing is threading this
+  // component's own `frames` (renamed `steps` below, since that's what
+  // findPreviousValue expects to index into) and current `index` state
+  // through, since every prior view here only ever needed the CURRENT
+  // frame in isolation.
+  const isDPTable = topic === "dynamic-programming";
 
   return (
     <div className="concept-walkthrough">
@@ -155,6 +167,8 @@ export default function ConceptWalkthrough({ frames, topic, pattern }) {
         <GridGraphView locals={frame.locals} />
       ) : isGraphNode ? (
         <GraphNodeView graph={buildGraphNodeGraph(frame.locals)} />
+      ) : isDPTable ? (
+        <DPTableView locals={frame.locals} steps={frames} index={index} />
       ) : (
         <ArrayPointerView locals={frame.locals} topic={topic} pattern={pattern} />
       )}

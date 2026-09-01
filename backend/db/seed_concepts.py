@@ -2589,6 +2589,318 @@ CONCEPT_LESSONS = [
             "is popped and finalized exactly once."
         ),
     ),
+    # ---- Batch 11: item 13 (the final item) of the curriculum-ordered
+    # expansion -- dynamic programming (Days 39-42). THREE lessons, not
+    # four, despite four curriculum days -- unlike every prior multi-day
+    # batch, the day-to-lesson mapping here is intentionally NOT 1:1. Day
+    # 39 (memoization vs tabulation, foundational) is its own topic lesson.
+    # But Days 40 ("1D DP: decision at each step") and 41 ("coin change,
+    # LIS intro") both land under pattern_families.py's SAME existing rule
+    # (topic="dynamic-programming" and "1d" in pattern -> "1D dynamic
+    # programming") and, more importantly, teach the SAME underlying shape
+    # -- dp[i] built from a scan/decision over already-computed earlier
+    # dp values -- just with different per-step recurrences (House
+    # Robber's fixed skip-or-take pair vs Coin Change's "try every coin"
+    # vs LIS's "compare against every earlier index"). That's a
+    # difference in RECURRENCE, not in STRUCTURAL PATTERN, so they're
+    # combined into one dp-1d lesson rather than force-split the way Trees
+    # (batch 8) or Graphs (batch 10) split multiple same-family days into
+    # separate lessons when each day's content was structurally distinct.
+    # This mirrors batch 7's own precedent: Sorting's 4 curriculum days
+    # (17-20) became just 2 lessons (sorting, divide-and-conquer-sorting),
+    # grouped by actual technique-similarity rather than day-count. Day 42
+    # ("2D DP intro") DOES get its own lesson (dp-2d) -- 2D DP is a
+    # genuine structural generalization (two coordinates instead of one),
+    # matches pattern_families.py's separate "2D dynamic programming"
+    # rule cleanly, and closes out the curriculum's expansion order.
+    #
+    # DPTableView (Visualizers.jsx) is the first visualizer this expansion
+    # needs that ISN'T just `locals`-shaped -- its diff-highlighting (which
+    # cell just changed) needs the FULL trace history via `findPreviousValue
+    # (steps, index, name)`, not just the current frame. ConceptWalkthrough.
+    # jsx already tracks `frames` and `index` in its own state for the
+    # step controls, so no new adapter function was needed here either --
+    # just a new branch passing `steps={frames}` and `index={index}`
+    # straight through, since `frames[i].locals` already matches exactly
+    # what `findPreviousValue` expects from a real trace's `steps[i].locals`.
+    # See docs/decisions.md "Teaching system expansion: batch 11".
+    dict(
+        slug="dynamic-programming",
+        kind="topic",
+        topic="dynamic-programming",
+        pattern_family=None,
+        title="Dynamic programming: memoization vs tabulation",
+        display_order=1,
+        estimated_minutes=15,
+        summary="DP solves a problem by breaking it into overlapping subproblems and solving each one "
+                "exactly once -- either top-down with a cache (memoization) or bottom-up by filling a table "
+                "in order (tabulation).",
+        prerequisite_slugs="recursion",
+        what_markdown=(
+            "Dynamic programming applies when a problem has OVERLAPPING SUBPROBLEMS (the same smaller "
+            "problem gets solved more than once by naive recursion) and OPTIMAL SUBSTRUCTURE (the best "
+            "answer can be built from the best answers to smaller pieces). There are two equivalent ways to "
+            "apply it: MEMOIZATION (top-down -- keep the natural recursion, but cache each result the first "
+            "time it's computed, and check the cache before recursing again) and TABULATION (bottom-up -- "
+            "build an array/table `dp[i]`, filling it in order from the smallest subproblem up, so every "
+            "value it depends on is already computed by the time it's needed)."
+        ),
+        why_markdown=(
+            "Naive recursive Fibonacci is the canonical example of why this matters: computing `fib(6)` "
+            "naively calls `fib(2)` alone 10 SEPARATE times, each one redoing identical work from scratch, "
+            "because the recursion has no memory of what it already solved. DP fixes exactly this -- solve "
+            "each distinct subproblem once, store the answer, reuse it -- turning an exponential amount of "
+            "repeated work into a linear amount of new work."
+        ),
+        recognize_markdown=(
+            "\"count the number of ways to...\", \"find the minimum/maximum...\", \"can you reach/make "
+            "exactly...\" -- combined with a naive recursive solution that would revisit the SAME smaller "
+            "input multiple times via different call paths. If a recursive breakdown never revisits the same "
+            "subproblem twice (e.g. binary search, or merge sort's two halves), memoizing it adds bookkeeping "
+            "overhead for zero benefit -- DP specifically earns its keep on OVERLAPPING subproblems."
+        ),
+        intuition_markdown=(
+            "Memoization and tabulation compute the exact same values -- the difference is direction and "
+            "mechanism, not result. Memoization keeps the natural top-down recursive shape (easier to write "
+            "first, since it mirrors the recursive definition directly) and adds a cache. Tabulation flips it "
+            "bottom-up into an explicit loop (usually a bit faster in practice, no recursion/call-stack "
+            "overhead, and the loop order makes the dependency structure -- what needs to be computed before "
+            "what -- fully explicit)."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace fib(6) via bottom-up TABULATION -- filling a dp array in order, each cell built entirely "
+            "from cells already computed."
+        ),
+        walkthrough_code=(
+            "def fib(n):\n"
+            "    dp = [0] * (n + 1)\n"
+            "    dp[1] = 1\n"
+            "    for i in range(2, n + 1):\n"
+            "        dp[i] = dp[i-1] + dp[i-2]\n"
+            "    return dp[n]\n\n"
+            "fib(6)"
+        ),
+        walkthrough_frames=[
+            dict(caption="n=6. dp[i] will hold fib(i). dp[0]=0 is already correct (a base case); dp[1] "
+                          "still needs setting.",
+                 locals={"dp": [0, 0, 0, 0, 0, 0, 0]}),
+            dict(caption="dp[1]=1 (the second base case).",
+                 locals={"dp": [0, 1, 0, 0, 0, 0, 0]}),
+            dict(caption="dp[2]=dp[1]+dp[0]=1+0=1 -- built entirely from cells ALREADY computed. This is "
+                          "the whole win over naive recursion: each subproblem is solved exactly once, "
+                          "never recomputed.",
+                 locals={"dp": [0, 1, 1, 0, 0, 0, 0]}),
+            dict(caption="dp[3]=dp[2]+dp[1]=1+1=2.",
+                 locals={"dp": [0, 1, 1, 2, 0, 0, 0]}),
+            dict(caption="dp[4]=dp[3]+dp[2]=2+1=3.",
+                 locals={"dp": [0, 1, 1, 2, 3, 0, 0]}),
+            dict(caption="dp[5]=dp[4]+dp[3]=3+2=5.",
+                 locals={"dp": [0, 1, 1, 2, 3, 5, 0]}),
+            dict(caption="dp[6]=dp[5]+dp[4]=5+3=8=fib(6). Every cell filled exactly once -- O(n) total "
+                          "work. Compare naive recursion: computing fib(6) recursively calls fib(2) alone "
+                          "10 SEPARATE times, each redoing the same work from scratch.",
+                 locals={"dp": [0, 1, 1, 2, 3, 5, 8]}),
+        ],
+        common_mistakes_markdown=(
+            "Writing \"memoization\" that stores a result but never actually CHECKS the cache before "
+            "recursing again -- still fully exponential despite the cache dict filling up, since nothing "
+            "ever reads it back. Confusing WHEN to use DP (overlapping subproblems) with \"any recursive "
+            "problem\" -- not every recursive breakdown overlaps; memoizing binary search or merge sort adds "
+            "overhead for no benefit, since neither ever revisits the same subproblem. And an off-by-one in "
+            "the table's size -- needing to index up to `dp[n]` requires `dp = [0] * (n + 1)`, not `[0] * n`."
+        ),
+        complexity_markdown=(
+            "`O(n)` time and `O(n)` space for Fibonacci tabulation -- each of the `n` subproblems computed "
+            "once, `O(1)` work each. Naive recursion is `O(2^n)` -- exponential, since the SAME subproblem "
+            "gets recomputed from scratch every time it's reached via a different call path. (Space can be "
+            "reduced further to `O(1)` here specifically, since `dp[i]` only ever needs the last two "
+            "values -- not true for every DP problem.)"
+        ),
+    ),
+    dict(
+        slug="dp-1d",
+        kind="pattern",
+        topic="dynamic-programming",
+        pattern_family="1D dynamic programming",
+        title="1D DP: a decision at each step",
+        display_order=2,
+        estimated_minutes=17,
+        summary="Many 1D DP problems share one shape: dp[i] is built from a decision made using "
+                "already-computed earlier values -- House Robber's skip-or-take, Coin Change's try-every-"
+                "coin, LIS's compare-against-every-earlier-index.",
+        prerequisite_slugs="dynamic-programming",
+        what_markdown=(
+            "1D DP fills a single array `dp` where `dp[i]` answers the subproblem \"using only the first "
+            "`i` elements/positions\". Each cell is computed from a DECISION involving one or more earlier "
+            "cells -- House Robber decides skip-or-take at each house (`dp[i] = max(dp[i-1], dp[i-2] + "
+            "nums[i])`); Coin Change tries every coin denomination and keeps the best; Longest Increasing "
+            "Subsequence compares against every earlier index and extends the best valid one. Different "
+            "recurrences, same underlying shape."
+        ),
+        why_markdown=(
+            "Each of these, solved naively (try every subset of houses, every combination of coins, every "
+            "subsequence), is exponential. Recognizing that `dp[i]` only ever needs a SMALL number of "
+            "already-solved earlier values -- not a fresh re-exploration of every possibility -- is what "
+            "collapses the naive exponential search down to a single linear (or near-linear) pass."
+        ),
+        recognize_markdown=(
+            "\"maximum/minimum ... without picking two adjacent/too-close items\", \"minimum number of "
+            "coins/steps to reach exactly X\", \"longest increasing/valid ... subsequence\", or generally: a "
+            "1D sequence where the best answer up to position `i` can be expressed using the best answers up "
+            "to a few earlier positions."
+        ),
+        intuition_markdown=(
+            "House Robber's `dp[i] = max(dp[i-1], dp[i-2] + nums[i])` is worth internalizing as a template: "
+            "SKIP position `i` (keep whatever was already best without it -- `dp[i-1]`) versus TAKE position "
+            "`i` (its value plus the best answer from far enough back that taking it stays valid -- `dp[i-2] "
+            "+ nums[i]`). Coin Change and LIS both generalize the \"take\" branch from a single fixed choice "
+            "into a small LOOP over every valid choice at that step, then take the best of all of them --  "
+            "same skip-or-take-the-best-choice shape, just with more than two options."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace House Robber's dp[i] = max(dp[i-1], dp[i-2] + nums[i]) on nums=[2, 7, 9, 3, 1] -- the "
+            "exact recurrence Day 40 itself calls out."
+        ),
+        walkthrough_code=(
+            "def rob(nums):\n"
+            "    dp = [0] * len(nums)\n"
+            "    dp[0] = nums[0]\n"
+            "    dp[1] = max(nums[0], nums[1])\n"
+            "    for i in range(2, len(nums)):\n"
+            "        dp[i] = max(dp[i-1], dp[i-2] + nums[i])\n"
+            "    return dp[-1]\n\n"
+            "rob([2, 7, 9, 3, 1])"
+        ),
+        walkthrough_frames=[
+            dict(caption="nums=[2,7,9,3,1]. dp[i] will hold the max money robbable using only houses 0..i. "
+                          "Two base cases needed first.",
+                 locals={"dp": [0, 0, 0, 0, 0]}),
+            dict(caption="dp[0]=2 -- only one house available, rob it.",
+                 locals={"dp": [2, 0, 0, 0, 0]}),
+            dict(caption="dp[1]=max(nums[0],nums[1])=max(2,7)=7 -- with two adjacent houses, rob whichever "
+                          "is worth more (can't rob both, they're adjacent).",
+                 locals={"dp": [2, 7, 0, 0, 0]}),
+            dict(caption="dp[2]=max(dp[1], dp[0]+nums[2])=max(7, 2+9)=11 -- the DECISION at each step: "
+                          "either skip house 2 (keep dp[1]=7) or rob it plus whatever was best two houses "
+                          "back (dp[0]+9=11). Take the max.",
+                 locals={"dp": [2, 7, 11, 0, 0]}),
+            dict(caption="dp[3]=max(dp[2], dp[1]+nums[3])=max(11, 7+3)=11 -- skipping wins this time.",
+                 locals={"dp": [2, 7, 11, 11, 0]}),
+            dict(caption="dp[4]=max(dp[3], dp[2]+nums[4])=max(11, 11+1)=12.",
+                 locals={"dp": [2, 7, 11, 11, 12]}),
+            dict(caption="dp[4]=12 -- the answer. Every cell was built from the SAME two-choice decision: "
+                          "skip (keep dp[i-1]) or take (dp[i-2]+nums[i]). This exact shape reappears across "
+                          "many 1D DP problems, just with a different per-step decision -- Coin Change: try "
+                          "every coin denomination and take the best; Longest Increasing Subsequence: "
+                          "compare against every earlier index and take the best valid extension.",
+                 locals={"dp": [2, 7, 11, 11, 12]}),
+        ],
+        common_mistakes_markdown=(
+            "Forgetting one of the TWO base cases -- `dp[1]` specifically needs `max(nums[0], nums[1])`, not "
+            "just `nums[1]`, since with only two houses you still choose the better one. Writing the "
+            "recurrence with only ONE branch (e.g. always `dp[i-1] + nums[i]`, no comparison against "
+            "skipping) -- silently assumes taking is always at least as good as skipping, which breaks the "
+            "moment a later value is small. And trying to greedily pick the largest remaining value first "
+            "instead of scanning in order -- `dp[i]` specifically depends on `dp[i-1]` and `dp[i-2]` already "
+            "being CORRECT, which greedy picking doesn't guarantee."
+        ),
+        complexity_markdown=(
+            "`O(n)` time -- each of the `n` positions considered exactly once, `O(1)` work per position for "
+            "a fixed-choice recurrence like House Robber (more, but still small and bounded, for a "
+            "try-every-choice recurrence like Coin Change). `O(n)` space for the full `dp` array, reducible "
+            "to `O(1)` when `dp[i]` only ever needs the previous two values, same as Fibonacci."
+        ),
+    ),
+    dict(
+        slug="dp-2d",
+        kind="pattern",
+        topic="dynamic-programming",
+        pattern_family="2D dynamic programming",
+        title="2D DP: two coordinates instead of one",
+        display_order=3,
+        estimated_minutes=17,
+        summary="2D DP is the exact same idea as 1D DP -- build each cell from already-computed earlier "
+                "cells -- just indexed by two coordinates: a grid's (row, col), or two strings' (i, j).",
+        prerequisite_slugs="dp-1d",
+        what_markdown=(
+            "A 2D DP table `dp[r][c]` (or `dp[i][j]`) answers a subproblem indexed by TWO positions instead "
+            "of one. For a grid problem like Unique Paths, that's literally a `(row, col)` coordinate: "
+            "`dp[r][c] = dp[r-1][c] + dp[r][c-1]`, the number of ways to reach `(r, c)` from either the cell "
+            "above or the cell to its left. For a two-string problem like Longest Common Subsequence or Edit "
+            "Distance, `dp[i][j]` instead represents \"using the first `i` characters of string A and the "
+            "first `j` characters of string B\" -- same grid-of-subproblems shape, just indexed by string "
+            "position instead of grid position."
+        ),
+        why_markdown=(
+            "Trying every possible path through a grid, or every possible way to align two strings, is "
+            "exponential. 2D DP works for the same reason 1D DP does: each cell only depends on a small, "
+            "already-computed set of earlier cells, so filling the whole table once (in the right order) "
+            "computes every subproblem exactly once instead of re-deriving overlapping ones repeatedly."
+        ),
+        recognize_markdown=(
+            "\"number of paths through a grid\", \"longest common .../edit distance between two "
+            "strings/sequences\", or generally any problem naturally described by TWO independent "
+            "positions/indices where the answer at `(i, j)` builds on answers at `(i-1, j)`, `(i, j-1)`, or "
+            "`(i-1, j-1)`."
+        ),
+        intuition_markdown=(
+            "The loop order matters exactly the way it does in 1D DP, just in two dimensions: every cell "
+            "`dp[r][c]` must be computed AFTER every cell it reads (`dp[r-1][c]` and `dp[r][c-1]` for Unique "
+            "Paths), so the standard order is row by row, left to right within each row. The first row and "
+            "first column are usually special-cased as base cases (exactly one way to reach any edge cell of "
+            "a grid by only moving right or down) before the main double loop starts."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace Unique Paths on a 3x3 grid: dp[r][c] = dp[r-1][c] + dp[r][c-1], the number of ways to "
+            "reach each cell moving only right or down."
+        ),
+        walkthrough_code=(
+            "def unique_paths(rows, cols):\n"
+            "    dp = [[1] * cols for _ in range(rows)]\n"
+            "    for r in range(1, rows):\n"
+            "        for c in range(1, cols):\n"
+            "            dp[r][c] = dp[r-1][c] + dp[r][c-1]\n"
+            "    return dp[rows-1][cols-1]\n\n"
+            "unique_paths(3, 3)"
+        ),
+        walkthrough_frames=[
+            dict(caption="rows=3, cols=3. Every cell in row 0 or column 0 is initialized to 1 -- there's "
+                          "exactly ONE way to reach any edge cell (keep moving right, or keep moving down).",
+                 locals={"dp": [[1, 1, 1], [1, 1, 1], [1, 1, 1]]}),
+            dict(caption="dp[1][1]=dp[0][1]+dp[1][0]=1+1=2 -- the number of paths to any interior cell is "
+                          "the SUM of paths to the cell above it and the cell to its left (the only two "
+                          "ways to arrive here).",
+                 locals={"dp": [[1, 1, 1], [1, 2, 1], [1, 1, 1]]}),
+            dict(caption="dp[1][2]=dp[0][2]+dp[1][1]=1+2=3.",
+                 locals={"dp": [[1, 1, 1], [1, 2, 3], [1, 1, 1]]}),
+            dict(caption="dp[2][1]=dp[1][1]+dp[2][0]=2+1=3.",
+                 locals={"dp": [[1, 1, 1], [1, 2, 3], [1, 3, 1]]}),
+            dict(caption="dp[2][2]=dp[1][2]+dp[2][1]=3+3=6.",
+                 locals={"dp": [[1, 1, 1], [1, 2, 3], [1, 3, 6]]}),
+            dict(caption="dp[2][2]=6 -- the answer. Same idea as 1D DP, just indexed by TWO coordinates "
+                          "instead of one: LCS and Edit Distance use this identical grid-of-subproblems "
+                          "shape, just indexed by two STRING positions (i, j) instead of two GRID "
+                          "coordinates (row, col).",
+                 locals={"dp": [[1, 1, 1], [1, 2, 3], [1, 3, 6]]}),
+        ],
+        common_mistakes_markdown=(
+            "Forgetting to initialize the FIRST row and column to their correct base case before the main "
+            "double loop -- the recurrence `dp[r][c]=dp[r-1][c]+dp[r][c-1]` would then read an uninitialized "
+            "value for any cell along the top or left edge, undercounting (or otherwise corrupting) every "
+            "path that touches them. Looping in the wrong order (e.g. filling column by column when the "
+            "recurrence depends on a value to the LEFT in the same row) -- 2D DP still requires every cell "
+            "you read to already be correctly computed, same constraint 1D DP has, just in two dimensions. "
+            "And an off-by-one on two-string problems specifically -- `dp[i][j]` is usually sized `(n+1) x "
+            "(m+1)` and represents the first `i`/`j` characters, so the actual characters being compared are "
+            "`a[i-1]` and `b[j-1]`, not `a[i]` and `b[j]`."
+        ),
+        complexity_markdown=(
+            "`O(rows * cols)` time and space -- every cell computed exactly once, `O(1)` work per cell. For "
+            "two-string problems like LCS or Edit Distance, that's `O(n * m)` for strings of length `n` and "
+            "`m` -- still far better than trying every possible subsequence/edit sequence, which is "
+            "exponential."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -3762,6 +4074,148 @@ CONCEPT_CHECKPOINTS = {
                                    "nodes is popped and finalized exactly once -- both bounded by "
                                    "O((V+E) log V) total."),
     ],
+    "dynamic-programming": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Computing fib(35) via naive recursion takes noticeably long (seconds), but "
+                              "the same answer via tabulation is instant. Why?",
+             code=None,
+             choices_json=[
+                 "Naive recursion recomputes the same subproblems exponentially many times",
+                 "Tabulation uses a faster CPU instruction",
+                 "Naive recursion has a bug",
+                 "They're actually the same speed",
+             ],
+             correct_answer="Naive recursion recomputes the same subproblems exponentially many times",
+             explanation_markdown="fib(2) alone gets computed 10 separate times while naively computing "
+                                   "fib(6) -- and the ratio gets exponentially worse as n grows. Tabulation "
+                                   "(or memoized recursion) computes each distinct subproblem exactly once "
+                                   "and reuses the stored result."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to memoize fib, but fib_memo_wrong(20) still makes over 21,000 "
+                              "calls -- essentially the same as naive recursion. What's the bug?",
+             code="def fib_memo_wrong(n, memo=None):\n"
+                  "    if memo is None:\n"
+                  "        memo = {}\n"
+                  "    if n < 2:\n"
+                  "        return n\n"
+                  "    result = fib_memo_wrong(n - 1, memo) + fib_memo_wrong(n - 2, memo)\n"
+                  "    memo[n] = result\n"
+                  "    return result",
+             choices_json=None,
+             correct_answer="memo[n] = result is stored AFTER computing, but nothing ever CHECKS memo "
+                             "before recursing again -- there's no `if n in memo: return memo[n]` at the "
+                             "top. So every call still fully re-explores both recursive branches from "
+                             "scratch; the memo dict fills up but is never actually read, and the function "
+                             "stays exponential.",
+             explanation_markdown="Fix: check the cache FIRST, before doing any recursive work -- `if n in "
+                                   "memo: return memo[n]` at the very top of the function, before the base "
+                                   "case check even. Storing a result is only half of memoization; reading "
+                                   "it back is the half that actually saves the work."),
+        dict(kind="complexity",
+             prompt_markdown="Fibonacci via tabulation over n subproblems, O(1) work each, costs how much "
+                              "total time?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n)",
+             explanation_markdown="Each of the n subproblems (dp[0] through dp[n]) is computed exactly "
+                                   "once, O(1) work per cell -- O(n) total, versus naive recursion's "
+                                   "O(2^n)."),
+    ],
+    "dp-1d": [
+        dict(kind="choose_pattern",
+             prompt_markdown="House Robber's dp[i] = max(dp[i-1], dp[i-2] + nums[i]). What's the "
+                              "plain-English version of this recurrence?",
+             code=None,
+             choices_json=[
+                 "At each house, either skip it (keep the best so far) or rob it plus the best from two "
+                 "houses back",
+                 "Always rob every house with an odd index",
+                 "Sort the houses by value and rob the top half",
+                 "Rob every house whose neighbor is worth less",
+             ],
+             correct_answer="At each house, either skip it (keep the best so far) or rob it plus the best "
+                             "from two houses back",
+             explanation_markdown="That's the exact decision dp[i]=max(dp[i-1], dp[i-2]+nums[i]) encodes: "
+                                   "skip house i (dp[i-1], the adjacency constraint stays satisfied) or "
+                                   "take house i plus whatever was already optimal two houses back "
+                                   "(dp[i-2]+nums[i], since house i-1 must then be skipped)."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to solve House Robber, but on nums=[2,7,9,3,1] it returns 9 "
+                              "instead of the correct 12. What's the bug?",
+             code="def rob_wrong(nums):\n"
+                  "    dp = [0] * len(nums)\n"
+                  "    dp[0] = nums[0]\n"
+                  "    dp[1] = max(nums[0], nums[1])\n"
+                  "    for i in range(2, len(nums)):\n"
+                  "        dp[i] = max(dp[i-1], nums[i])\n"
+                  "    return dp[-1]",
+             choices_json=None,
+             correct_answer="dp[i] = max(dp[i-1], nums[i]) is missing the dp[i-2]+ part entirely -- it "
+                             "compares skipping house i against JUST house i's own value, never against "
+                             "robbing house i ALONG WITH whatever was best two houses back. On "
+                             "nums=[2,7,9,3,1] this returns 9 instead of the correct 12 (missing the "
+                             "2+9+1=12 combination entirely).",
+             explanation_markdown="Fix: dp[i] = max(dp[i-1], dp[i-2] + nums[i]) -- the second branch must "
+                                   "ADD nums[i] to dp[i-2], not compare nums[i] alone. This is the single "
+                                   "most common House Robber bug."),
+        dict(kind="complexity",
+             prompt_markdown="House Robber's 1D DP over n houses costs how much time and space?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n) time, O(n) space (reducible to O(1))",
+             explanation_markdown="Each house is considered exactly once (O(1) work per house) -- O(n) "
+                                   "total. Since dp[i] only ever needs the previous two values, the full "
+                                   "array can be replaced with two rolling variables for O(1) space."),
+    ],
+    "dp-2d": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need the length of the longest common subsequence between two strings of "
+                              "length n and m. What's the DP table's shape and the recurrence's rough time "
+                              "complexity?",
+             code=None,
+             choices_json=[
+                 "An (n+1) x (m+1) table, O(n*m) time",
+                 "A 1D array of length n+m, O(n+m) time",
+                 "No table needed -- O(1) with a formula",
+                 "An n x n table regardless of m",
+             ],
+             correct_answer="An (n+1) x (m+1) table, O(n*m) time",
+             explanation_markdown="Each cell dp[i][j] depends on the first i characters of one string and "
+                                   "the first j of the other, so the table needs one row per position in "
+                                   "each string -- (n+1) x (m+1) -- and filling every cell once costs "
+                                   "O(n*m)."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to solve Unique Paths on a 3x3 grid, but it produces the wrong "
+                              "table. What's the bug?",
+             code="def unique_paths_wrong(rows, cols):\n"
+                  "    dp = [[1] * cols for _ in range(rows)]\n"
+                  "    for r in range(rows):\n"
+                  "        for c in range(cols):\n"
+                  "            if r > 0 and c > 0:\n"
+                  "                dp[r][c] = dp[r-1][c] + dp[r][c-1]\n"
+                  "            elif r > 0:\n"
+                  "                dp[r][c] = dp[r-1][c] + 1\n"
+                  "    return dp",
+             choices_json=None,
+             correct_answer="The first column is computed with dp[r-1][c] + 1 instead of just being left "
+                             "at 1 -- there's exactly ONE path to any first-column cell (straight down), "
+                             "not 'the cell above plus one more path'. This double-counts every time and "
+                             "produces a wrong, inflated grid instead of the correct "
+                             "[[1,1,1],[1,2,3],[1,3,6]].",
+             explanation_markdown="Fix: initialize the entire first row AND first column to 1 BEFORE the "
+                                   "main loop (this lesson's dp = [[1]*cols for _ in range(rows)] already "
+                                   "does this correctly), then only apply the r-1/c-1 recurrence to "
+                                   "genuinely interior cells where both r>0 and c>0."),
+        dict(kind="complexity",
+             prompt_markdown="2D DP filling a rows x cols table, O(1) work per cell, costs how much total "
+                              "time and space?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(rows * cols) time and space",
+             explanation_markdown="Every cell is computed exactly once -- O(1) work each -- so total time "
+                                   "(and the space to store the table) scales with the total number of "
+                                   "cells, rows * cols."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -4514,5 +4968,91 @@ CONCEPT_PRACTICE_EXERCISES = {
                             "other candidate still in the heap (or not yet discovered) can only be equal or "
                             "worse. Skip an already-finalized node the same way the lesson's dijkstra does, "
                             "via a stale-entry check on pop."),
+    ],
+    "dynamic-programming": [
+        dict(prompt_markdown="Write `fib_memo(n, memo=None)` using TOP-DOWN memoization (recursion + a "
+                              "cache) instead of this lesson's bottom-up tabulation -- same answer, the "
+                              "other half of Day 39's \"memoization vs tabulation\" comparison. e.g. "
+                              "`fib_memo(6)` returns `8`.",
+             starter_code="def fib_memo(n, memo=None):\n"
+                          "    if memo is None:\n"
+                          "        memo = {}\n"
+                          "    # check the cache first; base case n < 2; otherwise recurse into\n"
+                          "    # both n-1 and n-2, store the result in memo before returning it\n"
+                          "    pass",
+             solution_code=(
+                 "def fib_memo(n, memo=None):\n"
+                 "    if memo is None:\n"
+                 "        memo = {}\n"
+                 "    if n in memo:\n"
+                 "        return memo[n]\n"
+                 "    if n < 2:\n"
+                 "        return n\n"
+                 "    memo[n] = fib_memo(n - 1, memo) + fib_memo(n - 2, memo)\n"
+                 "    return memo[n]"
+             ),
+             hint_markdown="Check `if n in memo: return memo[n]` BEFORE doing any recursive work -- that's "
+                            "the check this lesson's own spot_bug checkpoint is missing. Store the computed "
+                            "result in memo right before returning it, exactly mirroring the base case."),
+    ],
+    "dp-1d": [
+        dict(prompt_markdown="Write `coin_change(coins, amount)` that returns the minimum number of coins "
+                              "needed to make exactly amount (or -1 if impossible), using 1D DP -- e.g. "
+                              "`coin_change([1, 3, 4], 6)` returns `2` (3+3), and `coin_change([2], 3)` "
+                              "returns `-1`.",
+             starter_code="def coin_change(coins, amount):\n"
+                          "    dp = [float('inf')] * (amount + 1)\n"
+                          "    dp[0] = 0\n"
+                          "    for a in range(1, amount + 1):\n"
+                          "        # try every coin; if using it improves on the current best for\n"
+                          "        # this amount, take it\n"
+                          "        pass\n"
+                          "    return dp[amount] if dp[amount] != float('inf') else -1",
+             solution_code=(
+                 "def coin_change(coins, amount):\n"
+                 "    dp = [float('inf')] * (amount + 1)\n"
+                 "    dp[0] = 0\n"
+                 "    for a in range(1, amount + 1):\n"
+                 "        for c in coins:\n"
+                 "            if c <= a and dp[a - c] + 1 < dp[a]:\n"
+                 "                dp[a] = dp[a - c] + 1\n"
+                 "    return dp[amount] if dp[amount] != float('inf') else -1"
+             ),
+             hint_markdown="For each amount a, try EVERY coin c <= a and check dp[a-c]+1 -- the same 'try "
+                            "every choice, take the best' idea Day 41 introduces, just with more than two "
+                            "choices at each step instead of House Robber's fixed skip-or-take pair. "
+                            "dp[0]=0 is the base case: zero coins needed to make amount 0."),
+    ],
+    "dp-2d": [
+        dict(prompt_markdown="Write `lcs_length(a, b)` that returns the length of the longest common "
+                              "subsequence between strings a and b (characters in the same relative order, "
+                              "not necessarily contiguous) -- e.g. `lcs_length('abcde', 'ace')` returns "
+                              "`3` ('ace'), and `lcs_length('abc', 'def')` returns `0`.",
+             starter_code="def lcs_length(a, b):\n"
+                          "    n, m = len(a), len(b)\n"
+                          "    dp = [[0] * (m + 1) for _ in range(n + 1)]\n"
+                          "    for i in range(1, n + 1):\n"
+                          "        for j in range(1, m + 1):\n"
+                          "            # if a[i-1] == b[j-1], this character extends the best\n"
+                          "            # match found without it; otherwise take the best of\n"
+                          "            # dropping a character from either string\n"
+                          "            pass\n"
+                          "    return dp[n][m]",
+             solution_code=(
+                 "def lcs_length(a, b):\n"
+                 "    n, m = len(a), len(b)\n"
+                 "    dp = [[0] * (m + 1) for _ in range(n + 1)]\n"
+                 "    for i in range(1, n + 1):\n"
+                 "        for j in range(1, m + 1):\n"
+                 "            if a[i-1] == b[j-1]:\n"
+                 "                dp[i][j] = dp[i-1][j-1] + 1\n"
+                 "            else:\n"
+                 "                dp[i][j] = max(dp[i-1][j], dp[i][j-1])\n"
+                 "    return dp[n][m]"
+             ),
+             hint_markdown="If a[i-1] == b[j-1] (careful: index i-1/j-1, not i/j, since the table is "
+                            "1-indexed but the strings are 0-indexed), that character extends the match "
+                            "found without either of them: dp[i][j] = dp[i-1][j-1] + 1. Otherwise take the "
+                            "best of skipping a character from EITHER string: max(dp[i-1][j], dp[i][j-1])."),
     ],
 }

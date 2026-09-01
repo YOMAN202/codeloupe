@@ -9,8 +9,9 @@ Pointers -- Days 25-27), batch 4 (Stacks, Queues -- Days 28-29), batch 5
 Search Variants -- Days 21-22), batch 7 (Sorting, Divide-and-conquer
 sorting -- Days 17-20), batch 8 (Trees, Binary Search Trees, Tree
 BFS -- Days 30-32), batch 9 (Heaps, Top-K with a bounded heap --
-Days 33-34), and batch 10 (Graphs, Graph BFS, Graph DFS, Dijkstra's
-algorithm -- Days 35-38) of the curriculum expansion.
+Days 33-34), batch 10 (Graphs, Graph BFS, Graph DFS, Dijkstra's
+algorithm -- Days 35-38), and batch 11 (Dynamic Programming, 1D DP,
+2D DP -- Days 39-42, the final batch of the curriculum expansion).
 
 Covers: the Learn hub lists all lessons grouped by topic in the correct
 topic-before-pattern order; a concept lesson page renders every section
@@ -37,7 +38,13 @@ each node's own label) and GridGraphView (no adapter needed, same as
 HeapView, for the grid-BFS walkthrough) -- plus the graph-shortest-paths
 lesson's real pattern_family narrowing down to 4 of the topic's 9 curated
 problems, the one departure this batch makes from batches 8-9's
-pattern_family=None precedent.
+pattern_family=None precedent; and batch 11's DPTableView integration --
+the first ConceptWalkthrough.jsx view needing more than the current
+frame in isolation (its cell-level diff highlighting walks backward
+through the full frame history), and the batch's own three-lessons-for-
+four-days departure (Days 40-41 share one dp-1d lesson since both teach
+the same 1D-DP shape, mirroring batch 7's Sorting precedent of grouping
+by technique rather than by day-count).
 
 Run with the dev server (port 5173) and backend (port 5001) already up.
 """
@@ -64,8 +71,8 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all twenty-five concept lessons (pilot + batches 1-10)", cards.count() == 25)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting, trees, heaps, graphs)",
+        check("Learn hub lists all twenty-eight concept lessons (pilot + batches 1-11, the full expansion)", cards.count() == 28)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting, trees, heaps, graphs, dynamic programming)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
@@ -79,7 +86,8 @@ def main():
               and page.locator("h3", has_text="sorting").count() > 0
               and page.locator("h3", has_text="trees").count() > 0
               and page.locator("h3", has_text="heaps").count() > 0
-              and page.locator("h3", has_text="graphs").count() > 0)
+              and page.locator("h3", has_text="graphs").count() > 0
+              and page.locator("h3", has_text="dynamic programming").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -773,6 +781,100 @@ def main():
                   and page.locator("a.callout", has_text="Learn: Graph BFS").count() > 0
                   and page.locator("a.callout", has_text="Learn: Graph DFS").count() > 0
                   and page.locator("a.callout", has_text="Learn: Dijkstra").count() > 0)
+
+        # ---- batch 11: dynamic-programming lesson (Fibonacci tabulation via ---
+        # DPTableView, the first view needing the full frame history, not just
+        # the current one, for its cell-level diff highlighting) --------------
+        page.goto(f"{BASE}/#/learn/dynamic-programming", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Dynamic programming')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("dynamic-programming walkthrough renders via DPTableView's dp-cell shape, not any other renderer",
+              walkthrough.locator(".dp-cell").count() > 0
+              and walkthrough.locator(".grid-cell").count() == 0
+              and walkthrough.locator(".graph-node").count() == 0
+              and walkthrough.locator(".tree-node").count() == 0
+              and walkthrough.locator(".heap-node").count() == 0
+              and walkthrough.locator(".seq-boxes").count() == 0)
+        check("dynamic-programming walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("fourth frame highlights exactly one changed dp cell, with value 2 (dp[3])",
+              walkthrough.locator(".dp-cell-changed").count() == 1
+              and walkthrough.locator(".dp-cell-changed").inner_text() == "2")
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("final frame's caption confirms fib(2) was recomputed 10 separate times by naive recursion",
+              "10 separate times" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        problem_rows = page.locator(".problem-list .problem-row")
+        check("dynamic-programming (pattern_family unset) shows all 10 topic='dynamic-programming' curated problems",
+              problem_rows.count() == 10)
+
+        # ---- batch 11: dp-1d lesson (House Robber's skip-or-take recurrence, --
+        # covering both Day 40 and Day 41 -- they share one lesson since both
+        # teach the same 1D-DP shape) -------------------------------------------
+        page.goto(f"{BASE}/#/learn/dp-1d", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('1D DP')", timeout=10000)
+        check("dp-1d prerequisite links to Dynamic programming",
+              page.get_by_role("link", name=re.compile("Dynamic programming")).count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("dp-1d walkthrough renders via DPTableView", walkthrough.locator(".dp-cell").count() > 0)
+        check("dp-1d walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("fourth frame highlights the skip-or-take decision at dp[2]=11",
+              walkthrough.locator(".dp-cell-changed").count() == 1
+              and walkthrough.locator(".dp-cell-changed").inner_text() == "11"
+              and "the DECISION at each step" in page.locator(".concept-walkthrough-caption").inner_text())
+        checkpoint_choice = page.get_by_role(
+            "button", name=re.compile("At each house, either skip it")
+        )
+        check("dp-1d has a choose_pattern checkpoint about the skip-or-take decision",
+              checkpoint_choice.count() > 0)
+        checkpoint_choice.click()
+        page.wait_for_timeout(150)
+        check("correct choice gets positive feedback styling",
+              "checkpoint-correct" in (checkpoint_choice.get_attribute("class") or ""))
+        problem_rows = page.locator(".problem-list .problem-row")
+        check("dp-1d (pattern_family='1D dynamic programming') narrows to 5 problems",
+              problem_rows.count() == 5)
+
+        # ---- batch 11: dp-2d lesson (Unique Paths on a 2D grid, DPTableView's --
+        # is2D branch) ------------------------------------------------------------
+        page.goto(f"{BASE}/#/learn/dp-2d", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('2D DP')", timeout=10000)
+        check("dp-2d prerequisite links to 1D DP",
+              page.get_by_role("link", name=re.compile("1D DP")).count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("dp-2d walkthrough renders via DPTableView's 2D grid branch",
+              walkthrough.locator(".dp-cell").count() > 0 and walkthrough.locator(".grid-cell").count() == 0)
+        check("dp-2d walkthrough starts at step 1 of 6", "step 1 / 6" in walkthrough.inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("fourth frame highlights exactly one changed dp cell, with value 3 (dp[2][1])",
+              walkthrough.locator(".dp-cell-changed").count() == 1
+              and walkthrough.locator(".dp-cell-changed").inner_text() == "3")
+        reveal_btns = page.get_by_role("button", name="Reveal answer")
+        check("dp-2d has reveal-style checkpoints", reveal_btns.count() > 0)
+        reveal_btns.first.click()
+        page.wait_for_timeout(150)
+        check("revealed checkpoint explanation renders",
+              page.locator(".checkpoint-explanation").first.inner_text().strip() != "")
+        problem_rows = page.locator(".problem-list .problem-row")
+        check("dp-2d (pattern_family='2D dynamic programming') narrows to 3 problems",
+              problem_rows.count() == 3)
+
+        # ---- integration: days 39-42 all link to all three DP lessons ----------
+        for day in (39, 40, 41, 42):
+            page.goto(f"{BASE}/#/lessons/{day}", wait_until="networkidle")
+            page.wait_for_selector(f"text=Day {day}", timeout=10000)
+            check(f"day-{day} lesson page shows callouts for all three DP lessons",
+                  page.locator("a.callout", has_text="Learn: Dynamic programming").count() > 0
+                  and page.locator("a.callout", has_text="Learn: 1D DP").count() > 0
+                  and page.locator("a.callout", has_text="Learn: 2D DP").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 
