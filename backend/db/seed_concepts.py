@@ -1324,6 +1324,217 @@ CONCEPT_LESSONS = [
             "R)` alone."
         ),
     ),
+    # ---- Batch 7: item 9 of the curriculum-ordered expansion -- sorting
+    # (Days 17-20). Days 17-18 (bubble, insertion -- both O(n^2)) and Days
+    # 19-20 (merge sort, quicksort -- both O(n log n) divide-and-conquer)
+    # are the curriculum's own conceptual split, matching
+    # pattern_families.py's own two-family distinction for topic="sorting"
+    # ("Sorting fundamentals" vs "Divide and conquer sorting"). The
+    # divide-and-conquer walkthrough deliberately visualizes quicksort's
+    # partition step, not merge sort's merge step -- merging reads from TWO
+    # same-length arrays at once, and ArrayPointerView computes "is this
+    # int a valid pointer" independently per rendered sequence (see the
+    # Stacks/Queues/Recursion/Backtracking precedent in batches 4-5), so i
+    # (a position in `left`) would ALSO render as a misleading chip on
+    # `right` (same length, overlapping valid index range), and vice versa
+    # for j -- unlike Prefix Sums' arr/prefix, where a shared index IS
+    # meaningful on both sequences. Partition works on one array with i/j
+    # as genuinely single-array pointers, sidestepping the hazard
+    # entirely -- and it's the more forward-looking concept anyway (Day
+    # 20's own curriculum content already calls out that partition logic
+    # reappears in quickselect). See docs/decisions.md "Teaching system
+    # expansion: batch 7".
+    dict(
+        slug="sorting",
+        kind="topic",
+        topic="sorting",
+        pattern_family=None,
+        title="Sorting: comparison-based fundamentals",
+        display_order=1,
+        estimated_minutes=16,
+        summary="Bubble sort and insertion sort -- the two simplest ways to sort by repeated comparison and "
+                "swap/shift, both O(n^2), and the baseline everything faster is measured against.",
+        prerequisite_slugs="arrays",
+        what_markdown=(
+            "Two different O(n^2) strategies for sorting by comparing elements. **Bubble sort** repeatedly "
+            "scans the array, swapping any ADJACENT pair that's out of order, so the largest unsorted element "
+            "\"bubbles\" to its correct position each full pass. **Insertion sort** grows a sorted prefix one "
+            "element at a time: it takes the next element (`key`) and SHIFTS everything in the sorted prefix "
+            "that's bigger than it one slot to the right, opening up the correct gap to insert `key` into."
+        ),
+        why_markdown=(
+            "Neither is what you'd reach for to sort a large array in practice (`arr.sort()` and the "
+            "divide-and-conquer sorts exist for that) -- but both are the clearest possible illustration of "
+            "\"an algorithm as a sequence of comparisons and swaps,\" and insertion sort specifically is the "
+            "conceptual bridge to merge sort: merge sort is really just insertion sort's \"grow a sorted "
+            "region\" idea, sped up by splitting the work recursively instead of growing one element at a "
+            "time."
+        ),
+        recognize_markdown=(
+            "You won't often reach for bubble or insertion sort to solve an interview problem directly -- the "
+            "value here is recognizing their SHAPE inside other problems: a nested loop that compares "
+            "adjacent elements and swaps (bubble sort's shape) shows up in problems about counting "
+            "inversions or adjacent-swap distance; \"shift elements right to open a gap\" (insertion sort's "
+            "shape) shows up anywhere you're inserting into an already-sorted structure one item at a time."
+        ),
+        intuition_markdown=(
+            "Insertion sort's inner loop has to be a `while`, not an `if`, for the same reason a sliding "
+            "window's shrink step does: opening up the correct gap for `key` can take more than one shift. If "
+            "`key` needs to move all the way from the end of the array to the front, EVERY element in the "
+            "sorted prefix shifts right by one, one comparison and one shift at a time, until `key` finally "
+            "finds a spot (or the front of the array) where the element to its left is no longer bigger."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `insertion_sort([5, 2, 4, 1, 3])`. Watch `i=3` (`key=1`) closely -- it takes three shifts "
+            "to move `1` all the way from index 3 to the front, exactly the multi-step `while` case."
+        ),
+        walkthrough_code=(
+            "def insertion_sort(arr):\n"
+            "    for i in range(1, len(arr)):\n"
+            "        key = arr[i]\n"
+            "        j = i - 1\n"
+            "        while j >= 0 and arr[j] > key:\n"
+            "            arr[j + 1] = arr[j]\n"
+            "            j -= 1\n"
+            "        arr[j + 1] = key\n"
+            "    return arr"
+        ),
+        walkthrough_frames=[
+            dict(caption="i=1: the sorted prefix is just arr[0:1]=[5]. key=arr[1]=2. j starts at i-1=0. arr[0]=5 is greater than key -- shift it right and keep scanning left.",
+                 locals={"arr": [5, 2, 4, 1, 3], "i": 1, "j": 0}),
+            dict(caption="j has gone below 0 -- shifted past the start of the array. Place key=2 at arr[0]. arr=[2, 5, 4, 1, 3]. Sorted prefix is now [2, 5].",
+                 locals={"arr": [2, 5, 4, 1, 3], "i": 1, "j": -1}),
+            dict(caption="i=2: key=arr[2]=4. arr[1]=5 is greater than key -- one shift; then arr[0]=2 is not greater than key, so the while loop stops. Place key at arr[1]. arr=[2, 4, 5, 1, 3]. Sorted prefix is now [2, 4, 5].",
+                 locals={"arr": [2, 4, 5, 1, 3], "i": 2, "j": 0}),
+            dict(caption="i=3: key=arr[3]=1. arr[2]=5 > key -- shift. j becomes 1. arr[1]=4 is STILL greater than key -- one shift isn't enough, the while loop keeps going.",
+                 locals={"arr": [2, 4, 5, 5, 3], "i": 3, "j": 1}),
+            dict(caption="Shift again: arr[1]=4 > key, shift, j becomes 0. arr[0]=2 is ALSO greater than key -- a third shift is needed.",
+                 locals={"arr": [2, 4, 4, 5, 3], "i": 3, "j": 0}),
+            dict(caption="After the third shift j becomes -1 and the loop finally stops. Place key=1 at arr[0]. arr=[1, 2, 4, 5, 3]. Three shifts were needed to open a path all the way to the front -- exactly why this has to be a while loop, not an if.",
+                 locals={"arr": [1, 2, 4, 5, 3], "i": 3, "j": -1}),
+            dict(caption="i=4: key=arr[4]=3 needs two shifts to reach index 2. Final result: arr=[1, 2, 3, 4, 5] -- fully sorted.",
+                 locals={"arr": [1, 2, 3, 4, 5], "i": 4, "j": 1}),
+        ],
+        common_mistakes_markdown=(
+            "Writing the inner while condition as `while arr[j] > key` and forgetting the `j >= 0` check -- "
+            "once `j` goes negative, Python doesn't error immediately: `arr[j]` silently wraps around and "
+            "reads from the END of the list (`arr[-1]`, `arr[-2]`, ...), corrupting the shift with unrelated "
+            "elements for several steps before eventually crashing once `j` passes `-len(arr)`. Confusing "
+            "bubble sort's SWAP (exchange two adjacent elements) with insertion sort's SHIFT (move one "
+            "element over, without touching the one it passed) -- they look superficially similar but are "
+            "different operations with different costs. And assuming either is stable or fast enough for "
+            "large inputs by default -- both are correct, but `O(n^2)` for arbitrary input, not a substitute "
+            "for `arr.sort()` or the divide-and-conquer sorts in real code."
+        ),
+        complexity_markdown=(
+            "`O(n^2)` in the worst case for both (`n` elements, each potentially needing up to `n` "
+            "comparisons/shifts against every other element) -- reverse-sorted input is the worst case for "
+            "insertion sort specifically, since every new element has to shift all the way to the front. "
+            "`O(1)` extra space for both -- everything happens in place, no second array allocated."
+        ),
+    ),
+    dict(
+        slug="divide-and-conquer-sorting",
+        kind="pattern",
+        topic="sorting",
+        pattern_family="Divide and conquer sorting",
+        title="Divide-and-conquer sorting",
+        display_order=2,
+        estimated_minutes=20,
+        summary="Merge sort and quicksort both break the array into smaller pieces first -- turning O(n^2) "
+                "into O(n log n), and quicksort's partition step reappears constantly in its own right.",
+        prerequisite_slugs="sorting,recursion",
+        what_markdown=(
+            "Both merge sort and quicksort are recursive: they split the array, recursively sort the pieces, "
+            "then combine. **Merge sort** splits down the middle unconditionally (no comparisons needed to "
+            "split), sorts each half recursively, then does the real work in a `merge` step that combines two "
+            "already-sorted halves into one sorted array in a single linear pass. **Quicksort** does the "
+            "opposite: the real work happens in a `partition` step BEFORE recursing -- pick a pivot, "
+            "rearrange the array so everything `<= pivot` ends up to its left and everything greater ends up "
+            "to its right (with the pivot landing in its final sorted position), then recurse on the two "
+            "sides independently. Neither recursive call needs to touch the other side ever again."
+        ),
+        why_markdown=(
+            "Both simple sorts (bubble, insertion) do `O(n)` work, `n` times over -- `O(n^2)` total. Splitting "
+            "the array first is what breaks that: a problem of size `n` becomes two problems of size `n/2`, "
+            "so the recursion is only `O(log n)` levels deep, and each level -- summed across every piece at "
+            "that level -- still only does `O(n)` total work (a full merge, or a full partition). `O(log n)` "
+            "levels times `O(n)` work per level is `O(n log n)`, which is the single biggest complexity jump "
+            "in the whole curriculum: doubling the input size adds one more level of recursion, not double "
+            "the work."
+        ),
+        recognize_markdown=(
+            "You're very rarely asked to implement merge sort or quicksort from scratch as the actual "
+            "interview question -- the reason this pattern matters is that PARTITION reappears constantly on "
+            "its own, stripped of the recursion around it: \"find the kth smallest/largest element\" "
+            "(quickselect -- partition, then recurse into only the ONE side that contains index k, never "
+            "both), \"move all elements matching some condition to one side\" (Dutch national flag / "
+            "partitioning problems), and the general idea of \"split, solve independently, no further work "
+            "needed to combine\" is worth recognizing whenever a problem's brute force is `O(n^2)` but the two "
+            "halves of a split genuinely don't interact."
+        ),
+        intuition_markdown=(
+            "Partition's invariant, one comparison at a time: keep an index `i` marking the boundary of "
+            "\"everything confirmed `<= pivot` so far\" (`arr[lo..i]`), and scan forward with `j`. Whenever "
+            "`arr[j] <= pivot`, advance `i` and swap `arr[i]` with `arr[j]` -- this grows the confirmed region "
+            "by exactly one element without disturbing its invariant. Once `j` has scanned the whole range, "
+            "one final swap drops the pivot itself into position `i + 1`, which is now guaranteed correct: "
+            "everything to its left is `<= pivot`, everything to its right is not."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `partition([8, 3, 1, 9, 5, 4], lo=0, hi=5)` -- pivot is `arr[hi]=4`. Watch how `i` only "
+            "advances (and a swap happens) exactly when `arr[j] <= pivot`."
+        ),
+        walkthrough_code=(
+            "def partition(arr, lo, hi):\n"
+            "    pivot = arr[hi]\n"
+            "    i = lo - 1\n"
+            "    for j in range(lo, hi):\n"
+            "        if arr[j] <= pivot:\n"
+            "            i += 1\n"
+            "            arr[i], arr[j] = arr[j], arr[i]\n"
+            "    arr[i + 1], arr[hi] = arr[hi], arr[i + 1]\n"
+            "    return i + 1"
+        ),
+        walkthrough_frames=[
+            dict(caption="Partition arr around pivot=arr[hi]=4. i marks the boundary of the 'confirmed <= pivot' region (empty so far, since i starts at lo-1=-1). j=0: arr[0]=8 is greater than pivot -- leave it, move on.",
+                 locals={"arr": [8, 3, 1, 9, 5, 4], "j": 0}),
+            dict(caption="j=1: arr[1]=3 is <= pivot -- it belongs in the left region. Advance i to 0 and swap arr[i] with arr[j].",
+                 locals={"arr": [8, 3, 1, 9, 5, 4], "i": 0, "j": 1}),
+            dict(caption="After the swap: arr=[3, 8, 1, 9, 5, 4]. The confirmed region arr[0..i]=[3] now correctly holds only values <= pivot.",
+                 locals={"arr": [3, 8, 1, 9, 5, 4], "i": 0, "j": 1}),
+            dict(caption="j=2: arr[2]=1 is <= pivot -- advance i to 1 and swap arr[i] with arr[j].",
+                 locals={"arr": [3, 8, 1, 9, 5, 4], "i": 1, "j": 2}),
+            dict(caption="After the swap: arr=[3, 1, 8, 9, 5, 4]. Confirmed region arr[0..1]=[3, 1] is still all <= pivot.",
+                 locals={"arr": [3, 1, 8, 9, 5, 4], "i": 1, "j": 2}),
+            dict(caption="j=3 and j=4: arr[3]=9 and arr[4]=5 are both greater than pivot -- left in place, i doesn't move either time.",
+                 locals={"arr": [3, 1, 8, 9, 5, 4], "i": 1, "j": 4}),
+            dict(caption="Scan done. Final swap drops the pivot into its correct position i+1=2: arr=[3, 1, 4, 9, 5, 8]. Everything left of index 2 is <= 4; everything right is greater -- the pivot never needs to move again.",
+                 locals={"arr": [3, 1, 4, 9, 5, 8], "i": 1, "j": 4}),
+        ],
+        common_mistakes_markdown=(
+            "Forgetting the final swap (`arr[i + 1], arr[hi] = arr[hi], arr[i + 1]`) that actually moves the "
+            "pivot from `arr[hi]` into its confirmed position -- the function still returns `i + 1` as if the "
+            "pivot were there, but it isn't; the two recursive calls then split around the wrong index and "
+            "silently produce a scrambled result, working correctly only on inputs where the pivot happened "
+            "to already belong at `hi`. Always picking the LAST element as the pivot on already-sorted (or "
+            "reverse-sorted) input -- every partition step splits off just one element instead of roughly "
+            "half, degrading quicksort from `O(n log n)` to `O(n^2)`, which is why real implementations "
+            "randomize the pivot choice or pick a median-of-three. And merge sort specifically: forgetting to "
+            "copy the remaining tail of whichever half didn't run out first -- one side is always exhausted "
+            "before the other, and its leftover elements (already sorted) just get appended, no more "
+            "comparisons needed."
+        ),
+        complexity_markdown=(
+            "`O(n log n)` average case for both: `O(log n)` levels of recursion (the array roughly halves, or "
+            "partitions roughly in half on average, each level), and `O(n)` total work summed across every "
+            "piece at a single level (a full merge, or a full partition pass). Quicksort's WORST case is "
+            "`O(n^2)` -- a consistently bad pivot choice (e.g. always picking an extreme value on sorted "
+            "input) turns `log n` levels into `n` levels. Merge sort has no such worst case (`O(n log n)` "
+            "always) but needs `O(n)` extra space for the merge step; quicksort partitions in place, `O(log "
+            "n)` extra space for the recursion stack."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -1963,6 +2174,115 @@ CONCEPT_CHECKPOINTS = {
              explanation_markdown="Each of the O(log R) binary-search steps over the candidate range calls "
                                    "the O(n) predicate check once -- the two costs multiply, not add."),
     ],
+    "sorting": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Which of these sorts does much less work when the input is ALREADY nearly "
+                              "sorted, compared to a random input of the same size?",
+             code=None,
+             choices_json=[
+                 "Insertion sort",
+                 "Selection sort",
+                 "Any comparison sort -- they all do the same amount of work regardless of input order",
+                 "None -- sorting algorithms ignore existing order",
+             ],
+             correct_answer="Insertion sort",
+             explanation_markdown="Insertion sort's inner while loop only shifts as far as needed to find "
+                                   "each element's correct spot -- on a nearly-sorted array most elements "
+                                   "need zero or one shift, so it runs close to O(n) instead of O(n^2). "
+                                   "Selection sort's inner scan for the next minimum is always the full "
+                                   "remaining length regardless of how sorted the input already is -- it "
+                                   "can't finish early."),
+        dict(kind="spot_bug",
+             prompt_markdown="This insertion sort usually works, but sometimes silently produces a wrong "
+                              "result instead of an error, or occasionally crashes outright. What's the bug?",
+             code="def insertion_sort(arr):\n"
+                  "    for i in range(1, len(arr)):\n"
+                  "        key = arr[i]\n"
+                  "        j = i - 1\n"
+                  "        while arr[j] > key:\n"
+                  "            arr[j + 1] = arr[j]\n"
+                  "            j -= 1\n"
+                  "        arr[j + 1] = key\n"
+                  "    return arr",
+             choices_json=None,
+             correct_answer="The while condition is missing j >= 0 -- it should be "
+                             "while j >= 0 and arr[j] > key. Once j goes negative, Python doesn't error "
+                             "immediately: arr[j] silently wraps around and reads from the END of the list "
+                             "(arr[-1], arr[-2], ...), corrupting the shift with unrelated elements for "
+                             "several steps before eventually crashing once j passes -len(arr).",
+             explanation_markdown="A missing bounds check on a negative index is one of the sneakiest bugs "
+                                   "in Python specifically, since arr[-1] is always valid -- it never raises "
+                                   "an error to point you at the mistake, it just silently reads the wrong "
+                                   "element."),
+        dict(kind="complexity",
+             prompt_markdown="What's the worst-case time complexity of insertion sort (and bubble sort), and "
+                              "which input triggers it?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n^2), triggered by reverse-sorted input",
+             explanation_markdown="Reverse-sorted input forces every new element to shift/compare against "
+                                   "everything already placed -- roughly n comparisons for each of n "
+                                   "elements, the worst case for both algorithms."),
+    ],
+    "divide-and-conquer-sorting": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need the kth smallest element in an unsorted array, without needing the "
+                              "rest of the array fully sorted. What's the most efficient approach covered so "
+                              "far?",
+             code=None,
+             choices_json=[
+                 "Quickselect -- partition like quicksort, but only recurse into the one side that contains "
+                 "index k",
+                 "Fully sort the array, then index into position k",
+                 "Binary search directly over the unsorted array",
+                 "Insertion sort until the kth element is in its final place",
+             ],
+             correct_answer="Quickselect -- partition like quicksort, but only recurse into the one side "
+                             "that contains index k",
+             explanation_markdown="Partition already tells you exactly where the pivot landed (index i+1) "
+                                   "relative to k -- if that's k, you're done; otherwise only ONE side can "
+                                   "possibly contain index k, so quickselect never wastes time recursing into "
+                                   "the side that doesn't matter, unlike a full sort."),
+        dict(kind="spot_bug",
+             prompt_markdown="This quicksort usually sorts correctly, but sometimes silently produces a "
+                              "scrambled (not fully sorted) result. What's the bug?",
+             code="def partition(arr, lo, hi):\n"
+                  "    pivot = arr[hi]\n"
+                  "    i = lo - 1\n"
+                  "    for j in range(lo, hi):\n"
+                  "        if arr[j] <= pivot:\n"
+                  "            i += 1\n"
+                  "            arr[i], arr[j] = arr[j], arr[i]\n"
+                  "    return i + 1\n\n"
+                  "def quicksort(arr, lo=0, hi=None):\n"
+                  "    if hi is None:\n"
+                  "        hi = len(arr) - 1\n"
+                  "    if lo < hi:\n"
+                  "        p = partition(arr, lo, hi)\n"
+                  "        quicksort(arr, lo, p - 1)\n"
+                  "        quicksort(arr, p + 1, hi)\n"
+                  "    return arr",
+             choices_json=None,
+             correct_answer="partition() never actually moves the pivot into its final position -- the line "
+                             "arr[i + 1], arr[hi] = arr[hi], arr[i + 1] is missing. It returns i + 1 claiming "
+                             "that's where the pivot now sits, but the pivot is still at arr[hi]. The "
+                             "recursive calls then split around the wrong index, silently scrambling the "
+                             "result -- and it happens to work by luck on inputs where the pivot already "
+                             "belonged at hi, which is what makes it easy to miss.",
+             explanation_markdown="Compare against this lesson's own walkthrough_code: the final swap line is "
+                                   "exactly what's missing here."),
+        dict(kind="complexity",
+             prompt_markdown="Merge sort and (average-case) quicksort both take O(n log n). Where does the "
+                              "log n factor come from specifically?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(log n) levels of recursion (the input roughly halves each level), each level "
+                             "doing O(n) total work across all its pieces combined",
+             explanation_markdown="The recursion tree's depth is log n because the input size halves (or "
+                                   "partitions roughly in half, on average) at every level; the work summed "
+                                   "across every piece AT one level is still O(n) total, no matter how many "
+                                   "pieces that level has been split into."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -2273,5 +2593,66 @@ CONCEPT_PRACTICE_EXERCISES = {
                             "rotation point (and the minimum) must be somewhere to the right of mid; "
                             "otherwise mid itself could BE the minimum, so hi shrinks down to mid, not past "
                             "it."),
+    ],
+    "sorting": [
+        dict(prompt_markdown="Write `selection_sort(arr)` -- repeatedly find the MINIMUM of the unsorted "
+                              "remainder and swap it into place at the front. Unlike bubble sort or "
+                              "insertion sort (both curated as their own problems), this is a third "
+                              "comparison-based approach: exactly one swap per pass, no matter how far out "
+                              "of place the minimum was.",
+             starter_code="def selection_sort(arr):\n    n = len(arr)\n    for i in range(n):\n"
+                          "        # find the index of the minimum value in arr[i:], then swap it to arr[i]\n"
+                          "        pass\n    return arr",
+             solution_code=(
+                 "def selection_sort(arr):\n"
+                 "    n = len(arr)\n"
+                 "    for i in range(n):\n"
+                 "        min_idx = i\n"
+                 "        for j in range(i + 1, n):\n"
+                 "            if arr[j] < arr[min_idx]:\n"
+                 "                min_idx = j\n"
+                 "        arr[i], arr[min_idx] = arr[min_idx], arr[i]\n"
+                 "    return arr"
+             ),
+             hint_markdown="Two nested loops, but a different shape than insertion sort's: the OUTER index i "
+                            "marks the next position to fill; the INNER loop just scans arr[i+1:] to find "
+                            "which index currently holds the smallest value, then one swap places it at i."),
+    ],
+    "divide-and-conquer-sorting": [
+        dict(prompt_markdown="Write `quickselect(arr, k)` that returns the kth smallest element (0-indexed) "
+                              "in arr WITHOUT fully sorting it -- e.g. `quickselect([7,2,9,4,1], 2)` returns "
+                              "`4` (the 3rd smallest). Reuse this lesson's own `partition` function.",
+             starter_code="def partition(arr, lo, hi):\n    pivot = arr[hi]\n    i = lo - 1\n"
+                          "    for j in range(lo, hi):\n        if arr[j] <= pivot:\n            i += 1\n"
+                          "            arr[i], arr[j] = arr[j], arr[i]\n"
+                          "    arr[i + 1], arr[hi] = arr[hi], arr[i + 1]\n    return i + 1\n\n"
+                          "def quickselect(arr, k):\n    lo, hi = 0, len(arr) - 1\n"
+                          "    # partition, then recurse into ONLY the side that contains index k\n    pass",
+             solution_code=(
+                 "def partition(arr, lo, hi):\n"
+                 "    pivot = arr[hi]\n"
+                 "    i = lo - 1\n"
+                 "    for j in range(lo, hi):\n"
+                 "        if arr[j] <= pivot:\n"
+                 "            i += 1\n"
+                 "            arr[i], arr[j] = arr[j], arr[i]\n"
+                 "    arr[i + 1], arr[hi] = arr[hi], arr[i + 1]\n"
+                 "    return i + 1\n"
+                 "\n"
+                 "def quickselect(arr, k):\n"
+                 "    lo, hi = 0, len(arr) - 1\n"
+                 "    while True:\n"
+                 "        p = partition(arr, lo, hi)\n"
+                 "        if p == k:\n"
+                 "            return arr[p]\n"
+                 "        elif p < k:\n"
+                 "            lo = p + 1\n"
+                 "        else:\n"
+                 "            hi = p - 1"
+             ),
+             hint_markdown="After one partition call, arr[p] is ALREADY in its final sorted position -- "
+                            "compare p to k directly: if p == k you're done, if p < k the answer is "
+                            "somewhere in the right side (lo = p + 1), otherwise it's in the left side "
+                            "(hi = p - 1). Never recurse into both sides like quicksort does."),
     ],
 }

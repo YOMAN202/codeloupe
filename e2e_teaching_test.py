@@ -5,8 +5,9 @@ content architecture"). Covers the original Arrays + Two Pointers pilot
 plus batch 1 (Prefix Sums, Strings, Hashing -- Days 9-12), batch 2
 (Sliding Window -- Days 15-16), batch 3 (Linked Lists, Fast/Slow
 Pointers -- Days 25-27), batch 4 (Stacks, Queues -- Days 28-29), batch 5
-(Recursion, Backtracking -- Days 23-24), and batch 6 (Binary Search,
-Binary Search Variants -- Days 21-22) of the curriculum expansion.
+(Recursion, Backtracking -- Days 23-24), batch 6 (Binary Search, Binary
+Search Variants -- Days 21-22), and batch 7 (Sorting, Divide-and-conquer
+sorting -- Days 17-20) of the curriculum expansion.
 
 Covers: the Learn hub lists all lessons grouped by topic in the correct
 topic-before-pattern order; a concept lesson page renders every section
@@ -52,8 +53,8 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all fourteen concept lessons (pilot + batches 1-6)", cards.count() == 14)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search)",
+        check("Learn hub lists all sixteen concept lessons (pilot + batches 1-7)", cards.count() == 16)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
@@ -63,7 +64,8 @@ def main():
               and page.locator("h3", has_text="stacks").count() > 0
               and page.locator("h3", has_text="queues").count() > 0
               and page.locator("h3", has_text="recursion").count() > 0
-              and page.locator("h3", has_text="binary search").count() > 0)
+              and page.locator("h3", has_text="binary search").count() > 0
+              and page.locator("h3", has_text="sorting").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -446,6 +448,67 @@ def main():
         check("day-22 lesson page shows callouts for both Binary search and Binary search variants",
               page.locator("a.callout", has_text="Learn: Binary search").count() > 0
               and page.locator("a.callout", has_text="Learn: Binary search variants").count() > 0)
+
+        # ---- batch 7: sorting lesson (insertion sort's multi-shift while loop) --
+        page.goto(f"{BASE}/#/learn/sorting", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Sorting')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("sorting walkthrough renders via the plain array/pointer view",
+              walkthrough.locator(".seq-boxes").count() > 0)
+        check("sorting walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        check("multi-shift frame's caption confirms one shift wasn't enough",
+              "isn't enough" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        final_values = page.locator(".concept-walkthrough .seq-box-value").all_inner_texts()
+        check("final frame shows the fully sorted array [1, 2, 3, 4, 5]",
+              final_values == ["1", "2", "3", "4", "5"])
+        reveal_btns = page.get_by_role("button", name="Reveal answer")
+        check("sorting has reveal-style checkpoints", reveal_btns.count() > 0)
+        reveal_btns.first.click()
+        page.wait_for_timeout(150)
+        check("revealed checkpoint explanation mentions the negative-indexing wraparound bug",
+              "wrap" in page.locator(".checkpoint-explanation").first.inner_text().lower())
+
+        # ---- batch 7: divide-and-conquer-sorting lesson (quicksort partition) --
+        page.goto(f"{BASE}/#/learn/divide-and-conquer-sorting", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Divide-and-conquer sorting')", timeout=10000)
+        check("divide-and-conquer-sorting prerequisites link to both Sorting and Recursion",
+              page.get_by_role("link", name="Sorting: comparison-based fundamentals").count() > 0
+              and page.get_by_role("link", name="Recursion").count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("divide-and-conquer-sorting walkthrough renders (quicksort partition, single array only)",
+              walkthrough.count() > 0)
+        check("divide-and-conquer-sorting walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(6):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        final_values = page.locator(".concept-walkthrough .seq-box-value").all_inner_texts()
+        check("final partition frame places the pivot (4) at its correct sorted index, [3, 1, 4, 9, 5, 8]",
+              final_values == ["3", "1", "4", "9", "5", "8"])
+        checkpoint_choice = page.get_by_role("button", name=re.compile("Quickselect -- partition like quicksort"))
+        check("divide-and-conquer-sorting has a choose_pattern checkpoint about quickselect",
+              checkpoint_choice.count() > 0)
+        checkpoint_choice.click()
+        page.wait_for_timeout(150)
+        check("correct choice gets positive feedback styling",
+              "checkpoint-correct" in (checkpoint_choice.get_attribute("class") or ""))
+
+        # ---- integration: days 17-20 link to both sorting lessons --------------
+        page.goto(f"{BASE}/#/lessons/17", wait_until="networkidle")
+        page.wait_for_selector("text=Day 17", timeout=10000)
+        check("day-17 lesson page shows callouts for both Sorting and Divide-and-conquer sorting",
+              page.locator("a.callout", has_text="Learn: Sorting").count() > 0
+              and page.locator("a.callout", has_text="Learn: Divide-and-conquer sorting").count() > 0)
+        page.goto(f"{BASE}/#/lessons/20", wait_until="networkidle")
+        page.wait_for_selector("text=Day 20", timeout=10000)
+        check("day-20 lesson page shows callouts for both Sorting and Divide-and-conquer sorting",
+              page.locator("a.callout", has_text="Learn: Sorting").count() > 0
+              and page.locator("a.callout", has_text="Learn: Divide-and-conquer sorting").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 
