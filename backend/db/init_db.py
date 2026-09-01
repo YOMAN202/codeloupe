@@ -19,12 +19,15 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from seed_lessons import LESSONS
 from seed_problems import PROBLEMS
+from seed_concepts import CONCEPT_LESSONS, CONCEPT_CHECKPOINTS, CONCEPT_PRACTICE_EXERCISES
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "traceviz.db")
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 _TABLES = ["mistakes", "revision_schedule", "attempts", "hints",
-           "test_cases", "problems", "lessons"]
+           "test_cases", "problems", "lessons",
+           "concept_lesson_progress", "concept_practice_exercises",
+           "concept_checkpoints", "concept_lessons"]
 
 
 def get_connection():
@@ -125,6 +128,47 @@ def _seed_problems(conn):
             )
 
 
+def _seed_concepts(conn):
+    for c in CONCEPT_LESSONS:
+        cur = conn.execute(
+            """INSERT INTO concept_lessons
+               (slug, kind, topic, pattern_family, title, display_order, estimated_minutes,
+                summary, prerequisite_slugs, what_markdown, why_markdown, recognize_markdown,
+                intuition_markdown, walkthrough_intro_markdown, walkthrough_code,
+                walkthrough_frames_json, common_mistakes_markdown, complexity_markdown)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (c["slug"], c["kind"], c["topic"], c.get("pattern_family"), c["title"],
+             c.get("display_order", 0), c.get("estimated_minutes"), c["summary"],
+             c.get("prerequisite_slugs", ""), c["what_markdown"], c["why_markdown"],
+             c.get("recognize_markdown"), c["intuition_markdown"],
+             c.get("walkthrough_intro_markdown"), c.get("walkthrough_code"),
+             json.dumps(c["walkthrough_frames"]) if c.get("walkthrough_frames") else None,
+             c.get("common_mistakes_markdown"), c.get("complexity_markdown")),
+        )
+        concept_id = cur.lastrowid
+
+        for order, chk in enumerate(CONCEPT_CHECKPOINTS.get(c["slug"], [])):
+            conn.execute(
+                """INSERT INTO concept_checkpoints
+                   (concept_lesson_id, display_order, kind, prompt_markdown, code,
+                    choices_json, correct_answer, explanation_markdown)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (concept_id, order, chk["kind"], chk["prompt_markdown"], chk.get("code"),
+                 json.dumps(chk["choices_json"]) if chk.get("choices_json") else None,
+                 chk["correct_answer"], chk["explanation_markdown"]),
+            )
+
+        for order, ex in enumerate(CONCEPT_PRACTICE_EXERCISES.get(c["slug"], [])):
+            conn.execute(
+                """INSERT INTO concept_practice_exercises
+                   (concept_lesson_id, display_order, prompt_markdown, starter_code,
+                    solution_code, hint_markdown)
+                   VALUES (?,?,?,?,?,?)""",
+                (concept_id, order, ex["prompt_markdown"], ex.get("starter_code"),
+                 ex["solution_code"], ex.get("hint_markdown")),
+            )
+
+
 def init_db():
     """Full (re)initialization: drops and recreates every table, including
     attempts/revision_schedule/mistakes, then reseeds lessons and
@@ -139,13 +183,16 @@ def init_db():
         conn.executescript(f.read())
     _seed_lessons(conn)
     _seed_problems(conn)
+    _seed_concepts(conn)
     conn.commit()
     lesson_count = conn.execute("SELECT COUNT(*) c FROM lessons").fetchone()["c"]
     problem_count = conn.execute("SELECT COUNT(*) c FROM problems").fetchone()["c"]
     test_case_count = conn.execute("SELECT COUNT(*) c FROM test_cases").fetchone()["c"]
+    concept_count = conn.execute("SELECT COUNT(*) c FROM concept_lessons").fetchone()["c"]
     conn.close()
     print(f"Initialized {DB_PATH}: {lesson_count} lessons, {problem_count} problems, "
-          f"{test_case_count} test cases (auto-verified against reference solutions).")
+          f"{test_case_count} test cases (auto-verified against reference solutions), "
+          f"{concept_count} concept lessons.")
 
 
 def ensure_db():

@@ -1,25 +1,31 @@
 // Lesson/problem content is plain multi-line text (not full markdown).
 // Render it as paragraphs, turning consecutive dash/number-prefixed
-// lines into a real list so it doesn't look like a wall of text, and
-// turning single-backtick spans (`nums`, `O(n)`) into real inline code
-// instead of showing literal backtick characters -- about half the
-// problem bank's descriptions use that convention. No markdown library
-// needed for content this simple.
+// lines into a real list so it doesn't look like a wall of text, turning
+// single-backtick spans (`nums`, `O(n)`) into real inline code instead of
+// showing literal backtick characters -- about half the problem bank's
+// descriptions use that convention -- and turning **double-asterisk**
+// spans into real bold (the concept-lesson content in
+// backend/db/seed_concepts.py uses this to name sub-patterns inline, e.g.
+// "**opposite-direction**"). No markdown library needed for content this
+// simple; these are the only two inline conventions this content pipeline
+// supports, deliberately, rather than reaching for full markdown.
 
-// Shared with LessonDetail.jsx for the same reason: any free-text field
-// from the same content pipeline can contain a `backtick span`, and it
-// should render the same way everywhere it appears.
+// Shared with LessonDetail.jsx and ConceptLesson.jsx for the same reason:
+// any free-text field from the same content pipeline can contain either
+// span, and it should render the same way everywhere it appears.
 export function renderInlineCode(text) {
   if (!text) return text;
-  const parts = text.split(/(`[^`]+`)/g);
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
   if (parts.length === 1) return text;
-  return parts.map((part, i) =>
-    part.startsWith("`") && part.endsWith("`") && part.length > 1 ? (
-      <code key={i}>{part.slice(1, -1)}</code>
-    ) : (
-      <span key={i}>{part}</span>
-    )
-  );
+  return parts.map((part, i) => {
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 1) {
+      return <code key={i}>{part.slice(1, -1)}</code>;
+    }
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
 
 export default function MultilineText({ text, className = "" }) {

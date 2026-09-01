@@ -94,6 +94,17 @@ export default function LessonDetail() {
         </div>
       )}
 
+      {lesson.concept_lessons?.length > 0 && (
+        <div className="callout-row">
+          {lesson.concept_lessons.map((c) => (
+            <Link key={c.slug} to={`/learn/${c.slug}`} className="callout callout-next">
+              <strong>Learn: {c.title}</strong>
+              <span>{c.summary}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
       <section className="lesson-section">
         <h3>Concept</h3>
         <MultilineText text={lesson.concept_markdown} />

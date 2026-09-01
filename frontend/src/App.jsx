@@ -6,6 +6,8 @@ import ProblemWorkspace from "./pages/ProblemWorkspace/ProblemWorkspace";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import MistakeJournal from "./pages/MistakeJournal/MistakeJournal";
 import Scratchpad from "./pages/Scratchpad/Scratchpad";
+import Learn from "./pages/Learn/Learn";
+import ConceptLesson from "./pages/ConceptLesson/ConceptLesson";
 import "./App.css";
 
 // Codeloupe's abstract focus-ring mark -- a lens ring with a center point,
@@ -25,7 +27,7 @@ function BrandMark({ size = 22 }) {
 // Navigation order, deliberately reconsidered (was Curriculum -> Problems
 // -> Dashboard -> Mistake Journal -> Scratchpad):
 //
-//   Dashboard -> Curriculum -> Problems -> Mistake Journal -> Scratchpad
+//   Dashboard -> Learn -> Curriculum -> Problems -> Mistake Journal -> Scratchpad
 //
 // Dashboard is now both the landing route ("/") and first in the sidebar.
 // It already carries "Today's session" (an adaptive next-thing-to-do
@@ -33,14 +35,27 @@ function BrandMark({ size = 22 }) {
 // resume-lesson prompt Curriculum shows (see Dashboard.jsx), making it the
 // single most complete answer to "what should I do right now" the moment
 // the app opens, rather than requiring a click over from Curriculum first.
+//
+// Learn sits right after Dashboard, before Curriculum: it's a genuinely
+// different content type from the day-based Curriculum (concept/pattern
+// lessons like "Arrays" or "Two pointers", not a day-by-day schedule), and
+// giving it a real nav slot -- rather than burying it inside Curriculum or
+// individual problem pages -- is what makes it obvious, per the teaching-
+// system brief, that Codeloupe is a learning platform and not just a
+// LeetCode-style question list. Everywhere else (problem pages, day
+// lessons) links INTO a concept lesson contextually; this is the one place
+// to browse all of them. See docs/decisions.md "Teaching system UX
+// integration" for why this earned a nav slot rather than reusing Curriculum's.
+//
 // Curriculum keeps its own resume callout for when a learner lands there
 // directly (e.g. mid-session, to plan ahead) -- it becomes purely the
 // "browse/plan the full 45-day path" page. Problems and Mistake Journal
 // keep their relative order per the reviewed suggestion; Scratchpad stays
 // last, since it's a free-form utility rather than part of the guided
-// learn -> solve -> review loop the other four pages form.
+// learn -> solve -> review loop the other pages form.
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", end: true },
+  { to: "/learn", label: "Learn" },
   { to: "/curriculum", label: "Curriculum" },
   { to: "/problems", label: "Problems" },
   { to: "/mistakes", label: "Mistake Journal" },
@@ -73,6 +88,8 @@ function App() {
       <main className="main-content">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/learn" element={<Learn />} />
+          <Route path="/learn/:slug" element={<ConceptLesson />} />
           <Route path="/curriculum" element={<CurriculumMap />} />
           <Route path="/lessons/:day" element={<LessonDetail />} />
           <Route path="/problems" element={<ProblemBrowser />} />

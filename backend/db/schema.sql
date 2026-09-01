@@ -146,3 +146,101 @@ CREATE TABLE IF NOT EXISTS mistakes (
     evidence TEXT,                      -- short factual note the classifier (or the learner) attached
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ---------------------------------------------------------------------
+-- Teaching system: structured concept lessons (topic overviews and
+-- pattern deep-dives), separate from the day-based `lessons` table above.
+-- `lessons` stays what it always was -- a concise per-day mix of Python
+-- fundamentals and a pointer at the DSA vocabulary for that day.
+-- `concept_lessons` is the deeper "what is this, why does it work, when
+-- do I reach for it" teaching content the day lessons never had room for.
+--
+-- Deliberately hangs off the SAME vocabulary the problem bank already
+-- uses -- problems.topic (15 existing values: 'arrays', 'two-pointer',
+-- etc.) and logic/pattern_families.py's normalized family names -- rather
+-- than inventing a new taxonomy. That is what makes this scale to the
+-- rest of the curriculum later without a redesign: a new concept lesson
+-- is just a new row whose `topic` matches an existing problems.topic
+-- value, and every problem/day/lesson tagged with that topic picks it up
+-- automatically (see the dynamic linking notes below) -- no new join
+-- table to keep in sync, no per-problem/per-day authoring required.
+--
+-- Linking to problems and day-lessons is intentionally NOT a foreign key
+-- or join table: it's computed at request time in app.py by matching
+-- problems.topic (and logic.pattern_families.pattern_family_for) against
+-- concept_lessons.topic/pattern_family. A hardcoded link table would go
+-- stale the moment a new problem or day lesson is added; deriving it from
+-- the vocabulary both already share never can.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS concept_lessons (
+    id INTEGER PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,             -- e.g. 'arrays', 'two-pointers'
+    kind TEXT NOT NULL CHECK (kind IN ('topic', 'pattern')),
+                                            -- 'topic'   = broad foundational lesson for a problems.topic
+                                            --             value (what arrays are, indexing, traversal...)
+                                            -- 'pattern' = a recognizable technique within/across topics
+                                            --             (two pointers, sliding window...), taught with
+                                            --             explicit "when should I use this?" signals
+    topic TEXT NOT NULL,                   -- matches an existing problems.topic value
+    pattern_family TEXT,                   -- optional: matches a logic/pattern_families.py family name,
+                                            -- for a 'pattern' lesson that maps onto one specific family
+    title TEXT NOT NULL,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    estimated_minutes INTEGER,
+    summary TEXT NOT NULL,                 -- 1 sentence, shown on Learn hub cards and problem-page callouts
+    prerequisite_slugs TEXT,               -- comma-separated concept_lessons.slug values (recommended, not gated)
+    what_markdown TEXT NOT NULL,           -- what the concept/pattern is
+    why_markdown TEXT NOT NULL,            -- why it's useful / what problem it solves
+    recognize_markdown TEXT,               -- "when should I use this?" -- concrete recognition signals
+                                            -- (NULL for most 'topic' lessons, required in spirit for 'pattern' ones)
+    intuition_markdown TEXT NOT NULL,      -- the core idea in plain language, before any code
+    walkthrough_intro_markdown TEXT,       -- short lead-in to the worked example below
+    walkthrough_code TEXT,                 -- the annotated worked-example code shown alongside the walkthrough
+    walkthrough_frames_json TEXT,          -- JSON array of {caption, locals} teaching-visualization frames --
+                                            -- controlled/authored example state, NOT a trace of the user's own
+                                            -- code. Rendered by ConceptWalkthrough.jsx, which reuses the same
+                                            -- ArrayPointerView/etc. components the real tracer uses, but is a
+                                            -- fully separate component from TraceViewer.jsx: this data never
+                                            -- touches the sys.settrace pipeline. See docs/decisions.md.
+    common_mistakes_markdown TEXT,
+    complexity_markdown TEXT               -- time/space complexity discussion for this concept/pattern
+);
+
+CREATE TABLE IF NOT EXISTS concept_checkpoints (
+    id INTEGER PRIMARY KEY,
+    concept_lesson_id INTEGER NOT NULL REFERENCES concept_lessons(id),
+    display_order INTEGER NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL CHECK (kind IN
+        ('predict_output', 'choose_pattern', 'spot_bug', 'complexity', 'order_steps')),
+    prompt_markdown TEXT NOT NULL,
+    code TEXT,                              -- optional code snippet the prompt refers to
+    choices_json TEXT,                      -- JSON array of choice strings (multiple-choice-style checkpoints);
+                                             -- NULL for free-response ones (predict_output, complexity)
+    correct_answer TEXT NOT NULL,           -- matches a choices_json entry, or free text otherwise
+    explanation_markdown TEXT NOT NULL      -- shown after answering, right or wrong -- reinforces either way
+);
+
+-- Small guided drills done in the scratchpad BEFORE a full curated
+-- problem -- deliberately lighter-weight than the problem bank (no test
+-- harness, no hints ladder, no attempt/mistake tracking). Just a prompt,
+-- a nudge, and a reference solution to compare against.
+CREATE TABLE IF NOT EXISTS concept_practice_exercises (
+    id INTEGER PRIMARY KEY,
+    concept_lesson_id INTEGER NOT NULL REFERENCES concept_lessons(id),
+    display_order INTEGER NOT NULL DEFAULT 0,
+    prompt_markdown TEXT NOT NULL,
+    starter_code TEXT,
+    solution_code TEXT NOT NULL,
+    hint_markdown TEXT
+);
+
+-- Per-concept-lesson learning status, independent of day lesson_progress
+-- above (a learner can know the "two pointers" pattern lesson without
+-- that being tied to any single curriculum day).
+CREATE TABLE IF NOT EXISTS concept_lesson_progress (
+    concept_lesson_id INTEGER PRIMARY KEY REFERENCES concept_lessons(id),
+    status TEXT NOT NULL DEFAULT 'not_started'
+        CHECK (status IN ('not_started', 'in_progress', 'completed', 'known')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

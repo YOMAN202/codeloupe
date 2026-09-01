@@ -35,6 +35,29 @@ def row_to_dict(row):
     return dict(row) if row else None
 
 
+# ---------------------------------------------------------- concept links --
+# Shared by the lessons/problems endpoints below (to surface "concepts you
+# should know" inline) and by the /api/concepts endpoints further down.
+# See db/schema.sql's concept_lessons comment: the link is a computed
+# topic-string match, not a join table, so it never goes stale as new
+# problems/days/concept lessons are added.
+
+def _related_concept_lessons(conn, topics):
+    topics = [t for t in dict.fromkeys(topics) if t]  # dedupe, preserve order, drop falsy
+    if not topics:
+        return []
+    placeholders = ",".join("?" * len(topics))
+    rows = conn.execute(
+        f"""SELECT cl.slug, cl.kind, cl.title, cl.summary,
+                   COALESCE(clp.status, 'not_started') AS status
+            FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
+            WHERE cl.topic IN ({placeholders})
+            ORDER BY cl.topic, cl.kind, cl.display_order""",
+        topics,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------- health --
 
 @app.route("/api/health", methods=["GET"])
@@ -95,6 +118,10 @@ def get_lesson(day):
             "satisfied": (block_days["done"] or 0) == block_days["total"],
         })
     result["recommended_prerequisites"] = prerequisites
+    # "concepts you should know" for this day, derived from its problems'
+    # topics -- empty for most days until the teaching system's content
+    # expands past the arrays/two-pointers pilot (see db/seed_concepts.py).
+    result["concept_lessons"] = _related_concept_lessons(conn, [p["topic"] for p in problems])
     conn.close()
     return jsonify(result)
 
@@ -195,12 +222,149 @@ def get_problem(slug):
         "SELECT input_args_json, expected_output_json, label FROM test_cases "
         "WHERE problem_id = ? AND is_hidden = 0 ORDER BY id", (problem["id"],)
     ).fetchall()
+    result["concept_lessons"] = _related_concept_lessons(conn, [problem["topic"]])
     conn.close()
     result["visible_test_cases"] = [
         {"args": json.loads(t["input_args_json"]), "expected": json.loads(t["expected_output_json"])}
         for t in visible
     ]
     return jsonify(result)
+
+
+# ------------------------------------------------------------- concepts --
+# Teaching-system concept lessons: topic overviews ('arrays') and pattern
+# deep-dives ('two-pointers') that teach the "what/why/when should I use
+# this" a curated problem never had room for. See db/schema.sql's
+# concept_lessons comment and db/seed_concepts.py's module docstring for
+# the content-architecture reasoning; this is a pilot covering the
+# curriculum's own first topic + pattern (days 8/13/14), not the full
+# curriculum yet.
+
+_CONCEPT_LIST_FIELDS = "cl.slug, cl.kind, cl.topic, cl.pattern_family, cl.title, cl.display_order, cl.estimated_minutes, cl.summary"
+
+
+def _resolve_concept_prereqs(conn, prerequisite_slugs):
+    slugs = [s.strip() for s in (prerequisite_slugs or "").split(",") if s.strip()]
+    if not slugs:
+        return []
+    placeholders = ",".join("?" * len(slugs))
+    rows = conn.execute(
+        f"""SELECT cl.slug, cl.title, COALESCE(clp.status, 'not_started') AS status
+            FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
+            WHERE cl.slug IN ({placeholders})""",
+        slugs,
+    ).fetchall()
+    order = {s: i for i, s in enumerate(slugs)}
+    return sorted([dict(r) for r in rows], key=lambda r: order.get(r["slug"], len(slugs)))
+
+
+def _related_problems_for_concept(conn, concept):
+    """Problems this concept lesson applies to -- topic match, narrowed to
+    a specific pattern family when the lesson targets one (most
+    'pattern'-kind lessons will; both pilot lessons happen to leave
+    pattern_family NULL and cover a whole topic instead, per
+    seed_concepts.py). Core-tier problems sort first so a learner coming
+    from a lesson sees the curriculum's own curated entry point before
+    the extended/advanced pool."""
+    rows = conn.execute(
+        """SELECT slug, title, difficulty, pattern, path_tier, day FROM problems
+           WHERE topic = ?
+           ORDER BY CASE path_tier WHEN 'core' THEN 0 WHEN 'extended' THEN 1 ELSE 2 END, day, id""",
+        (concept["topic"],),
+    ).fetchall()
+    result = [dict(r) for r in rows]
+    if concept["pattern_family"]:
+        result = [r for r in result if pattern_family_for(concept["topic"], r["pattern"]) == concept["pattern_family"]]
+    return result[:12]
+
+
+@app.route("/api/concepts", methods=["GET"])
+def list_concepts():
+    conn = get_connection()
+    rows = conn.execute(
+        f"""SELECT {_CONCEPT_LIST_FIELDS}, COALESCE(clp.status, 'not_started') AS status
+            FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
+            ORDER BY cl.topic, cl.kind, cl.display_order"""
+    ).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/concepts/<slug>", methods=["GET"])
+def get_concept(slug):
+    conn = get_connection()
+    concept = conn.execute(
+        """SELECT cl.*, COALESCE(clp.status, 'not_started') AS status
+           FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
+           WHERE cl.slug = ?""", (slug,)
+    ).fetchone()
+    if concept is None:
+        conn.close()
+        return jsonify({"error": f"No concept lesson '{slug}'"}), 404
+
+    result = dict(concept)
+    result["walkthrough_frames"] = (
+        json.loads(concept["walkthrough_frames_json"]) if concept["walkthrough_frames_json"] else []
+    )
+    del result["walkthrough_frames_json"]
+
+    checkpoint_rows = conn.execute(
+        """SELECT id, kind, prompt_markdown, code, choices_json, correct_answer, explanation_markdown
+           FROM concept_checkpoints WHERE concept_lesson_id = ? ORDER BY display_order""",
+        (concept["id"],),
+    ).fetchall()
+    checkpoints = []
+    for chk in checkpoint_rows:
+        d = dict(chk)
+        d["choices"] = json.loads(d["choices_json"]) if d["choices_json"] else None
+        del d["choices_json"]
+        checkpoints.append(d)
+    result["checkpoints"] = checkpoints
+
+    exercise_rows = conn.execute(
+        """SELECT id, prompt_markdown, starter_code, solution_code, hint_markdown
+           FROM concept_practice_exercises WHERE concept_lesson_id = ? ORDER BY display_order""",
+        (concept["id"],),
+    ).fetchall()
+    result["practice_exercises"] = [dict(e) for e in exercise_rows]
+
+    result["prerequisites"] = _resolve_concept_prereqs(conn, concept["prerequisite_slugs"])
+    result["related_problems"] = _related_problems_for_concept(conn, concept)
+    conn.close()
+    return jsonify(result)
+
+
+@app.route("/api/concepts/<slug>/progress", methods=["PUT"])
+def set_concept_progress(slug):
+    payload = request.get_json(silent=True) or {}
+    status = payload.get("status")
+    valid_statuses = {"not_started", "in_progress", "completed", "known"}
+    if status not in valid_statuses:
+        return jsonify({"error": f"status must be one of {sorted(valid_statuses)}"}), 400
+
+    conn = get_connection()
+    concept = conn.execute("SELECT id FROM concept_lessons WHERE slug = ?", (slug,)).fetchone()
+    if concept is None:
+        conn.close()
+        return jsonify({"error": f"No concept lesson '{slug}'"}), 404
+
+    now = __import__("datetime").datetime.utcnow().isoformat()
+    existing = conn.execute(
+        "SELECT concept_lesson_id FROM concept_lesson_progress WHERE concept_lesson_id = ?", (concept["id"],)
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE concept_lesson_progress SET status=?, updated_at=? WHERE concept_lesson_id=?",
+            (status, now, concept["id"]),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO concept_lesson_progress (concept_lesson_id, status, updated_at) VALUES (?,?,?)",
+            (concept["id"], status, now),
+        )
+    conn.commit()
+    conn.close()
+    return jsonify({"slug": slug, "status": status})
 
 
 @app.route("/api/problems/<slug>/hints/<int:rung>", methods=["GET"])

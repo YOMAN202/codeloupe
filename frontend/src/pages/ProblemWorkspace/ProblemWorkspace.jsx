@@ -765,6 +765,17 @@ export default function ProblemWorkspace() {
             )}
           </div>
 
+          {problem.concept_lessons?.length > 0 && (
+            <div className="callout-row">
+              {problem.concept_lessons.map((c) => (
+                <Link key={c.slug} to={`/learn/${c.slug}`} className="callout callout-next">
+                  <strong>{c.kind === "pattern" ? "Pattern" : "Concept"} to know: {c.title}</strong>
+                  <span>{c.summary}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
           <MultilineText text={problem.description_markdown} />
           {problem.constraints_markdown && (
             <>

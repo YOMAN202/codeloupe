@@ -72,6 +72,12 @@ export const logAttempt = (attempt) => send("POST", "/attempts", attempt);
 export const fetchProgress = () => get("/progress");
 export const fetchAttempts = (slug) => get(`/problems/${slug}/attempts`);
 
+// ---- concepts (teaching system) -----------------------------------------
+export const fetchConcepts = () => get("/concepts");
+export const fetchConcept = (slug) => get(`/concepts/${slug}`);
+export const setConceptProgress = (slug, status) =>
+  send("PUT", `/concepts/${slug}/progress`, { status });
+
 // ---- mistake journal / practice session ---------------------------------
 export const updateMistake = (id, payload) => send("PUT", `/mistakes/${id}`, payload);
 export const fetchMistakeJournal = () => get("/mistakes/journal");
