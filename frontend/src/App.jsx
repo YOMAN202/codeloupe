@@ -1,76 +1,43 @@
-import { useEffect, useState } from "react";
-import LessonView from "./components/LessonView/LessonView";
-import CodeEditor from "./components/Editor/CodeEditor";
-import { fetchLesson, runCode } from "./api/client";
+import { NavLink, Routes, Route } from "react-router-dom";
+import CurriculumMap from "./pages/CurriculumMap/CurriculumMap";
+import LessonDetail from "./pages/LessonDetail/LessonDetail";
+import ProblemBrowser from "./pages/ProblemBrowser/ProblemBrowser";
+import ProblemWorkspace from "./pages/ProblemWorkspace/ProblemWorkspace";
+import Dashboard from "./pages/Dashboard/Dashboard";
+import Scratchpad from "./pages/Scratchpad/Scratchpad";
 import "./App.css";
 
-const DEFAULT_CODE = "# Write your Python code here, then click Run.\n";
-
 function App() {
-  const [lesson, setLesson] = useState(null);
-  const [lessonLoading, setLessonLoading] = useState(true);
-  const [lessonError, setLessonError] = useState(null);
-
-  const [code, setCode] = useState(DEFAULT_CODE);
-  const [output, setOutput] = useState(null);
-  const [running, setRunning] = useState(false);
-  const [runError, setRunError] = useState(null);
-
-  useEffect(() => {
-    fetchLesson(1)
-      .then(setLesson)
-      .catch((e) => setLessonError(e.message))
-      .finally(() => setLessonLoading(false));
-  }, []);
-
-  async function handleRun() {
-    setRunning(true);
-    setRunError(null);
-    setOutput(null);
-    try {
-      const result = await runCode(code);
-      setOutput(result);
-    } catch (e) {
-      setRunError(e.message);
-    } finally {
-      setRunning(false);
-    }
-  }
-
   return (
     <div className="app-shell">
-      <header>
-        <h1>Traceviz</h1>
-        <p className="muted">Milestone 1 — lesson view, editor, sandboxed run</p>
-      </header>
-
-      <main className="two-pane">
-        <div className="pane lesson-pane">
-          <LessonView lesson={lesson} loading={lessonLoading} error={lessonError} />
+      <nav className="sidebar">
+        <div className="brand">
+          <h1>Traceviz</h1>
+          <p className="muted">45-day Python + DSA companion</p>
         </div>
+        <NavLink to="/" end className="nav-link">
+          Curriculum
+        </NavLink>
+        <NavLink to="/problems" className="nav-link">
+          Problems
+        </NavLink>
+        <NavLink to="/dashboard" className="nav-link">
+          Dashboard
+        </NavLink>
+        <NavLink to="/scratchpad" className="nav-link">
+          Scratchpad &amp; Trace
+        </NavLink>
+      </nav>
 
-        <div className="pane editor-pane">
-          <CodeEditor value={code} onChange={setCode} />
-          <button className="run-button" onClick={handleRun} disabled={running}>
-            {running ? "Running..." : "Run"}
-          </button>
-
-          <div className="output-panel">
-            <h3>Output</h3>
-            {runError && <pre className="error">{runError}</pre>}
-            {output && (
-              <>
-                {output.timed_out && (
-                  <p className="warning">Execution timed out.</p>
-                )}
-                <pre className="stdout">{output.stdout || "(no stdout)"}</pre>
-                {output.stderr && <pre className="stderr">{output.stderr}</pre>}
-                <p className="muted">exit code: {String(output.exit_code)}</p>
-              </>
-            )}
-            {!output && !runError && <p className="muted">(run your code to see output)</p>}
-          </div>
-        </div>
+      <main className="main-content">
+        <Routes>
+          <Route path="/" element={<CurriculumMap />} />
+          <Route path="/lessons/:day" element={<LessonDetail />} />
+          <Route path="/problems" element={<ProblemBrowser />} />
+          <Route path="/problems/:slug" element={<ProblemWorkspace />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/scratchpad" element={<Scratchpad />} />
+        </Routes>
       </main>
     </div>
   );

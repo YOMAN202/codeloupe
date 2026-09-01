@@ -13,7 +13,8 @@
     "@monaco-editor/react": "^4.7.0",
     "monaco-editor": "^0.56.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^6.30.6"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

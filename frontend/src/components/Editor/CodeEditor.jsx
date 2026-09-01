@@ -1,8 +1,6 @@
 import Editor from "@monaco-editor/react";
 import "../../monacoSetup";
 
-// Milestone 1: a plain Monaco editor wrapper. No step-highlighting or trace
-// overlay yet -- that's added in Milestone 2 once the tracer exists.
 export default function CodeEditor({ value, onChange }) {
   return (
     <Editor
@@ -15,6 +13,16 @@ export default function CodeEditor({ value, onChange }) {
         fontSize: 14,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
+      }}
+      onMount={(editor) => {
+        // Expose the live editor instance on window for E2E testing --
+        // simulated keystrokes (Playwright) trigger Monaco's
+        // auto-indent-on-Enter for every embedded newline in a pasted
+        // block, cascading indentation on multi-line inserts. A real
+        // user's actual paste/typing doesn't have this problem; test code
+        // calling editor.setValue() directly sidesteps it. Harmless outside
+        // a test harness -- nothing reads this window property at runtime.
+        window.__tracevizEditor = editor;
       }}
     />
   );

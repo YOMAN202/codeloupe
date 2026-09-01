@@ -61,12 +61,33 @@ _TRACER_HARNESS = textwrap.dedent('''
                 return repr(v)[:200]
         return repr(v)[:200]
 
+    __tv_skip_frames = set()
+
     def __tv_tracer(frame, event, arg):
         if len(__tv_steps) >= {max_steps}:
             __tv_truncated[0] = True
             sys.settrace(None)
             return None
         if frame.f_code.co_filename != __tv_filename:
+            return __tv_tracer
+        # A `class Foo:` block executes as its own frame (CPython runs the
+        # class body to build its namespace) -- co_name is the class name,
+        # not a function a learner wrote to be called. Every linked-list/
+        # tree problem's starter code defines Node/TreeNode at the top, so
+        # without this filter every single trace would open with noisy
+        # "call/line steps inside Node" before anything the learner
+        # actually wrote starts running. Detect it via CO_OPTIMIZED
+        # (bit 0x0001 of co_flags): real functions use fast locals and
+        # have this flag set; class bodies (like module-level code) use a
+        # plain namespace dict and don't -- excluding "<module>" itself
+        # (which also lacks the flag, but whose steps we DO want to keep)
+        # isolates class bodies specifically.
+        if event == "call" and frame.f_code.co_name != "<module>" and not (frame.f_code.co_flags & 0x0001):
+            __tv_skip_frames.add(id(frame))
+            return __tv_tracer
+        if id(frame) in __tv_skip_frames:
+            if event == "return":
+                __tv_skip_frames.discard(id(frame))
             return __tv_tracer
         if event == "call":
             __tv_depth[0] += 1
