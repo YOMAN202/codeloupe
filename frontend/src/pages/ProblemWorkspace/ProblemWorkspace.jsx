@@ -17,9 +17,84 @@ import {
   traceProblemCustom,
   runProblemCustom,
   fetchAttempts,
+  updateMistake,
 } from "../../api/client";
 
 const TABS = ["Tests", "Hints", "Trace", "Complexity", "Playground", "History"];
+
+// Mirrors logic/mistakes.py's MISTAKE_CATEGORIES exactly -- the backend is
+// the source of truth and rejects anything outside this list, so this
+// stays a fixed, hand-kept copy rather than a runtime fetch (the list
+// changes about as often as the app's core taxonomy does, i.e. rarely).
+const MISTAKE_CATEGORIES = [
+  "Off-by-one errors", "Missed edge cases", "Incorrect pointer movement",
+  "Incorrect base case", "Incorrect data-structure usage", "Pattern recognition difficulty",
+  "Logic errors", "Complexity misunderstanding", "Recursion issues", "Boundary-condition mistakes",
+];
+
+// Builds the classifier's evidence payload directly from a /run response
+// the caller already has -- no extra request. See logic/mistakes.py for
+// exactly how each field is (or deliberately isn't) turned into a category.
+function buildFailureContext(runResult) {
+  if (!runResult) return null;
+  if (runResult.crashed) {
+    return { crashed: true, first_failure: null, num_failed: null, num_total: null };
+  }
+  const results = runResult.results || [];
+  const failing = results.filter((r) => !r.passed);
+  if (failing.length === 0) return null;
+  const first = failing[0];
+  return {
+    crashed: false,
+    first_failure: { args: first.args, expected: first.expected, actual: first.actual, error: first.error },
+    num_failed: failing.length,
+    num_total: results.length,
+  };
+}
+
+// Mistake-journal review prompt: shown once per failed run, right after
+// the classifier (or lack of one) has an answer. Never presents a guess
+// as fact -- a category is always paired with its confidence tag, and an
+// unclassified result says so plainly rather than picking something.
+function MistakeSuggestion({ suggestion, onConfirm, onOverride, pickerOpen, setPickerOpen, savedLabel }) {
+  if (!suggestion) return null;
+  return (
+    <div className="mistake-suggestion">
+      <h4>Possible mistake noticed</h4>
+      {suggestion.category ? (
+        <p>
+          <strong>{suggestion.category}</strong>{" "}
+          <span className="viz-type-tag">{suggestion.confidence.replace(/_/g, " ")}</span>
+        </p>
+      ) : (
+        <p className="muted small">Couldn't confidently classify this one -- that's fine, not every mistake fits a category.</p>
+      )}
+      {suggestion.evidence && <p className="muted small">{suggestion.evidence}</p>}
+      {savedLabel ? (
+        <p className="success small">{savedLabel}</p>
+      ) : !pickerOpen ? (
+        <div className="hint-buttons">
+          {suggestion.category && (
+            <button className="chip chip-small" onClick={onConfirm}>
+              Yes, that's it
+            </button>
+          )}
+          <button className="chip chip-small" onClick={() => setPickerOpen(true)}>
+            {suggestion.category ? "Not quite -- let me pick" : "Classify it myself"}
+          </button>
+        </div>
+      ) : (
+        <div className="pattern-choice-grid">
+          {MISTAKE_CATEGORIES.map((c) => (
+            <button key={c} className="pattern-choice" onClick={() => onOverride(c)}>
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Optional pattern-recognition practice: the standard pattern categories a
 // learner should be building intuition for. Deliberately not tied 1:1 to
@@ -262,6 +337,9 @@ export default function ProblemWorkspace() {
 
   const [startedAt, setStartedAt] = useState(Date.now());
   const [attemptFeedback, setAttemptFeedback] = useState(null);
+  const [mistakeSuggestion, setMistakeSuggestion] = useState(null);
+  const [mistakePickerOpen, setMistakePickerOpen] = useState(false);
+  const [mistakeSavedLabel, setMistakeSavedLabel] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -286,6 +364,9 @@ export default function ProblemWorkspace() {
     setExpandedAttemptId(null);
     setComplexityCompare(null);
     setAttemptFeedback(null);
+    setMistakeSuggestion(null);
+    setMistakePickerOpen(false);
+    setMistakeSavedLabel(null);
     setStartedAt(Date.now());
     setTab("Tests");
     fetchProblem(slug)
@@ -315,6 +396,9 @@ export default function ProblemWorkspace() {
     setRunning(true);
     setRunResult(null);
     setAttemptFeedback(null);
+    setMistakeSuggestion(null);
+    setMistakePickerOpen(false);
+    setMistakeSavedLabel(null);
     try {
       const result = await runProblem(slug, code);
       setRunResult(result);
@@ -327,8 +411,10 @@ export default function ProblemWorkspace() {
         max_hint_rung_seen: hintsShown.length ? Math.max(...hintsShown) : 0,
         solution_revealed: solutionRevealed,
         time_taken_seconds: timeTakenSeconds,
+        failure_context: result.all_passed ? null : buildFailureContext(result),
       });
       setAttemptFeedback(attempt);
+      if (attempt.mistake) setMistakeSuggestion(attempt.mistake);
       if (tab === "History") {
         fetchAttempts(slug)
           .then((result) => setAttempts(result.attempts || []))
@@ -489,6 +575,31 @@ export default function ProblemWorkspace() {
     }
   }
 
+  // Mistake-journal review: the learner either confirms the classifier's
+  // guess as-is, or picks their own category (also how an unclassified
+  // mistake gets one at all). Either way the human's answer is final --
+  // see app.py's update_mistake, which never re-runs the heuristic.
+  async function confirmMistake() {
+    if (!mistakeSuggestion) return;
+    try {
+      await updateMistake(mistakeSuggestion.id, { confirm: true });
+      setMistakeSavedLabel("Saved to your mistake journal.");
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function overrideMistake(category) {
+    if (!mistakeSuggestion) return;
+    try {
+      await updateMistake(mistakeSuggestion.id, { category });
+      setMistakeSavedLabel(`Saved as "${category}".`);
+      setMistakePickerOpen(false);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   if (loading) return <p className="muted">Loading problem...</p>;
   if (error) return <p className="error">{error}</p>;
   if (!problem) return null;
@@ -576,6 +687,15 @@ export default function ProblemWorkspace() {
                 : `Solved with help (hints/solution used). Next review: ${attemptFeedback.next_due_date}.`}
             </p>
           )}
+
+          <MistakeSuggestion
+            suggestion={mistakeSuggestion}
+            onConfirm={confirmMistake}
+            onOverride={overrideMistake}
+            pickerOpen={mistakePickerOpen}
+            setPickerOpen={setMistakePickerOpen}
+            savedLabel={mistakeSavedLabel}
+          />
 
           <ExplainThinking
             problem={problem}
@@ -824,6 +944,14 @@ export default function ProblemWorkspace() {
                           {a.time_taken_seconds != null && <span>{a.time_taken_seconds}s</span>}
                           {a.is_independent ? <span className="success">independent solve</span> : null}
                         </div>
+                        {a.mistake && (
+                          <div className="attempt-history-row muted small">
+                            <span>
+                              Mistake: <strong>{a.mistake.category || "Unclassified"}</strong>{" "}
+                              <span className="viz-type-tag">{a.mistake.confidence.replace(/_/g, " ")}</span>
+                            </span>
+                          </div>
+                        )}
                         <div className="hint-buttons">
                           <button
                             className="chip chip-small"

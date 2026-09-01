@@ -19,6 +19,9 @@ from execution.tracer import trace_code
 from logic.revision import compute_next_schedule
 from logic.analysis import estimate_complexity, generate_hint_from_code
 from logic.curriculum_graph import all_prerequisite_blocks
+from logic.mistakes import classify_mistake, MISTAKE_CATEGORIES, CONFIDENCE_LEVELS
+from logic.pattern_families import pattern_family_for
+from logic.practice_session import build_practice_session
 
 _LESSON_STATUSES = {"not_started", "in_progress", "completed", "skipped", "known"}
 _DONE_STATUSES = {"completed", "skipped", "known"}  # "no longer pending" for resume/recommended-next purposes
@@ -335,13 +338,28 @@ def get_attempts(slug):
         conn.close()
         return jsonify({"error": f"No problem '{slug}'"}), 404
     rows = conn.execute(
-        """SELECT id, submitted_code, passed, hints_used, max_hint_rung_seen,
-                  solution_revealed, is_independent, time_taken_seconds, created_at
-           FROM attempts WHERE problem_id = ? ORDER BY id""",
+        """SELECT a.id, a.submitted_code, a.passed, a.hints_used, a.max_hint_rung_seen,
+                  a.solution_revealed, a.is_independent, a.time_taken_seconds, a.created_at,
+                  m.id AS mistake_id, m.category AS mistake_category, m.confidence AS mistake_confidence,
+                  m.evidence AS mistake_evidence
+           FROM attempts a LEFT JOIN mistakes m ON m.attempt_id = a.id
+           WHERE a.problem_id = ? ORDER BY a.id""",
         (problem["id"],),
     ).fetchall()
     conn.close()
-    return jsonify({"attempts": [dict(r) for r in rows]})
+
+    attempts = []
+    for r in rows:
+        d = dict(r)
+        mistake = None
+        if d["mistake_id"] is not None:
+            mistake = {"id": d["mistake_id"], "category": d["mistake_category"],
+                       "confidence": d["mistake_confidence"], "evidence": d["mistake_evidence"]}
+        for k in ("mistake_id", "mistake_category", "mistake_confidence", "mistake_evidence"):
+            del d[k]
+        d["mistake"] = mistake
+        attempts.append(d)
+    return jsonify({"attempts": attempts})
 
 @app.route("/api/attempts", methods=["POST"])
 def log_attempt():
@@ -353,6 +371,10 @@ def log_attempt():
     max_hint_rung_seen = int(payload.get("max_hint_rung_seen", 0))
     solution_revealed = bool(payload.get("solution_revealed", False))
     time_taken_seconds = payload.get("time_taken_seconds")
+    # Optional: {"crashed": bool, "first_failure": {...}|None, "num_failed": int,
+    # "num_total": int} built by the frontend from the /run response it
+    # already has in hand -- see logic/mistakes.py's classify_mistake.
+    failure_context = payload.get("failure_context")
 
     is_independent = passed and hints_used == 0 and not solution_revealed
 
@@ -371,6 +393,23 @@ def log_attempt():
          int(solution_revealed), int(is_independent), time_taken_seconds),
     )
     attempt_id = cur.lastrowid
+
+    # Mistake journal: only for FAILED attempts (a pass isn't a "mistake"
+    # in the sense of the fixed category list, even an assisted one --
+    # hints_used/solution_revealed already track "needed help" separately
+    # on the attempt itself). Always writes a row when there's a failure,
+    # even when unclassified, so the journal can honestly show "N failures,
+    # M classified, K not yet classified" instead of silently dropping the
+    # unclear ones.
+    mistake_out = None
+    if not passed:
+        category, evidence = classify_mistake(failure_context, problem["topic"])
+        confidence = "likely_issue" if category else "unclassified"
+        mcur = conn.execute(
+            "INSERT INTO mistakes (attempt_id, problem_id, category, confidence, evidence) VALUES (?,?,?,?,?)",
+            (attempt_id, problem["id"], category, confidence, evidence),
+        )
+        mistake_out = {"id": mcur.lastrowid, "category": category, "confidence": confidence, "evidence": evidence}
 
     # Revision scheduling
     existing = conn.execute(
@@ -392,7 +431,87 @@ def log_attempt():
     conn.commit()
     conn.close()
     return jsonify({"attempt_id": attempt_id, "is_independent": is_independent,
-                     "next_due_date": next_due, "result": result_label})
+                     "next_due_date": next_due, "result": result_label, "mistake": mistake_out})
+
+
+# ---------------------------------------------------------- mistake journal --
+
+@app.route("/api/mistakes/<int:mistake_id>", methods=["PUT"])
+def update_mistake(mistake_id):
+    """Lets the learner review a classifier suggestion: confirm it as-is
+    (user_confirmed), replace it with their own pick (manually_selected --
+    also how an unclassified mistake gets a category at all), or leave it
+    alone. Never re-runs the heuristic classifier -- once a human has
+    looked at it, the human's answer wins."""
+    payload = request.get_json(silent=True) or {}
+    category = payload.get("category")
+    confirm = bool(payload.get("confirm", False))
+
+    if category is not None and category not in MISTAKE_CATEGORIES:
+        return jsonify({"error": f"category must be one of {MISTAKE_CATEGORIES}"}), 400
+
+    conn = get_connection()
+    existing = conn.execute("SELECT * FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
+    if existing is None:
+        conn.close()
+        return jsonify({"error": f"No mistake {mistake_id}"}), 404
+
+    if confirm:
+        new_category = existing["category"]
+        new_confidence = "user_confirmed"
+    elif category is not None:
+        new_category = category
+        new_confidence = "manually_selected"
+    else:
+        conn.close()
+        return jsonify({"error": "Provide 'confirm': true or a 'category' to set."}), 400
+
+    conn.execute("UPDATE mistakes SET category = ?, confidence = ? WHERE id = ?",
+                 (new_category, new_confidence, mistake_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"id": mistake_id, "category": new_category, "confidence": new_confidence})
+
+
+@app.route("/api/mistakes/journal", methods=["GET"])
+def mistake_journal():
+    """The mistake journal, across every problem: answers 'what kinds of
+    mistakes do I repeatedly make?' with real counts by category and
+    confidence, plus the individual entries (each linking back to its
+    problem and attempt) so the learner can revisit exactly what happened."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT m.id, m.category, m.confidence, m.evidence, m.created_at,
+                  p.slug, p.title, p.topic, p.pattern, a.id AS attempt_id
+           FROM mistakes m
+           JOIN problems p ON m.problem_id = p.id
+           JOIN attempts a ON m.attempt_id = a.id
+           ORDER BY m.created_at DESC"""
+    ).fetchall()
+    conn.close()
+
+    entries = []
+    category_counts = {}
+    unclassified_count = 0
+    for r in rows:
+        d = dict(r)
+        d["pattern_family"] = pattern_family_for(r["topic"], r["pattern"])
+        entries.append(d)
+        if r["category"]:
+            category_counts[r["category"]] = category_counts.get(r["category"], 0) + 1
+        else:
+            unclassified_count += 1
+
+    recurring = sorted(
+        ({"category": c, "count": n} for c, n in category_counts.items()),
+        key=lambda x: -x["count"],
+    )
+    return jsonify({
+        "entries": entries,
+        "total_mistakes": len(entries),
+        "unclassified_count": unclassified_count,
+        "recurring_categories": recurring,
+    })
 
 
 # --------------------------------------------------------------- progress --
@@ -440,6 +559,34 @@ def progress():
            WHERE a.is_independent = 1
            GROUP BY p.topic HAVING COUNT(*) >= 2"""
     ).fetchall()
+
+    # ---- pattern-level weakness (enhances, never replaces, the topic-level
+    # weak_topics above -- see logic/pattern_families.py) and a recurring-
+    # mistakes summary from the mistake journal.
+    mistake_join_rows = conn.execute(
+        """SELECT p.topic, p.pattern, m.category
+           FROM mistakes m JOIN problems p ON m.problem_id = p.id"""
+    ).fetchall()
+    family_counts, family_categories, category_counts = {}, {}, {}
+    for r in mistake_join_rows:
+        family = pattern_family_for(r["topic"], r["pattern"])
+        family_counts[family] = family_counts.get(family, 0) + 1
+        if r["category"]:
+            family_categories.setdefault(family, {})
+            family_categories[family][r["category"]] = family_categories[family].get(r["category"], 0) + 1
+            category_counts[r["category"]] = category_counts.get(r["category"], 0) + 1
+    pattern_weaknesses = [
+        {
+            "pattern_family": family,
+            "mistake_count": count,
+            "top_category": max(family_categories[family], key=family_categories[family].get) if family_categories.get(family) else None,
+        }
+        for family, count in sorted(family_counts.items(), key=lambda kv: -kv[1])[:5]
+    ]
+    recurring_mistakes = [
+        {"category": cat, "count": n}
+        for cat, n in sorted(category_counts.items(), key=lambda kv: -kv[1])[:5]
+    ]
 
     today = __import__("datetime").date.today().isoformat()
     revision_due = conn.execute(
@@ -509,6 +656,8 @@ def progress():
         "top_weaknesses": [dict(r) for r in weak_topics],
         "top_strengths": [dict(r) for r in strong_topics],
         "topics_mastered": [r["topic"] for r in mastered_topics],
+        "pattern_weaknesses": pattern_weaknesses,
+        "recurring_mistakes": recurring_mistakes,
         "problems_due_for_revision": [dict(r) for r in revision_due],
         "average_solve_time_seconds": avg_time,
         "hint_usage_rate": hint_usage_rate,
@@ -521,6 +670,19 @@ def progress():
             for r in lesson_rows
         ],
     })
+
+
+@app.route("/api/practice-session", methods=["GET"])
+def practice_session():
+    """Adaptive 'Today's Session': see logic/practice_session.py. Purely a
+    suggestion list built from data the rest of the app already computes
+    (revision_schedule, the mistake journal, topic weakness, plain
+    progress) -- never a required path, the learner can ignore it and
+    open any problem directly."""
+    conn = get_connection()
+    items = build_practice_session(conn)
+    conn.close()
+    return jsonify({"items": items})
 
 
 # ----------------------------------------------------------- complexity --

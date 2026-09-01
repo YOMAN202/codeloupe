@@ -108,11 +108,20 @@ CREATE TABLE IF NOT EXISTS revision_schedule (
     last_result TEXT                    -- 'independent' | 'assisted' | 'failed'
 );
 
-CREATE TABLE IF NOT EXISTS mistake_patterns (
+-- Mistake journal: one row per FAILED attempt (never for a pass), created
+-- automatically at log-attempt time by the heuristic classifier in
+-- logic/mistakes.py, then optionally revised by the learner themselves.
+-- category is NULL for "unclassified" -- a legitimate, expected outcome,
+-- not an error state. See logic/mistakes.py's module docstring for the
+-- full confidence-level design (why the automated classifier never
+-- assigns anything above "likely_issue").
+CREATE TABLE IF NOT EXISTS mistakes (
     id INTEGER PRIMARY KEY,
-    topic TEXT NOT NULL,
-    pattern_key TEXT NOT NULL,   -- e.g. "off_by_one", "missing_visited_set"
-    occurrence_count INTEGER NOT NULL DEFAULT 0,
-    last_seen_at TEXT,
-    UNIQUE(topic, pattern_key)
+    attempt_id INTEGER NOT NULL UNIQUE REFERENCES attempts(id),
+    problem_id INTEGER NOT NULL REFERENCES problems(id),
+    category TEXT,                      -- one of logic/mistakes.py's MISTAKE_CATEGORIES, or NULL
+    confidence TEXT NOT NULL,           -- 'unclassified' (category IS NULL) | 'observed_confirmed' |
+                                         -- 'likely_issue' | 'user_confirmed' | 'manually_selected'
+    evidence TEXT,                      -- short factual note the classifier (or the learner) attached
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

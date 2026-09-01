@@ -23,7 +23,7 @@ from seed_problems import PROBLEMS
 DB_PATH = os.path.join(os.path.dirname(__file__), "traceviz.db")
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
-_TABLES = ["mistake_patterns", "revision_schedule", "attempts", "hints",
+_TABLES = ["mistakes", "revision_schedule", "attempts", "hints",
            "test_cases", "problems", "lessons"]
 
 
@@ -124,7 +124,7 @@ def _seed_problems(conn):
 
 def init_db():
     """Full (re)initialization: drops and recreates every table, including
-    attempts/revision_schedule/mistake_patterns, then reseeds lessons and
+    attempts/revision_schedule/mistakes, then reseeds lessons and
     problems from source. Destroys any recorded progress -- this is the
     explicit "reset everything" action, meant to be run deliberately via
     `python3 db/init_db.py`, never silently on every app.py startup (see

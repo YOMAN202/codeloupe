@@ -302,6 +302,29 @@
   font-size: 0.85rem;
 }
 
+/* ---- Today's Session (adaptive practice recommender) -------------------- */
+
+.practice-session {
+  background: #1a1f2a;
+  border: 1px solid #2a3550;
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1.2rem;
+}
+.practice-session-header { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.5rem; }
+.practice-session-header h3 { margin: 0; }
+
+/* ---- Mistake journal suggestion prompt ---------------------------------- */
+
+.mistake-suggestion {
+  background: #2a2418;
+  border: 1px solid #4d3d1f;
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  margin: 0.6rem 0;
+}
+.mistake-suggestion h4 { margin: 0 0 0.4rem; color: #f0c060; font-size: 0.88rem; }
+
 /* ---- Attempt history / solution journey -------------------------------- */
 
 .attempt-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }

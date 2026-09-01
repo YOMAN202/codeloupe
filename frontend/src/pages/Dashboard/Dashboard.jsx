@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchProgress } from "../../api/client";
+import { fetchProgress, fetchPracticeSession } from "../../api/client";
 import { TIER_META } from "../../components/Badges/Badges";
+
+const SESSION_KIND_LABEL = {
+  revision: "Revision",
+  recurring_mistake: "Recurring mistake",
+  weak_pattern: "Weak pattern",
+  weak_topic: "Weak topic",
+  new: "New problem",
+};
 
 function Stat({ label, value }) {
   return (
@@ -16,12 +24,16 @@ export default function Dashboard() {
   const [progress, setProgress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [session, setSession] = useState(null);
 
   useEffect(() => {
     fetchProgress()
       .then(setProgress)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    fetchPracticeSession()
+      .then(setSession)
+      .catch(() => {});
   }, []);
 
   if (loading) return <p className="muted">Loading dashboard...</p>;
@@ -36,6 +48,28 @@ export default function Dashboard() {
         <h2>Dashboard</h2>
         <p className="muted">Where you actually stand -- no points, no streak badges, just data.</p>
       </div>
+
+      {session?.items?.length > 0 && (
+        <section className="practice-session">
+          <div className="practice-session-header">
+            <h3>Today's session</h3>
+            <span className="muted small">
+              A suggested starting point, built from your own attempts and revision schedule -- never a
+              required path. Jump to any lesson, topic, or problem you want instead.
+            </span>
+          </div>
+          <ul className="problem-list">
+            {session.items.map((item) => (
+              <li key={item.slug}>
+                <Link to={`/problems/${item.slug}`}>{item.title}</Link>{" "}
+                <span className="viz-type-tag">{SESSION_KIND_LABEL[item.kind] || item.kind}</span>
+                <br />
+                <span className="muted small">{item.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {progress.path_tier_progress && (
         <section className="core-path-progress">
@@ -153,6 +187,27 @@ export default function Dashboard() {
               {progress.top_weaknesses.map((t) => (
                 <li key={t.topic}>
                   {t.topic}: {t.mistake_count} struggle{t.mistake_count === 1 ? "" : "s"}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="lesson-section">
+          <h3>Weakest patterns</h3>
+          <p className="muted small">
+            Enhances the topic breakdown above with more specific technique-level detail, e.g. "fast/slow
+            pointers" instead of just "linked lists". See the <Link to="/mistakes">Mistake Journal</Link>{" "}
+            for individual entries.
+          </p>
+          {!progress.pattern_weaknesses || progress.pattern_weaknesses.length === 0 ? (
+            <p className="muted">No data yet.</p>
+          ) : (
+            <ul>
+              {progress.pattern_weaknesses.map((p) => (
+                <li key={p.pattern_family}>
+                  {p.pattern_family}: {p.mistake_count} mistake{p.mistake_count === 1 ? "" : "s"}
+                  {p.top_category && <span className="muted small"> (most often: {p.top_category})</span>}
                 </li>
               ))}
             </ul>

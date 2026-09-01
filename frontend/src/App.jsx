@@ -4,6 +4,7 @@ import LessonDetail from "./pages/LessonDetail/LessonDetail";
 import ProblemBrowser from "./pages/ProblemBrowser/ProblemBrowser";
 import ProblemWorkspace from "./pages/ProblemWorkspace/ProblemWorkspace";
 import Dashboard from "./pages/Dashboard/Dashboard";
+import MistakeJournal from "./pages/MistakeJournal/MistakeJournal";
 import Scratchpad from "./pages/Scratchpad/Scratchpad";
 import "./App.css";
 
@@ -24,6 +25,9 @@ function App() {
         <NavLink to="/dashboard" className="nav-link">
           Dashboard
         </NavLink>
+        <NavLink to="/mistakes" className="nav-link">
+          Mistake Journal
+        </NavLink>
         <NavLink to="/scratchpad" className="nav-link">
           Scratchpad &amp; Trace
         </NavLink>
@@ -36,6 +40,7 @@ function App() {
           <Route path="/problems" element={<ProblemBrowser />} />
           <Route path="/problems/:slug" element={<ProblemWorkspace />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/mistakes" element={<MistakeJournal />} />
           <Route path="/scratchpad" element={<Scratchpad />} />
         </Routes>
       </main>

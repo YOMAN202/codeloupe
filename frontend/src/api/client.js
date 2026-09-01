@@ -66,6 +66,11 @@ export const logAttempt = (attempt) => send("POST", "/attempts", attempt);
 export const fetchProgress = () => get("/progress");
 export const fetchAttempts = (slug) => get(`/problems/${slug}/attempts`);
 
+// ---- mistake journal / practice session ---------------------------------
+export const updateMistake = (id, payload) => send("PUT", `/mistakes/${id}`, payload);
+export const fetchMistakeJournal = () => get("/mistakes/journal");
+export const fetchPracticeSession = () => get("/practice-session");
+
 // ---- plain run / trace (scratchpad + trace visualizer) -----------------
 export const runCode = (code) => send("POST", "/run", { code });
 export const traceCode = (code) => send("POST", "/trace", { code });
