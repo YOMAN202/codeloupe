@@ -2,7 +2,11 @@
 // all sharing the same error-handling shape (throw with the server's own
 // error message when available).
 
-const API_BASE = "http://127.0.0.1:5001/api";
+// Overridable via a VITE_API_BASE entry in frontend/.env(.local) for
+// anyone running the backend on a different host/port -- the default
+// (127.0.0.1:5001) is unchanged and matches backend/app.py's own default,
+// so this is a no-op for the normal "everything on one machine" case.
+const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:5001/api";
 
 async function get(path) {
   const res = await fetch(`${API_BASE}${path}`);

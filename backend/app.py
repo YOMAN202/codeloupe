@@ -1,13 +1,19 @@
 """
-Traceviz backend.
+Codeloupe backend.
 
-Phase 1 (this file): lessons, curated problems, sandboxed test running,
-progressive hints, solution reveal, attempt logging, revision scheduling,
-progress dashboard. Phase 2's trace endpoint lives in execution/tracer.py
-and is wired in below. AST hints / complexity / stress testing (Phase 4)
-are in logic/analysis.py.
+All API routes live in this one file: lessons (day-based curriculum),
+concept lessons (the teaching system, see db/schema.sql's concept_lessons
+comment), curated problems, sandboxed test running, progressive hints,
+solution reveal, attempt logging, revision scheduling, the mistake
+journal, pattern-level revision, adaptive practice sessions, approach
+comparison, and the trace endpoint. Supporting logic is split out by
+concern: execution/ (sandbox, test runner, tracer), logic/ (mistakes,
+pattern families, curriculum graph, revision scheduling, practice
+sessions, approach comparison, AST/complexity analysis). See
+docs/architecture.md for the full picture.
 """
 import json
+import os
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -52,7 +58,7 @@ def _related_concept_lessons(conn, topics):
                    COALESCE(clp.status, 'not_started') AS status
             FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
             WHERE cl.topic IN ({placeholders})
-            ORDER BY cl.topic, cl.kind, cl.display_order""",
+            ORDER BY cl.topic, CASE cl.kind WHEN 'topic' THEN 0 ELSE 1 END, cl.display_order""",
         topics,
     ).fetchall()
     return [dict(r) for r in rows]
@@ -284,7 +290,7 @@ def list_concepts():
     rows = conn.execute(
         f"""SELECT {_CONCEPT_LIST_FIELDS}, COALESCE(clp.status, 'not_started') AS status
             FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
-            ORDER BY cl.topic, cl.kind, cl.display_order"""
+            ORDER BY cl.topic, CASE cl.kind WHEN 'topic' THEN 0 ELSE 1 END, cl.display_order"""
     ).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
@@ -1047,4 +1053,14 @@ def trace_problem(slug):
 
 if __name__ == "__main__":
     ensure_db()  # only creates+seeds if traceviz.db doesn't exist yet -- never wipes progress on restart
-    app.run(debug=True, port=5001)
+    # Debug mode (the interactive Werkzeug debugger + auto-reload) is the
+    # right default for local development -- exactly what this app is built
+    # for -- but its debugger is an unauthenticated remote-code-execution
+    # console if this process is ever reachable from outside localhost. Set
+    # FLASK_DEBUG=0 before running for anything other than "on my own
+    # machine, for myself" (see docs/architecture.md's "Running beyond
+    # local dev" section). PORT is likewise overridable for anyone who
+    # already has something on 5001.
+    debug = os.environ.get("FLASK_DEBUG", "1") not in ("0", "false", "False")
+    port = int(os.environ.get("PORT", "5001"))
+    app.run(debug=debug, port=port)
