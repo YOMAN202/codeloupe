@@ -22,6 +22,7 @@ from logic.curriculum_graph import all_prerequisite_blocks
 from logic.mistakes import classify_mistake, MISTAKE_CATEGORIES, CONFIDENCE_LEVELS
 from logic.pattern_families import pattern_family_for
 from logic.practice_session import build_practice_session
+from logic.approach_comparison import compare_candidate
 
 _LESSON_STATUSES = {"not_started", "in_progress", "completed", "skipped", "known"}
 _DONE_STATUSES = {"completed", "skipped", "known"}  # "no longer pending" for resume/recommended-next purposes
@@ -147,7 +148,8 @@ _PROBLEM_DETAIL_FIELDS = (
     "id, slug, title, day, topic, pattern, difficulty, description_markdown, "
     "constraints_markdown, function_signature, starter_code, "
     "expected_time_complexity, expected_space_complexity, edge_cases, comparison_mode, "
-    "interview_priority, estimated_solve_minutes, progression_stage, canonical_reference, path_tier"
+    "interview_priority, estimated_solve_minutes, progression_stage, canonical_reference, path_tier, "
+    "(brute_force_reference IS NOT NULL) AS has_approach_baseline"
 )
 
 
@@ -239,14 +241,14 @@ def hint_from_code(slug):
 def get_solution(slug):
     conn = get_connection()
     problem = conn.execute(
-        "SELECT brute_force_reference, optimal_approach, brute_force_approach FROM problems WHERE slug = ?",
+        "SELECT optimal_reference, optimal_approach, brute_force_approach FROM problems WHERE slug = ?",
         (slug,),
     ).fetchone()
     conn.close()
     if problem is None:
         return jsonify({"error": f"No problem '{slug}'"}), 404
     return jsonify({
-        "solution_code": problem["brute_force_reference"],
+        "solution_code": problem["optimal_reference"],
         "optimal_approach": problem["optimal_approach"],
         "brute_force_approach": problem["brute_force_approach"],
     })
@@ -707,6 +709,89 @@ def complexity_estimate(slug):
     ]
     result = estimate_complexity(code, problem["function_signature"], test_cases)
     return jsonify(result)
+
+
+# ---------------------------------------------------- approach comparison --
+
+@app.route("/api/problems/<slug>/approach-comparison", methods=["POST"])
+def approach_comparison(slug):
+    """Optional, explicitly-triggered comparison between the learner's own
+    code and this problem's reference approach(es). Never run
+    automatically -- the frontend only calls this from a deliberate
+    "Compare my approach" click, gated (client-side) behind having run at
+    least once first, mirroring the honor-system gate already used for
+    hint/solution reveal.
+
+    Two-stage reveal, same idea as the Hints tab's solution reveal:
+    reveal_code=False (the default) returns every number -- structural
+    estimate, empirical timing/memory, growth curve, operation count --
+    for every candidate, but never the reference CODE itself. Those
+    numbers alone explain *why* one approach is better without handing
+    over the algorithm. reveal_code=True additionally returns the actual
+    source, which the frontend treats exactly like the existing solution
+    reveal (marks the attempt assisted, not independent).
+
+    See logic/approach_comparison.py for what each number actually
+    measures and why brute_force_baseline is null for most problems."""
+    payload = request.get_json(silent=True) or {}
+    code = payload.get("code", "")
+    reveal_code = bool(payload.get("reveal_code", False))
+    if not code.strip():
+        return jsonify({"error": "code is required"}), 400
+
+    conn = get_connection()
+    problem = conn.execute(
+        "SELECT id, function_signature, optimal_reference, brute_force_reference, "
+        "growth_curve_generator, growth_curve_sizes, brute_force_approach, optimal_approach, "
+        "expected_time_complexity, expected_space_complexity FROM problems WHERE slug = ?",
+        (slug,),
+    ).fetchone()
+    if problem is None:
+        conn.close()
+        return jsonify({"error": f"No problem '{slug}'"}), 404
+    test_case_rows = conn.execute(
+        "SELECT input_args_json, expected_output_json FROM test_cases WHERE problem_id = ? ORDER BY id",
+        (problem["id"],),
+    ).fetchall()
+    conn.close()
+
+    test_cases = [
+        {"args": json.loads(t["input_args_json"]), "expected": json.loads(t["expected_output_json"])}
+        for t in test_case_rows
+    ]
+    if not test_cases:
+        return jsonify({"error": "This problem has no test cases to benchmark against"}), 400
+    sample_args = test_cases[0]["args"]
+
+    has_baseline = problem["brute_force_reference"] is not None
+    growth_generator = problem["growth_curve_generator"] if has_baseline else None
+    growth_sizes = json.loads(problem["growth_curve_sizes"]) if (has_baseline and problem["growth_curve_sizes"]) else None
+
+    mine = compare_candidate(code, problem["function_signature"], test_cases, sample_args,
+                              growth_generator, growth_sizes)
+
+    optimal = compare_candidate(problem["optimal_reference"], problem["function_signature"], test_cases,
+                                 sample_args, growth_generator, growth_sizes)
+    optimal["narrative"] = problem["optimal_approach"]
+    if reveal_code:
+        optimal["code"] = problem["optimal_reference"]
+
+    baseline = None
+    if has_baseline:
+        baseline = compare_candidate(problem["brute_force_reference"], problem["function_signature"], test_cases,
+                                      sample_args, growth_generator, growth_sizes)
+        baseline["narrative"] = problem["brute_force_approach"]
+        if reveal_code:
+            baseline["code"] = problem["brute_force_reference"]
+
+    return jsonify({
+        "has_baseline": has_baseline,
+        "expected_time_complexity": problem["expected_time_complexity"],
+        "expected_space_complexity": problem["expected_space_complexity"],
+        "my_approach": mine,
+        "optimal_reference": optimal,
+        "brute_force_baseline": baseline,
+    })
 
 
 # --------------------------------------------------------- plain run/trace --

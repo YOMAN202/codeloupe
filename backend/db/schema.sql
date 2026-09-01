@@ -46,8 +46,29 @@ CREATE TABLE IF NOT EXISTS problems (
     related_problem_slugs TEXT,    -- comma-separated slugs
     prerequisite_topics TEXT,
     has_stress_test INTEGER NOT NULL DEFAULT 0,
-    stress_test_generator TEXT,    -- python source for generate(n) -> args tuple, or NULL
-    brute_force_reference TEXT,    -- python source for a reference solution used in stress testing, or NULL
+    stress_test_generator TEXT,    -- reserved for future randomized differential correctness
+                                    -- testing (generate(n) -> args tuple, compared against
+                                    -- optimal_reference). Not used by approach comparison below --
+                                    -- see growth_curve_generator/growth_curve_sizes for that.
+    optimal_reference TEXT,        -- python source for the canonical correct solution -- the SAME
+                                    -- code already used to compute this problem's expected test
+                                    -- outputs at seed time (see init_db.py's _compute_expected_outputs).
+                                    -- Populated for every problem. Powers "reveal solution" and the
+                                    -- optimal side of approach comparison. (Was named
+                                    -- brute_force_reference before the approach-comparison feature --
+                                    -- renamed because it was never actually a brute-force solution.)
+    brute_force_reference TEXT,    -- python source for a genuinely distinct, correct BASELINE
+                                    -- approach with meaningfully worse complexity than
+                                    -- optimal_reference. Deliberately NULL for most problems --
+                                    -- only populated where a real, useful naive alternative exists
+                                    -- (see docs/decisions.md). Approach comparison degrades
+                                    -- gracefully to "your code vs the optimal reference" when NULL.
+    growth_curve_generator TEXT,   -- python source defining generate(n) -> args tuple, sized ~n.
+                                    -- Only set alongside brute_force_reference -- used for the
+                                    -- empirical runtime/memory growth-curve in approach comparison.
+    growth_curve_sizes TEXT,       -- JSON array of input sizes to benchmark at, hand-picked per
+                                    -- problem's complexity class. Only set alongside
+                                    -- growth_curve_generator.
     comparison_mode TEXT NOT NULL DEFAULT 'exact',  -- 'exact' | 'float_close' | 'unordered_list' | 'unordered_list_of_lists' | 'unordered_list_of_sorted_lists'
     interview_priority TEXT,       -- 'Core' | 'Important' | 'Optional' -- interview-frequency curation, see problem-roadmap.md
     estimated_solve_minutes INTEGER,

@@ -12,6 +12,7 @@ import {
   fetchSolution,
   runProblem,
   fetchComplexityEstimate,
+  fetchApproachComparison,
   logAttempt,
   traceProblem,
   traceProblemCustom,
@@ -20,7 +21,7 @@ import {
   updateMistake,
 } from "../../api/client";
 
-const TABS = ["Tests", "Hints", "Trace", "Complexity", "Playground", "History"];
+const TABS = ["Tests", "Hints", "Trace", "Complexity", "Approaches", "Playground", "History"];
 
 // Mirrors logic/mistakes.py's MISTAKE_CATEGORIES exactly -- the backend is
 // the source of truth and rejects anything outside this list, so this
@@ -291,6 +292,75 @@ function PatternPractice({ problem, open, setOpen, guess, setGuess, revealed, se
   );
 }
 
+// Approach comparison: one card per candidate (my code / optimal reference
+// / brute-force baseline). Every number here is labeled with where it came
+// from -- see logic/approach_comparison.py's module docstring for exactly
+// what structural vs empirical_existing_tests vs growth_curve each mean.
+// Deliberately never renders the reference code itself unless `code` is
+// present on the candidate (i.e. the learner explicitly revealed it).
+function ApproachCard({ title, candidate, narrative, onTrace, tracing }) {
+  if (!candidate) return null;
+  const growth = candidate.growth_curve;
+  return (
+    <div className="approach-card">
+      <h4>{title}</h4>
+      {narrative && <p className="muted small">{narrative}</p>}
+      <p>
+        <strong>Structural estimate:</strong>{" "}
+        {candidate.structural?.structural_time_estimate || candidate.structural?.error}
+      </p>
+      {candidate.operation_count?.count != null && (
+        <p className="muted small">
+          {candidate.operation_count.count} trace step{candidate.operation_count.count === 1 ? "" : "s"}
+          {candidate.operation_count.truncated ? " (capped -- real count is higher)" : ""} on one
+          representative input
+        </p>
+      )}
+      {candidate.empirical_existing_tests?.points?.length > 0 && (
+        <>
+          <p className="muted small approach-metric-label">On this problem's own test cases:</p>
+          <ul className="approach-metric-list">
+            {candidate.empirical_existing_tests.points.map((pt, i) => (
+              <li key={i}>
+                size {pt.input_size ?? "n/a"}: {(pt.seconds * 1000).toFixed(3)} ms
+                {pt.peak_kb != null && `, ${Math.round(pt.peak_kb / 1024)} MB peak`}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {growth?.points?.length > 0 && (
+        <>
+          <p className="muted small approach-metric-label">Growth across synthetic input sizes:</p>
+          <ul className="approach-metric-list">
+            {growth.points.map((pt, i) => (
+              <li key={i}>
+                n={pt.n}:{" "}
+                {pt.seconds != null
+                  ? `${(pt.seconds * 1000).toFixed(1)} ms${pt.peak_kb != null ? `, ${Math.round(pt.peak_kb / 1024)} MB peak` : ""}`
+                  : pt.timed_out
+                  ? "timed out (became impractical at this size)"
+                  : "could not measure"}
+              </li>
+            ))}
+          </ul>
+          <p className="muted small">{growth.note}</p>
+        </>
+      )}
+      {candidate.code && (
+        <>
+          <pre className="code-block">{candidate.code}</pre>
+          {onTrace && (
+            <button className="chip chip-small" onClick={onTrace} disabled={tracing}>
+              Trace this approach &rarr;
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ProblemWorkspace() {
   const { slug } = useParams();
   const [problem, setProblem] = useState(null);
@@ -312,10 +382,14 @@ export default function ProblemWorkspace() {
   const [complexity, setComplexity] = useState(null);
   const [loadingComplexity, setLoadingComplexity] = useState(false);
 
+  const [approachCompare, setApproachCompare] = useState(null);
+  const [comparingApproaches, setComparingApproaches] = useState(false);
+
   const [trace, setTrace] = useState(null);
   const [tracing, setTracing] = useState(false);
   const [traceTestCaseIndex, setTraceTestCaseIndex] = useState(0);
   const [traceFocusEnd, setTraceFocusEnd] = useState(false);
+  const [tracedLabel, setTracedLabel] = useState("Your code");
 
   const [patternOpen, setPatternOpen] = useState(false);
   const [patternGuess, setPatternGuess] = useState(null);
@@ -349,9 +423,12 @@ export default function ProblemWorkspace() {
     setSolution(null);
     setSolutionRevealed(false);
     setComplexity(null);
+    setApproachCompare(null);
+    setComparingApproaches(false);
     setTrace(null);
     setTraceTestCaseIndex(0);
     setTraceFocusEnd(false);
+    setTracedLabel("Your code");
     setPatternOpen(false);
     setPatternGuess(null);
     setPatternRevealed(false);
@@ -474,6 +551,7 @@ export default function ProblemWorkspace() {
 
   async function runTrace(overrideTestCaseIndex) {
     const idx = overrideTestCaseIndex ?? traceTestCaseIndex;
+    setTracedLabel("Your code");
     setTracing(true);
     setTrace(null);
     try {
@@ -482,6 +560,57 @@ export default function ProblemWorkspace() {
       // without this the trace would never actually enter the function
       // body. See client.js's traceProblem / app.py's /trace docstring.
       const result = await traceProblem(slug, code, idx);
+      setTrace(result);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setTracing(false);
+    }
+  }
+
+  // Approach comparison: numbers first (reveal_code=false), reference code
+  // only on an explicit second click -- same two-stage gate as the Hints
+  // tab's solution reveal, and revealing either candidate's code marks the
+  // attempt assisted via the same solutionRevealed flag (see app.py's
+  // approach_comparison docstring for why).
+  async function compareApproaches() {
+    setComparingApproaches(true);
+    try {
+      const result = await fetchApproachComparison(slug, code, false);
+      setApproachCompare(result);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setComparingApproaches(false);
+    }
+  }
+
+  async function revealApproachCode() {
+    setComparingApproaches(true);
+    try {
+      const result = await fetchApproachComparison(slug, code, true);
+      setApproachCompare(result);
+      setSolutionRevealed(true);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setComparingApproaches(false);
+    }
+  }
+
+  // "Trace this approach": reuses the exact same trace endpoint/viewer as
+  // "Trace my code", just pointed at a revealed reference implementation
+  // instead of the editor's contents -- no new visualization code, just a
+  // label so it's never ambiguous whose execution is on screen.
+  async function traceApproachCode(label, referenceCode) {
+    setTab("Trace");
+    setTraceFocusEnd(true);
+    setTracedLabel(label);
+    setTracing(true);
+    setTrace(null);
+    try {
+      const sampleArgs = problem.visible_test_cases?.[0]?.args || [];
+      const result = await traceProblemCustom(slug, referenceCode, sampleArgs);
       setTrace(result);
     } catch (e) {
       setError(e.message);
@@ -541,6 +670,7 @@ export default function ProblemWorkspace() {
     if (args === null) return;
     setTab("Trace");
     setTraceFocusEnd(true);
+    setTracedLabel("Your code");
     setTracing(true);
     setTrace(null);
     try {
@@ -826,6 +956,11 @@ export default function ProblemWorkspace() {
                 >
                   {tracing ? "Tracing..." : "Trace my code"}
                 </button>
+                {trace && tracedLabel !== "Your code" && (
+                  <p className="muted small">
+                    <strong>Showing trace of: {tracedLabel}</strong>
+                  </p>
+                )}
                 {trace?.traced_test_case_args && (
                   <p className="muted small">
                     Traced with: <code>{problem.function_signature.match(/def\s+(\w+)/)?.[1]}(
@@ -864,6 +999,82 @@ export default function ProblemWorkspace() {
                       </>
                     )}
                   </div>
+                )}
+              </div>
+            )}
+
+            {tab === "Approaches" && (
+              <div>
+                {!runResult ? (
+                  <p className="muted">
+                    Run your code at least once first -- approach comparison works best once you've
+                    actually attempted the problem, even if that attempt is a naive first pass.
+                  </p>
+                ) : (
+                  <>
+                    <p className="muted small">
+                      Compares your code's own numbers against a reference approach, so you can see
+                      *why* one is better, not just that it is. Reference code stays hidden until you
+                      explicitly reveal it below -- the numbers alone are the point.
+                    </p>
+                    <div className="hint-buttons">
+                      <button className="chip" onClick={compareApproaches} disabled={comparingApproaches}>
+                        {comparingApproaches ? "Comparing..." : "Compare my approach"}
+                      </button>
+                      {approachCompare && !approachCompare.optimal_reference?.code && (
+                        <button className="chip chip-danger" onClick={revealApproachCode} disabled={comparingApproaches}>
+                          Show reference code (last resort)
+                        </button>
+                      )}
+                    </div>
+                    {approachCompare?.optimal_reference?.code && (
+                      <p className="warning">
+                        This attempt will be tagged assisted, not independent, per the spaced-revision
+                        system.
+                      </p>
+                    )}
+                    {approachCompare && (
+                      <>
+                        <p className="muted small approach-progression">
+                          {approachCompare.has_baseline
+                            ? "Naive baseline → your approach → optimized reference"
+                            : "No curated naive baseline exists for this problem -- comparing your approach directly against the optimized reference."}
+                          {" "}Target: {approachCompare.expected_time_complexity} time,{" "}
+                          {approachCompare.expected_space_complexity} space.
+                        </p>
+                        <div className="approach-columns">
+                          {approachCompare.has_baseline && (
+                            <ApproachCard
+                              title="Naive baseline"
+                              candidate={approachCompare.brute_force_baseline}
+                              narrative={approachCompare.brute_force_baseline?.narrative}
+                              onTrace={
+                                approachCompare.brute_force_baseline?.code
+                                  ? () => traceApproachCode("Naive baseline", approachCompare.brute_force_baseline.code)
+                                  : null
+                              }
+                              tracing={tracing}
+                            />
+                          )}
+                          <ApproachCard
+                            title="Your approach"
+                            candidate={approachCompare.my_approach}
+                          />
+                          <ApproachCard
+                            title="Optimized reference"
+                            candidate={approachCompare.optimal_reference}
+                            narrative={approachCompare.optimal_reference?.narrative}
+                            onTrace={
+                              approachCompare.optimal_reference?.code
+                                ? () => traceApproachCode("Optimized reference", approachCompare.optimal_reference.code)
+                                : null
+                            }
+                            tracing={tracing}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -985,7 +1196,8 @@ export default function ProblemWorkspace() {
                             </div>
                             <p className="muted small">
                               Structural estimates from each version's code shape -- see the Complexity tab for
-                              empirical timing on either version.
+                              empirical timing on either version, or the Approaches tab to compare your current
+                              code against a reference approach instead of a past attempt.
                             </p>
                           </div>
                         )}
