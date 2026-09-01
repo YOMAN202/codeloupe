@@ -111,7 +111,7 @@ npm run dev                # starts on http://127.0.0.1:5173
 
 Open `http://127.0.0.1:5173` — you should land on the Dashboard.
 
-**Windows convenience script:** after the one-time setup above (steps 1 and 2, done once), `start.bat` in the repo root starts both servers in their own windows and opens the app in your browser — double-click it, or run it from a terminal. It checks that dependencies and the database are already in place and tells you plainly if something's missing, rather than failing silently.
+**Windows convenience scripts:** after the one-time setup above (steps 1 and 2, done once), `start.bat` in the repo root is all you need for every subsequent start — double-click it. It starts both servers silently in the background (no terminal windows stay open), waits until the frontend is actually ready, then opens `http://localhost:5173/` in your browser automatically. It checks that dependencies and the database are already in place and shows a clear popup — not a silent failure — if something's missing or a server doesn't start. Run `stop.bat` when you're done for the day, since the servers keep running in the background until you do (see `scripts/start.ps1` and `scripts/stop.ps1` for the details).
 
 **3. Run the tests** (optional, needs both servers above already running):
 ```bash
