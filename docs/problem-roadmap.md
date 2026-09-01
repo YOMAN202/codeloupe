@@ -112,6 +112,45 @@ Plus a third tier added on explicit request, sitting outside both: **Advanced Ch
 
 **A genuine bug this curation work caught:** the original auto-verified test-case pipeline (`init_db.py`) called each problem's reference solution directly on its stored `test_inputs`. For "in-place mutation" style problems (e.g. `remove-duplicates-sorted`, which mutates its input array as part of the correct algorithm), this silently corrupted the *stored* input before it was written to the database -- the expected output was computed correctly against the original array, but the array itself got overwritten in memory before being serialized, so the seeded test case ended up comparing the right answer against the wrong (mutated) input. Running every problem's own reference solution back through the live API as a verification pass caught this immediately (`remove-duplicates-sorted` failed its own seeded test). Fixed by deep-copying each test input before calling the reference solution (`copy.deepcopy`, see `_compute_expected_outputs` in `init_db.py`) -- worth recording here because it's exactly the kind of subtle correctness bug the "auto-verify against a reference solution" design was meant to prevent in the first place, and it still slipped through until end-to-end testing against the real API (not just unit-testing the seeding logic in isolation) exercised it.
 
+## Second expansion: 76 -> 109 problems, closing the queues/strings/sliding-window/two-pointer gaps
+
+Once the 76-problem, 3-tier bank was stable, it was expanded again to **109 problems**, this time specifically targeting the coverage gaps disclosed at the end of the previous expansion (`queues` and `strings` each had only 1 dedicated problem; `sliding-window` and `two-pointer` had thin Easy-to-Medium progressions) rather than expanding uniformly. 33 new problems were added: 28 Easy/Medium (8 Core, 20 Extended) and 5 curated Hard (Advanced).
+
+**A mandatory deduplication review preceded writing any of the 33 into the seed file.** Before finalizing the candidate list, every planned new problem was cross-checked against the full existing 76-problem bank (not just within its own topic) for three failure modes: an outright duplicate, a duplicate under a different name, and a problem teaching essentially the same pattern with no meaningful variation. This caught two real issues that would otherwise have padded the bank without adding learning value:
+
+- **`valid-anagram` was independently proposed as a new Easy strings problem, but it already existed** in the 76-problem bank (`strings`/`core`/Easy). Dropped from the new-problems list; the strings gap was closed instead with a genuinely new Easy anchor (`longest-common-prefix`) plus five Medium variations, keeping the existing `valid-anagram` as the topic's Easy concept-introduction problem rather than adding a second one.
+- **`moving-average-from-data-stream` and `number-of-recent-calls` (Recent Counter) were both candidates for the queues gap**, and on inspection are mechanically near-identical (append to a deque, evict stale entries from the front, read the current size) with the only real difference being a fixed-count window versus a time-bounded window. Rather than include both, only `number-of-recent-calls` was kept -- it maps to a more distinctly valuable real-world pattern (time-windowed rate limiting) and its inclusion alongside `implement-queue-using-stacks` and `design-circular-queue` still gives the topic a real Easy-to-Medium spread without the redundant middle entry.
+
+Every one of the 33 problems that survived the review earns its place on one of the six grounds the review used explicitly: introduces a new pattern/data-structure-design idea not covered elsewhere (`merge-intervals`, `min-stack`, `add-two-numbers`, `subarray-sum-equals-k`, `clone-graph`, `partition-equal-subset-sum`, `task-scheduler`); is a deliberate Easy-to-Medium progression step building on an existing problem (`insert-interval` after `merge-intervals`; `remove-duplicates-sorted-array-ii` after the original `remove-duplicates-sorted`; `subsets-ii` after `subsets`; `valid-palindrome-ii` after `valid-palindrome`; `permutation-in-string` and `fruit-into-two-baskets` as new sliding-window sub-patterns distinct from the existing three); is a meaningfully different constraint variant sharing a broad pattern (`sort-colors`'s 3-way partition vs. the existing 2-pointer problems; `boats-to-save-people`'s greedy pairing vs. `max-area-container`'s greedy expansion; `minimum-size-subarray-sum`'s minimize-length objective vs. the existing maximize-length sliding-window problems); reinforces a high-interview-frequency skill not otherwise represented (`kth-smallest-element-in-bst`'s in-order-traversal-for-rank, `search-a-2d-matrix`'s flattened-grid binary search); or is a natural Hard capstone of a pattern family already built up through Easy/Medium (`minimum-window-substring` after the Medium sliding-window problems; `first-missing-positive`, `n-queens`, `binary-tree-maximum-path-sum`, `find-median-from-data-stream`). Every surviving problem was standalone-verified before being written into `seed_problems.py`, then re-verified through the live grading API (`verify_all_live.py`) after seeding -- the same two-pass process both prior expansions used, with 109/109 reference solutions passing.
+
+**Final tier breakdown:** Core 59 (was 51, +8), Extended 39 (was 19, +20), Advanced 11 (was 6, +5).
+
+**Final difficulty breakdown:** Easy 35, Medium 63, Hard 11 (all 11 Hard problems remain strictly `advanced`-tier -- 0 Hard problems in Core or Extended, unchanged from before).
+
+**Breakdown by topic (core / extended / advanced / total):**
+
+| Topic | Core | Extended | Advanced | Total |
+|---|---|---|---|---|
+| arrays | 5 | 5 | 2 | 12 |
+| binary-search | 3 | 3 | 1 | 7 |
+| dynamic-programming | 5 | 4 | 1 | 10 |
+| graphs | 6 | 2 | 1 | 9 |
+| hashing | 5 | 1 | 0 | 6 |
+| heaps | 4 | 1 | 2 | 7 |
+| linked-lists | 5 | 2 | 0 | 7 |
+| queues | 2 | 2 | 0 | 4 |
+| recursion | 4 | 2 | 1 | 7 |
+| sliding-window | 3 | 3 | 1 | 7 |
+| sorting | 4 | 0 | 0 | 4 |
+| stacks | 3 | 1 | 0 | 4 |
+| strings | 2 | 5 | 0 | 7 |
+| trees | 4 | 4 | 2 | 10 |
+| two-pointer | 4 | 4 | 0 | 8 |
+
+**Gap status:** `queues` went from 1 problem to 4 (Easy: `implement-queue-using-stacks`; Easy: `number-of-recent-calls`; Medium: `design-circular-queue`; Medium: the existing `sliding-window-maximum`). `strings` went from 1 to 7 (Easy: `valid-anagram`, `longest-common-prefix`, `implement-strstr`; Medium: `longest-palindromic-substring`, `palindromic-substrings`, `reverse-words-in-a-string`, `string-to-integer-atoi`). `sliding-window` went from 3 to 7 and `two-pointer` from 4 to 8, both now with a genuine Easy-to-Medium-to-variation spread instead of 1-2 Medium entries. Every topic in the bank now has at least one Easy AND one Medium entry within Core+Extended -- the queues/strings thinness disclosed at the end of the previous expansion is fully closed.
+
+**Remaining intentional gaps, disclosed honestly:** `sorting` and `stacks` still have no Extended-tier reinforcement beyond their Core problems (4 Core / 0 Extended, and 3 Core / 1 Extended respectively) -- both already have solid Easy-to-Medium Core progressions, and no additional Easy/Medium problem in either topic cleared the deduplication bar (the natural next candidates -- e.g. a second monotonic-stack problem, or heapsort as a fifth sorting algorithm -- were considered and judged pattern-redundant with what's already covered, so they were left out rather than added to pad a count). `heaps` and `sliding-window` each have exactly 2 Hard/Advanced problems (a deliberate exception to the "roughly one Hard per area" default, since both had two genuinely distinct high-value Hard applications -- k-way merge and task-scheduling-adjacent greedy heap use for heaps; minimize-with-frequency-coverage and the underlying monotonic-deque-max problem for sliding-window/queues). No topic has more than 2 Advanced-tier problems, and several topics (`hashing`, `linked-lists`, `sorting`, `stacks`, `two-pointer`) deliberately have zero -- not every topic needs a Hard capstone to be complete, and forcing one everywhere was explicitly rejected per the "don't pad Hard problems to hit a quota" instruction.
+
 ## Non-linear curriculum navigation
 
 The 45-day sequence is a **recommended path, not a locked course**. Every lesson (`lessons` table) has an independent status in a new `lesson_progress` table: `not_started`, `in_progress`, `completed`, `skipped`, or `known` (the last for "I already know this, don't make me redo it"). None of these gate access -- `GET /api/lessons/<day>` works for any day regardless of what came before, and `PUT /api/lessons/<day>/progress` can set any day to any status at any time.

@@ -40,4 +40,4 @@ if failures:
         print(f"      {detail}")
     sys.exit(1)
 else:
-    print("ALL 76 REFERENCE SOLUTIONS VERIFIED VIA LIVE GRADING API.")
+    print(f"ALL {len(problems)} REFERENCE SOLUTIONS VERIFIED VIA LIVE GRADING API.")

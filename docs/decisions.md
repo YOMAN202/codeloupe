@@ -51,6 +51,14 @@ The expansion specifically targeted the previously-disclosed gap: heaps went fro
 
 See `problem-roadmap.md`'s "Actual implementation" section for the full per-topic/per-tier/per-difficulty breakdown, the reference frameworks used (NeetCode 150, Striver's sheet, LeetCode citations), and the trace-visualizer fix this expansion prompted (see the entry below on tracing incorrect code).
 
+## Second problem-bank expansion: 76 -> 109 problems, with a mandatory cross-bank dedup review
+
+A second expansion targeted the specific gaps the first expansion disclosed rather than being an across-the-board increase: `queues` and `strings` topics were thin (1 problem each), and `sliding-window`/`two-pointer` had shallow Easy-to-Medium progressions. Before any of the 33 candidate problems were written into `seed_problems.py`, a deliberate deduplication pass checked every candidate against the *entire* existing 76-problem bank (not just its own topic), specifically to catch three failure modes: an outright duplicate, a duplicate under a different name, and a problem teaching essentially the same pattern with no meaningful variation.
+
+This caught two real issues before they shipped: a candidate `valid-anagram` (Easy, strings) turned out to already exist in the bank under the exact same slug -- an easy miss, since it's exactly the kind of "obvious first Easy problem for a thin topic" both an independent planning pass and the existing bank would naturally converge on. And two candidate queue problems (`moving-average-from-data-stream` and `number-of-recent-calls`) were mechanically near-identical (both: append to a deque, evict stale entries from the front) with the only real difference being a fixed-count window versus a time-bounded one -- only the more distinctly valuable one (time-windowed rate limiting) was kept. Both fixes are documented in detail, with the full per-problem justification for every one of the 33 survivors, in `problem-roadmap.md`'s "Second expansion" section.
+
+The same two-pass verification process as the first expansion applied again: every reference solution was checked standalone before being written into the seed file, then re-verified through the live grading API (`verify_all_live.py`) after seeding -- 109/109 passed. Final tier split: Core 59 / Extended 39 / Advanced 11. Final difficulty split: Easy 35 / Medium 63 / Hard 11 (Hard remains 100% confined to the Advanced tier). Every topic in the bank now has at least one Easy and one Medium problem, closing the queues/strings gap disclosed at the end of the first expansion.
+
 ## The trace visualizer must stay useful for INCORRECT code, not just correct solutions
 
 This is Traceviz's core differentiator, restated because it drove a real fix: the tracer shows what the learner's OWN code actually does, bugs included -- not a canned animation of a correct algorithm. Two bugs meant this wasn't actually true before this pass:

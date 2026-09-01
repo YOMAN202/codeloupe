@@ -41,8 +41,8 @@ check("GET /api/lessons/999 -> 404", r.status_code == 404)
 # ---- problems ---------------------------------------------------------
 r = requests.get(f"{BASE}/api/problems")
 problems = r.json()
-check("GET /api/problems -> 200, 76 problems (32 original + 38 expansion + 6 advanced)",
-      r.status_code == 200 and len(problems) == 76, len(problems))
+check("GET /api/problems -> 200, 109 problems (76 + 33 second-expansion, deduplicated)",
+      r.status_code == 200 and len(problems) == 109, len(problems))
 check("  every problem has interview_priority in Core/Important/Optional",
       all(p.get("interview_priority") in ("Core", "Important", "Optional") for p in problems),
       {p["slug"] for p in problems if p.get("interview_priority") not in ("Core", "Important", "Optional")})
@@ -62,8 +62,8 @@ check("  no Hard problems outside the advanced tier (Hard must stay strictly opt
       [p["slug"] for p in problems if p["difficulty"] == "Hard" and p["path_tier"] != "advanced"])
 r = requests.get(f"{BASE}/api/problems?path_tier=advanced")
 advanced_problems = r.json()
-check("GET /api/problems?path_tier=advanced -> filters to exactly the 6 Hard challenges",
-      r.status_code == 200 and len(advanced_problems) == 6 and all(p["difficulty"] == "Hard" for p in advanced_problems),
+check("GET /api/problems?path_tier=advanced -> filters to exactly the 11 Hard challenges",
+      r.status_code == 200 and len(advanced_problems) == 11 and all(p["difficulty"] == "Hard" for p in advanced_problems),
       len(advanced_problems))
 
 r = requests.get(f"{BASE}/api/problems/group-anagrams")
