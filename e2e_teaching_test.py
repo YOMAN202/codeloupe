@@ -8,8 +8,9 @@ Pointers -- Days 25-27), batch 4 (Stacks, Queues -- Days 28-29), batch 5
 (Recursion, Backtracking -- Days 23-24), batch 6 (Binary Search, Binary
 Search Variants -- Days 21-22), batch 7 (Sorting, Divide-and-conquer
 sorting -- Days 17-20), batch 8 (Trees, Binary Search Trees, Tree
-BFS -- Days 30-32), and batch 9 (Heaps, Top-K with a bounded heap --
-Days 33-34) of the curriculum expansion.
+BFS -- Days 30-32), batch 9 (Heaps, Top-K with a bounded heap --
+Days 33-34), and batch 10 (Graphs, Graph BFS, Graph DFS, Dijkstra's
+algorithm -- Days 35-38) of the curriculum expansion.
 
 Covers: the Learn hub lists all lessons grouped by topic in the correct
 topic-before-pattern order; a concept lesson page renders every section
@@ -28,7 +29,15 @@ disclaimer that dict state isn't visualized, the sliding-window
 double-shrink walkthrough frame, and the linked-list reversal/cycle-
 detection walkthroughs that reuse LinkedListView (a node-chain renderer,
 not the array-box one every other lesson uses) via a small adapter in
-ConceptWalkthrough.jsx.
+ConceptWalkthrough.jsx; and batch 10's two graph-rendering shapes --
+GraphNodeView (a new buildGraphNodeGraph adapter, first used for a plain
+adjacency-list build, then for DFS cycle detection's on_stack pointer
+tags, then for Dijkstra with live shortest-distance values encoded into
+each node's own label) and GridGraphView (no adapter needed, same as
+HeapView, for the grid-BFS walkthrough) -- plus the graph-shortest-paths
+lesson's real pattern_family narrowing down to 4 of the topic's 9 curated
+problems, the one departure this batch makes from batches 8-9's
+pattern_family=None precedent.
 
 Run with the dev server (port 5173) and backend (port 5001) already up.
 """
@@ -55,8 +64,8 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all twenty-one concept lessons (pilot + batches 1-9)", cards.count() == 21)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting, trees, heaps)",
+        check("Learn hub lists all twenty-five concept lessons (pilot + batches 1-10)", cards.count() == 25)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting, trees, heaps, graphs)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
@@ -69,7 +78,8 @@ def main():
               and page.locator("h3", has_text="binary search").count() > 0
               and page.locator("h3", has_text="sorting").count() > 0
               and page.locator("h3", has_text="trees").count() > 0
-              and page.locator("h3", has_text="heaps").count() > 0)
+              and page.locator("h3", has_text="heaps").count() > 0
+              and page.locator("h3", has_text="graphs").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -647,6 +657,122 @@ def main():
         check("day-34 lesson page shows callouts for both heap lessons",
               page.locator("a.callout", has_text="Learn: Heaps").count() > 0
               and page.locator("a.callout", has_text="Learn: Top-K").count() > 0)
+
+        # ---- batch 10: graphs lesson (adjacency-list build via the new -------
+        # buildGraphNodeGraph adapter, GraphNodeView's first ConceptWalkthrough
+        # user) --------------------------------------------------------------
+        page.goto(f"{BASE}/#/learn/graphs", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Graphs')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("graphs walkthrough renders via GraphNodeView's node-and-edge shape, not grid/tree/heap/array",
+              walkthrough.locator(".graph-node").count() > 0
+              and walkthrough.locator(".grid-cell").count() == 0
+              and walkthrough.locator(".tree-node").count() == 0
+              and walkthrough.locator(".heap-node").count() == 0
+              and walkthrough.locator(".seq-boxes").count() == 0)
+        check("graphs walkthrough starts at step 1 of 6", "step 1 / 6" in walkthrough.inner_text())
+        for _ in range(4):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("fifth frame's caption calls out C's degree of 3",
+              "degree" in page.locator(".concept-walkthrough-caption").inner_text().lower()
+              and "3" in page.locator(".concept-walkthrough-caption").inner_text())
+        page.get_by_role("button", name=re.compile("Next")).click()
+        page.wait_for_timeout(150)
+        check("final frame's caption bridges to the next two lessons' grid representation",
+              "adjacency list" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        problem_rows = page.locator(".problem-list .problem-row")
+        check("graphs (pattern_family unset) shows all 9 topic='graphs' curated problems",
+              problem_rows.count() == 9)
+
+        # ---- batch 10: graph-bfs lesson (grid BFS via GridGraphView, no ------
+        # adapter needed, same as HeapView) ------------------------------------
+        page.goto(f"{BASE}/#/learn/graph-bfs", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Graph BFS')", timeout=10000)
+        check("graph-bfs prerequisite links to Graphs",
+              page.get_by_role("link", name=re.compile("Graphs: representation")).count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("graph-bfs walkthrough renders via GridGraphView's grid-cell shape",
+              walkthrough.locator(".grid-cell").count() > 0 and walkthrough.locator(".graph-node").count() == 0)
+        check("graph-bfs walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("fourth frame's caption confirms the third BFS pop (count=3)",
+              "count=3" in page.locator(".concept-walkthrough-caption").inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("final frame's caption states the shortest-distance guarantee",
+              "shortest distance" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+
+        # ---- batch 10: graph-dfs lesson (cycle detection via GraphNodeView, --
+        # on_stack tracked as pointer tags) ------------------------------------
+        page.goto(f"{BASE}/#/learn/graph-dfs", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Graph DFS')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("graph-dfs walkthrough renders via GraphNodeView", walkthrough.locator(".graph-node").count() > 0)
+        check("graph-dfs walkthrough starts at step 1 of 6", "step 1 / 6" in walkthrough.inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("fourth frame shows all four on_stack pointer tags (D, A, B, C)",
+              walkthrough.locator(".pointer-chip").count() == 4)
+        page.get_by_role("button", name=re.compile("Next")).click()
+        page.wait_for_timeout(150)
+        check("fifth frame's caption identifies the back edge and reports a cycle",
+              "back edge" in page.locator(".concept-walkthrough-caption").inner_text().lower()
+              and "cycle" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        reveal_btns = page.get_by_role("button", name="Reveal answer")
+        check("graph-dfs has reveal-style checkpoints", reveal_btns.count() > 0)
+        reveal_btns.first.click()
+        page.wait_for_timeout(150)
+        check("revealed checkpoint explanation renders",
+              page.locator(".checkpoint-explanation").first.inner_text().strip() != "")
+
+        # ---- batch 10: graph-shortest-paths lesson (Dijkstra via GraphNodeView, -
+        # live dist encoded into each node's label; the one lesson this batch --
+        # that narrows to a real pattern_family) -------------------------------
+        page.goto(f"{BASE}/#/learn/graph-shortest-paths", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Dijkstra')", timeout=10000)
+        check("graph-shortest-paths prerequisites link to Graph BFS and Heaps",
+              page.get_by_role("link", name=re.compile("Graph BFS")).count() > 0
+              and page.get_by_role("link", name="Heaps: priority queues").count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("graph-shortest-paths walkthrough renders via GraphNodeView with live dist labels",
+              walkthrough.locator(".graph-node").count() > 0
+              and "d=0" in walkthrough.inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("fourth frame's caption explains skipping the stale heap entry for A",
+              "already in finalized" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        for _ in range(2):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("final frame's caption reports all four shortest distances",
+              "s=0" in page.locator(".concept-walkthrough-caption").inner_text().lower()
+              and "a=3" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        problem_rows = page.locator(".problem-list .problem-row")
+        check("graph-shortest-paths (pattern_family='Graph shortest paths') narrows to 4 problems",
+              problem_rows.count() == 4)
+        checkpoint_choice = page.get_by_role("button", name=re.compile("Plain BFS is enough and simpler"))
+        check("graph-shortest-paths has a choose_pattern checkpoint about BFS vs Dijkstra",
+              checkpoint_choice.count() > 0)
+        checkpoint_choice.click()
+        page.wait_for_timeout(150)
+        check("correct choice gets positive feedback styling",
+              "checkpoint-correct" in (checkpoint_choice.get_attribute("class") or ""))
+
+        # ---- integration: days 35-38 all link to all four graph lessons --------
+        for day in (35, 36, 37, 38):
+            page.goto(f"{BASE}/#/lessons/{day}", wait_until="networkidle")
+            page.wait_for_selector(f"text=Day {day}", timeout=10000)
+            check(f"day-{day} lesson page shows callouts for all four graph lessons",
+                  page.locator("a.callout", has_text="Learn: Graphs").count() > 0
+                  and page.locator("a.callout", has_text="Learn: Graph BFS").count() > 0
+                  and page.locator("a.callout", has_text="Learn: Graph DFS").count() > 0
+                  and page.locator("a.callout", has_text="Learn: Dijkstra").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 

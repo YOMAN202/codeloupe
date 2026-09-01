@@ -2116,6 +2116,479 @@ CONCEPT_LESSONS = [
             "regardless of how large `n` is -- the heap's size is capped by `k`, not by the input."
         ),
     ),
+    # ---- Batch 10: item 12 of the curriculum-ordered expansion -- graphs
+    # (Days 35-38). Four lessons, matching the curriculum's own four-day
+    # split (representation, BFS, DFS, Dijkstra) -- pattern_families.py
+    # actually has FOUR graph rules already (Grid BFS / Grid DFS-flood-fill
+    # / Graph shortest paths / Graph DFS-cycle-detection), more granular
+    # than heaps' single rule, but they don't line up cleanly with these
+    # four LESSONS either: Day 36's own two curated problems (Number of
+    # Islands = grid BFS, Rotting Oranges = multi-source BFS) land in TWO
+    # different families under pattern_family_for's ordered rules, and Day
+    # 37's two (Max Area of Island = grid DFS, Course Schedule = cycle
+    # detection) likewise split across two families. Only graph-shortest-
+    # paths gets a real pattern_family below ("Graph shortest paths" --
+    # Network Delay Time, Rotting Oranges, Word Ladder, and Clone Graph all
+    # land there under the existing rules, a reasonable "Apply it" list);
+    # graphs/graph-bfs/graph-dfs leave it unset, same tradeoff as batches 8
+    # and 9 -- see docs/decisions.md "Teaching system expansion: batch 10".
+    #
+    # Two different node shapes needed, both already distinguished by
+    # detectPrimaryView (detect.js) in the REAL trace system: a node-and-
+    # edge graph (GraphNodeView, needing a small adapter parallel to
+    # buildTreeGraph/buildLinkedListGraph -- see buildGraphNodeGraph in
+    # ConceptWalkthrough.jsx) for graphs and graph-dfs, and a grid
+    # (GridGraphView, which -- like HeapView -- takes locals directly, no
+    # adapter) for graph-bfs, matching which of Day 36's two problem shapes
+    # each lesson's own walkthrough demonstrates. graph-shortest-paths also
+    # uses GraphNodeView, encoding each node's live `dist` into its label
+    # text (e.g. "A d=3") since GraphNodeView has no separate side-panel
+    # for auxiliary state -- the same "narrate what the view can't render"
+    # tradeoff graph-bfs makes for its queue and graph-dfs makes for its
+    # on_stack (shown as pointer tags instead, since on_stack is a set of
+    # NODES rather than a separate value).
+    dict(
+        slug="graphs",
+        kind="topic",
+        topic="graphs",
+        pattern_family=None,
+        title="Graphs: representation & terminology",
+        display_order=1,
+        estimated_minutes=13,
+        summary="A graph is nodes plus edges -- the general structure trees, linked lists, and even grids "
+                "are all special cases of. Build one as an adjacency list and read off a node's neighbors "
+                "and degree.",
+        prerequisite_slugs="trees",
+        what_markdown=(
+            "A graph is a set of nodes (vertices) plus a set of connections between them (edges). The "
+            "cheapest common representation is an ADJACENCY LIST: a dict mapping each node to a list of its "
+            "neighbors. For an UNDIRECTED edge (a connection with no direction, like a friendship or a road), "
+            "record it in BOTH nodes' lists -- `graph.setdefault(a, []).append(b)` and the same with `a` and "
+            "`b` swapped. A node's DEGREE is simply the length of its neighbor list."
+        ),
+        why_markdown=(
+            "A tree only models strictly hierarchical relationships -- one parent per node, no cycles. Most "
+            "real relationships aren't like that: road networks, course prerequisites, social connections, "
+            "and word-transformation chains can all link back to something already seen, or have a node "
+            "reachable through more than one path. A graph is what you reach for the moment a relationship "
+            "isn't a strict hierarchy."
+        ),
+        recognize_markdown=(
+            "\"model connections/relationships between items\", \"prerequisites\" (course A requires course "
+            "B), \"friend network\", \"cities connected by roads\", \"can you get from X to Y\". The tell "
+            "that distinguishes it from a tree: a node can have more than one incoming connection, or a path "
+            "can loop back to somewhere it's already been."
+        ),
+        intuition_markdown=(
+            "An adjacency list costs `O(V + E)` total -- it only stores edges that actually exist. The "
+            "alternative, an ADJACENCY MATRIX (a `V x V` grid where cell `[i][j]` marks an edge from `i` to "
+            "`j`), costs `O(V^2)` regardless of how few edges exist -- worth it only when the graph is dense "
+            "(most possible edges exist) or you need O(1) \"is there an edge between i and j\" lookups. And a "
+            "GRID (the next two lessons) is itself an implicit graph with no adjacency list ever built: each "
+            "cell is a node, and each up/down/left/right step is an edge, all computed by index math."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace building an adjacency-list graph from an edge list one edge at a time, then look up a "
+            "node's neighbors and degree."
+        ),
+        walkthrough_code=(
+            "def build_graph(edges):\n"
+            "    graph = {}\n"
+            "    for a, b in edges:\n"
+            "        graph.setdefault(a, []).append(b)\n"
+            "        graph.setdefault(b, []).append(a)\n"
+            "    return graph\n\n"
+            "edges = [('A', 'B'), ('B', 'C'), ('A', 'C'), ('C', 'D')]\n"
+            "graph = build_graph(edges)\n"
+            "graph['C']  # C's neighbors"
+        ),
+        walkthrough_frames=[
+            dict(caption="edges=[(A,B),(B,C),(A,C),(C,D)]. Process (A,B): append B to A's list AND A to B's "
+                          "list -- both directions, since this is an undirected graph. graph={'A':['B'], "
+                          "'B':['A']}.",
+                 locals={"nodes": [{"id": 0, "val": "A", "neighbors": [1]}, {"id": 1, "val": "B", "neighbors": [0]}],
+                         "pointers": []}),
+            dict(caption="Process (B,C): B gets C appended (B=['A','C']), C gets B appended (C=['B']). "
+                          "graph={'A':['B'], 'B':['A','C'], 'C':['B']}.",
+                 locals={"nodes": [{"id": 0, "val": "A", "neighbors": [1]}, {"id": 1, "val": "B", "neighbors": [0, 2]},
+                                    {"id": 2, "val": "C", "neighbors": [1]}],
+                         "pointers": []}),
+            dict(caption="Process (A,C): A=['B','C'], C=['B','A']. This closes a loop -- A connects to B, B "
+                          "connects to C, and now C connects straight back to A. Unlike a tree, a graph "
+                          "allows exactly this: a path that returns to where it started, called a CYCLE.",
+                 locals={"nodes": [{"id": 0, "val": "A", "neighbors": [1, 2]}, {"id": 1, "val": "B", "neighbors": [0, 2]},
+                                    {"id": 2, "val": "C", "neighbors": [1, 0]}],
+                         "pointers": []}),
+            dict(caption="Process (C,D): C=['B','A','D'], D=['C']. All 4 edges processed -- "
+                          "graph={'A':['B','C'], 'B':['A','C'], 'C':['B','A','D'], 'D':['C']}.",
+                 locals={"nodes": [{"id": 0, "val": "A", "neighbors": [1, 2]}, {"id": 1, "val": "B", "neighbors": [0, 2]},
+                                    {"id": 2, "val": "C", "neighbors": [1, 0, 3]}, {"id": 3, "val": "D", "neighbors": [2]}],
+                         "pointers": []}),
+            dict(caption="graph['C'] -> ['B', 'A', 'D']. C's DEGREE (its neighbor count) is 3 -- more "
+                          "connections than any other node here, since it sits at the junction of the cycle "
+                          "and the branch to D.",
+                 locals={"nodes": [{"id": 0, "val": "A", "neighbors": [1, 2]}, {"id": 1, "val": "B", "neighbors": [0, 2]},
+                                    {"id": 2, "val": "C", "neighbors": [1, 0, 3]}, {"id": 3, "val": "D", "neighbors": [2]}],
+                         "pointers": [["current", 2]]}),
+            dict(caption="This dict-of-lists is an ADJACENCY LIST -- cheap (O(V+E) total) because it only "
+                          "stores edges that actually exist. For GRID problems specifically (the next two "
+                          "lessons), the grid itself already IS an implicit graph: each cell is a node, and "
+                          "up/down/left/right moves are edges, with no adjacency list ever built explicitly.",
+                 locals={"nodes": [{"id": 0, "val": "A", "neighbors": [1, 2]}, {"id": 1, "val": "B", "neighbors": [0, 2]},
+                                    {"id": 2, "val": "C", "neighbors": [1, 0, 3]}, {"id": 3, "val": "D", "neighbors": [2]}],
+                         "pointers": [["current", 2]]}),
+        ],
+        common_mistakes_markdown=(
+            "Forgetting the reverse append for an undirected edge -- `graph.setdefault(a, []).append(b)` "
+            "alone silently builds a DIRECTED graph (A -> B only); looking up B's neighbors then misses A "
+            "entirely, with no error to catch it. Confusing degree (a node's OWN neighbor count) with the "
+            "graph's total edge count. And assuming a graph has no cycles -- that's specifically a TREE; a "
+            "general graph allows a path to loop back to somewhere it's already been."
+        ),
+        complexity_markdown=(
+            "`O(V + E)` to build an adjacency list from `E` edges over `V` nodes -- every edge triggers a "
+            "constant amount of work, and every node gets at least an empty list entry. `O(1)` average to "
+            "look up a given node's neighbor list. An adjacency MATRIX instead costs `O(V^2)` memory "
+            "regardless of how few edges exist -- only worth it for dense graphs or O(1) edge-existence checks."
+        ),
+    ),
+    dict(
+        slug="graph-bfs",
+        kind="pattern",
+        topic="graphs",
+        pattern_family=None,
+        title="Graph BFS: shortest paths in unweighted graphs",
+        display_order=2,
+        estimated_minutes=16,
+        summary="BFS explores a graph (or grid) one full 'ring' of distance at a time -- so the FIRST time "
+                "it reaches any node is guaranteed to be via the shortest possible path, as long as every "
+                "edge costs the same.",
+        prerequisite_slugs="graphs,queues",
+        what_markdown=(
+            "Graph BFS uses a queue (FIFO), exactly like Day 32's tree level-order, plus one addition: a "
+            "VISITED set, since a graph (unlike a tree) can have cycles and multiple paths to the same node. "
+            "Mark a node visited the MOMENT it's enqueued, not when it's dequeued -- that's what guarantees "
+            "each node is only ever added to the queue once."
+        ),
+        why_markdown=(
+            "DFS also visits every reachable node, but with no distance guarantee -- it can stumble onto a "
+            "long, winding path to a node before ever trying the short direct one. BFS's FIFO order "
+            "guarantees nodes are dequeued in nondecreasing distance from the source: every node at distance "
+            "1 is dequeued before any node at distance 2, and so on. So the FIRST time BFS reaches any given "
+            "node is always via the shortest possible path -- as long as every edge costs the same."
+        ),
+        recognize_markdown=(
+            "\"fewest steps/minimum moves\" in an unweighted grid or graph, \"shortest path\" with no "
+            "mention of varying costs, \"levels/rings outward from a start\", or just \"everything reachable "
+            "from a start\" (a BFS flood-fill counts exactly like a DFS one would, just via a queue instead "
+            "of the call stack). If edges have DIFFERENT costs, BFS alone no longer guarantees shortest -- "
+            "that's the next lesson."
+        ),
+        intuition_markdown=(
+            "The one detail that actually matters: mark a cell visited the moment you ENQUEUE it, not when "
+            "you dequeue it. Marking at dequeue time still gives a correct final answer (with a guard that "
+            "skips an already-visited pop), but the SAME cell can be pushed onto the queue multiple times -- "
+            "once from each unvisited neighbor that reaches it -- before it's ever processed even once, doing "
+            "far more work than necessary."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace a BFS flood-fill count from (0,0) over a small grid, counting every connected 1-cell "
+            "reachable from the start."
+        ),
+        walkthrough_code=(
+            "from collections import deque\n\n"
+            "def bfs_count_island(grid, sr, sc):\n"
+            "    rows, cols = len(grid), len(grid[0])\n"
+            "    visited = {(sr, sc)}\n"
+            "    queue = deque([(sr, sc)])\n"
+            "    count = 0\n"
+            "    while queue:\n"
+            "        r, c = queue.popleft()\n"
+            "        count += 1\n"
+            "        for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):\n"
+            "            nr, nc = r + dr, c + dc\n"
+            "            if (0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 1\n"
+            "                    and (nr, nc) not in visited):\n"
+            "                visited.add((nr, nc))\n"
+            "                queue.append((nr, nc))\n"
+            "    return count"
+        ),
+        walkthrough_frames=[
+            dict(caption="grid=[[1,1,0],[0,1,0],[0,1,1]]. Start: enqueue (0,0), mark it visited. "
+                          "queue=[(0,0)].",
+                 locals={"grid": [[1, 1, 0], [0, 1, 0], [0, 1, 1]], "r": 0, "c": 0}),
+            dict(caption="Pop (0,0), count=1. Check its 4 neighbors: only (0,1) is an unvisited 1-cell -- "
+                          "mark it visited, enqueue it. queue=[(0,1)].",
+                 locals={"grid": [[1, 1, 0], [0, 1, 0], [0, 1, 1]], "r": 0, "c": 0}),
+            dict(caption="Pop (0,1), count=2. Its only unvisited 1-neighbor is (1,1) -- enqueue it. "
+                          "queue=[(1,1)].",
+                 locals={"grid": [[1, 1, 0], [0, 1, 0], [0, 1, 1]], "r": 0, "c": 1}),
+            dict(caption="Pop (1,1), count=3. Unvisited 1-neighbor: (2,1). queue=[(2,1)].",
+                 locals={"grid": [[1, 1, 0], [0, 1, 0], [0, 1, 1]], "r": 1, "c": 1}),
+            dict(caption="Pop (2,1), count=4. Unvisited 1-neighbor: (2,2). queue=[(2,2)].",
+                 locals={"grid": [[1, 1, 0], [0, 1, 0], [0, 1, 1]], "r": 2, "c": 1}),
+            dict(caption="Pop (2,2), count=5. No unvisited neighbors -- the queue is now empty.",
+                 locals={"grid": [[1, 1, 0], [0, 1, 0], [0, 1, 1]], "r": 2, "c": 2}),
+            dict(caption="queue empty -- BFS done, count=5 (this whole island). Because every cell was "
+                          "enqueued the FIRST time it was reached, and BFS processes strictly in enqueue "
+                          "order, tracking distance-from-start the same way would guarantee each cell's "
+                          "first-recorded distance is its true shortest distance.",
+                 locals={"grid": [[1, 1, 0], [0, 1, 0], [0, 1, 1]], "r": 2, "c": 2}),
+        ],
+        common_mistakes_markdown=(
+            "Marking a cell visited at POP time instead of ENQUEUE time -- still correct with a guard, but "
+            "lets the same cell get pushed onto the queue many times before it's ever processed once, doing "
+            "needless extra work. Reaching for DFS when the problem specifically needs the SHORTEST path or "
+            "fewest steps -- DFS finds A path to every reachable node, but not necessarily the shortest one. "
+            "And forgetting the visited set entirely on a graph with cycles -- unlike a tree, a graph can "
+            "send BFS back to a node it already processed, looping forever without one."
+        ),
+        complexity_markdown=(
+            "`O(V + E)` for a general graph, or `O(rows * cols)` for a grid -- every node/cell is enqueued "
+            "and dequeued at most once, and every edge (or grid neighbor) is examined a constant number of "
+            "times."
+        ),
+    ),
+    dict(
+        slug="graph-dfs",
+        kind="pattern",
+        topic="graphs",
+        pattern_family=None,
+        title="Graph DFS: cycle detection with an explicit stack",
+        display_order=3,
+        estimated_minutes=17,
+        summary="DFS explores as deep as possible before backtracking -- and for detecting a CYCLE in a "
+                "directed graph, the key insight is tracking which nodes are on the CURRENT path (on_stack), "
+                "not just which have ever been visited.",
+        prerequisite_slugs="graphs,recursion",
+        what_markdown=(
+            "Recursive DFS visits a node, recurses into each unvisited neighbor, then backtracks. For cycle "
+            "detection specifically, track TWO sets: `visited` (nodes ever fully explored) and `on_stack` "
+            "(nodes on the CURRENT call chain, right now). A \"back edge\" -- an edge pointing to a node "
+            "that's still in `on_stack` -- means the graph has a cycle."
+        ),
+        why_markdown=(
+            "A plain `visited` set alone can't tell the difference between \"reached this node via a "
+            "DIFFERENT path\" (completely normal in a graph, and NOT a cycle) and \"looped back to an "
+            "ancestor on THIS exact path\" (a real cycle). Day 37's own framing is that this DFS uses an "
+            "EXPLICIT stack, reinforcing Day 23's call-stack lesson: each nested `has_cycle` call is one more "
+            "frame pushed, and `on_stack` is simply a set that mirrors, at any moment, exactly which frames "
+            "are currently live."
+        ),
+        recognize_markdown=(
+            "\"detect a cycle in a directed graph\", \"can these prerequisites/dependencies all be "
+            "completed\", \"is a valid ordering (topological sort) even possible\" -- any \"is there a "
+            "cycle\" question on a directed graph is this pattern."
+        ),
+        intuition_markdown=(
+            "Picture a DAG shaped like a diamond: two different paths (through different intermediate nodes) "
+            "both lead to the SAME downstream node. That downstream node gets visited twice, by two "
+            "different ancestors -- completely normal, not a cycle. Checking \"have I EVER visited this "
+            "node\" would wrongly flag it. Checking \"is this node on my CURRENT path right now\" correctly "
+            "doesn't."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace has_cycle detecting a real cycle: D -> A -> B -> C -> A. Watch what happens when C looks "
+            "at its neighbor A, which is still on the current call stack."
+        ),
+        walkthrough_code=(
+            "def has_cycle(graph, node, on_stack, visited):\n"
+            "    visited.add(node)\n"
+            "    on_stack.add(node)\n"
+            "    for nxt in graph[node]:\n"
+            "        if nxt in on_stack:\n"
+            "            return True\n"
+            "        if nxt not in visited and has_cycle(graph, nxt, on_stack, visited):\n"
+            "            return True\n"
+            "    on_stack.discard(node)\n"
+            "    return False\n\n"
+            "graph = {'D': ['A'], 'A': ['B'], 'B': ['C'], 'C': ['A']}\n"
+            "has_cycle(graph, 'D', set(), set())"
+        ),
+        walkthrough_frames=[
+            dict(caption="has_cycle(graph, 'D', ...): visited={D}, on_stack={D} -- the tag marks it. D's "
+                          "only neighbor is A, not yet visited -- recurse.",
+                 locals={"nodes": [{"id": 0, "val": "D", "neighbors": [1]}, {"id": 1, "val": "A", "neighbors": [2]},
+                                    {"id": 2, "val": "B", "neighbors": [3]}, {"id": 3, "val": "C", "neighbors": [1]}],
+                         "pointers": [["on_stack: D", 0]]}),
+            dict(caption="has_cycle(graph, 'A', ...): on_stack={D,A}. This is a NEW call frame -- exactly "
+                          "the explicit-stack point from Day 23, one frame per node on the current path. A's "
+                          "neighbor B isn't visited -- recurse.",
+                 locals={"nodes": [{"id": 0, "val": "D", "neighbors": [1]}, {"id": 1, "val": "A", "neighbors": [2]},
+                                    {"id": 2, "val": "B", "neighbors": [3]}, {"id": 3, "val": "C", "neighbors": [1]}],
+                         "pointers": [["on_stack: D", 0], ["on_stack: A", 1]]}),
+            dict(caption="has_cycle(graph, 'B', ...): on_stack={D,A,B}. B's neighbor C isn't visited -- "
+                          "recurse.",
+                 locals={"nodes": [{"id": 0, "val": "D", "neighbors": [1]}, {"id": 1, "val": "A", "neighbors": [2]},
+                                    {"id": 2, "val": "B", "neighbors": [3]}, {"id": 3, "val": "C", "neighbors": [1]}],
+                         "pointers": [["on_stack: D", 0], ["on_stack: A", 1], ["on_stack: B", 2]]}),
+            dict(caption="has_cycle(graph, 'C', ...): on_stack={D,A,B,C}. C's only neighbor is A.",
+                 locals={"nodes": [{"id": 0, "val": "D", "neighbors": [1]}, {"id": 1, "val": "A", "neighbors": [2]},
+                                    {"id": 2, "val": "B", "neighbors": [3]}, {"id": 3, "val": "C", "neighbors": [1]}],
+                         "pointers": [["on_stack: D", 0], ["on_stack: A", 1], ["on_stack: B", 2], ["on_stack: C", 3]]}),
+            dict(caption="Is A in on_stack? YES -- A is still tagged 'on_stack: A', meaning it's an ancestor "
+                          "on THIS exact path (D -> A -> B -> C -> A). That's a back edge -- a real cycle. "
+                          "Return True immediately; no need to keep exploring.",
+                 locals={"nodes": [{"id": 0, "val": "D", "neighbors": [1]}, {"id": 1, "val": "A", "neighbors": [2]},
+                                    {"id": 2, "val": "B", "neighbors": [3]}, {"id": 3, "val": "C", "neighbors": [1]}],
+                         "pointers": [["on_stack: D", 0], ["on_stack: A", 1], ["on_stack: B", 2], ["on_stack: C", 3]]}),
+            dict(caption="Contrast: if C's only neighbor were some OTHER already-visited node reached via a "
+                          "different branch (not currently on_stack), that would be a completely normal "
+                          "shared descendant -- not a cycle. The check is specifically `nxt in on_stack`, "
+                          "never just `nxt in visited`.",
+                 locals={"nodes": [{"id": 0, "val": "D", "neighbors": [1]}, {"id": 1, "val": "A", "neighbors": [2]},
+                                    {"id": 2, "val": "B", "neighbors": [3]}, {"id": 3, "val": "C", "neighbors": [1]}],
+                         "pointers": [["on_stack: D", 0], ["on_stack: A", 1], ["on_stack: B", 2], ["on_stack: C", 3]]}),
+        ],
+        common_mistakes_markdown=(
+            "Using `nxt in visited` instead of `nxt in on_stack` for the back-edge check -- flags a false "
+            "cycle on any acyclic graph where a node is simply reachable via two different paths (a diamond "
+            "shape), since the second path finds the node already in `visited` even though it's long since "
+            "off the current stack. Forgetting `on_stack.discard(node)` when backtracking -- without it, "
+            "EVERY previously-explored node still looks like it's on the current path, and the check quietly "
+            "degrades into the same visited-only bug. And only starting DFS from ONE node -- a cycle in a "
+            "disconnected part of the graph that start never reaches is missed entirely, unless every "
+            "unvisited node is also tried as its own starting point."
+        ),
+        complexity_markdown=(
+            "`O(V + E)` -- same as any DFS traversal: every node is visited once and every edge examined "
+            "once (to check whether it points to something in `on_stack`), whether or not a cycle is "
+            "ultimately found."
+        ),
+    ),
+    dict(
+        slug="graph-shortest-paths",
+        kind="pattern",
+        topic="graphs",
+        pattern_family="Graph shortest paths",
+        title="Dijkstra's algorithm: shortest paths with weighted edges",
+        display_order=4,
+        estimated_minutes=18,
+        summary="When edges have different costs, BFS's 'first reached = shortest' guarantee breaks -- "
+                "Dijkstra fixes it by always finalizing the CHEAPEST unfinalized node next, using a min-heap "
+                "exactly like this batch's heaps lesson.",
+        prerequisite_slugs="graph-bfs,heaps",
+        what_markdown=(
+            "Dijkstra keeps a `dist` dict (the best known distance to each node so far) and a min-heap of "
+            "`(distance, node)` candidates. Repeatedly pop the cheapest candidate: if that node is already "
+            "finalized, it's a stale leftover entry -- skip it. Otherwise, finalize it (the popped distance "
+            "IS its true shortest distance now) and RELAX its neighbors -- for each one, if reaching it "
+            "through this node is cheaper than its previously known distance, update `dist` and push the "
+            "better candidate."
+        ),
+        why_markdown=(
+            "This combines Day 36's BFS with the heaps lessons: BFS explores in \"ring\" order because every "
+            "edge secretly costs 1, so FIFO order and distance order happen to be identical. Dijkstra "
+            "generalizes that same guarantee to ANY nonnegative edge weights by swapping the FIFO queue for "
+            "a min-heap ordered by actual accumulated distance, so the next node popped is always genuinely "
+            "the cheapest reachable one, not just the next one that happened to be enqueued."
+        ),
+        recognize_markdown=(
+            "\"shortest/cheapest path\" with weighted edges (costs, times, distances that DIFFER between "
+            "edges), \"minimum cost to reach every node from a source\", \"network delay time\". If every "
+            "edge costs the same, plain BFS is simpler and just as correct -- Dijkstra's extra dist-dict-plus-"
+            "heap bookkeeping earns its keep specifically when weights vary."
+        ),
+        intuition_markdown=(
+            "The popped distance is trustworthy the MOMENT it's popped: a min-heap always returns the "
+            "smallest remaining candidate, and since every edge weight is nonnegative, every OTHER path to "
+            "that node -- whether still sitting in the heap or not yet discovered -- can only be equal or "
+            "LARGER. Nothing still unexplored can ever beat it. That's exactly why Dijkstra requires "
+            "nonnegative weights: a negative edge could let a longer-looking path secretly end up cheaper "
+            "later, breaking this guarantee (Bellman-Ford handles that case instead)."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace Dijkstra from S over a small weighted graph. Watch node A get relaxed TWICE -- once "
+            "directly from S (distance 4), then again via B with a cheaper total (distance 3) -- before it's "
+            "ever finalized."
+        ),
+        walkthrough_code=(
+            "import heapq\n\n"
+            "def dijkstra(graph, start):\n"
+            "    dist = {start: 0}\n"
+            "    heap = [(0, start)]\n"
+            "    finalized = set()\n"
+            "    while heap:\n"
+            "        d, node = heapq.heappop(heap)\n"
+            "        if node in finalized:\n"
+            "            continue\n"
+            "        finalized.add(node)\n"
+            "        for nxt, w in graph[node]:\n"
+            "            nd = d + w\n"
+            "            if nxt not in dist or nd < dist[nxt]:\n"
+            "                dist[nxt] = nd\n"
+            "                heapq.heappush(heap, (nd, nxt))\n"
+            "    return dist"
+        ),
+        walkthrough_frames=[
+            dict(caption="graph: S->A(4), S->B(1), B->A(2), B->C(5), A->C(1). Pop (0,S) -- heap's smallest, "
+                          "so S's distance (0) is now FINAL. Relax both neighbors: A candidate = 0+4=4 (new) "
+                          "-- push (4,A). B candidate = 0+1=1 (new) -- push (1,B). heap=[(1,B),(4,A)].",
+                 locals={"nodes": [{"id": 0, "val": "S d=0*", "neighbors": [1, 2]},
+                                    {"id": 1, "val": "A d=4", "neighbors": [3]},
+                                    {"id": 2, "val": "B d=1", "neighbors": [1, 3]},
+                                    {"id": 3, "val": "C d=?", "neighbors": []}],
+                         "pointers": [["popped (0)", 0]]}),
+            dict(caption="Pop (1,B) -- next smallest. B's distance (1) is now final. Relax A: 1+2=3, cheaper "
+                          "than A's current 4 -- UPDATE dist[A]=3, push (3,A) (the stale (4,A) entry stays in "
+                          "the heap, ignored later). Relax C: 1+5=6 (new) -- push (6,C). "
+                          "heap=[(3,A),(4,A) stale,(6,C)].",
+                 locals={"nodes": [{"id": 0, "val": "S d=0*", "neighbors": [1, 2]},
+                                    {"id": 1, "val": "A d=3", "neighbors": [3]},
+                                    {"id": 2, "val": "B d=1*", "neighbors": [1, 3]},
+                                    {"id": 3, "val": "C d=6", "neighbors": []}],
+                         "pointers": [["popped (1)", 2]]}),
+            dict(caption="Pop (3,A) -- the UPDATED, cheaper entry (not the stale 4). A's true shortest "
+                          "distance is 3, confirmed now that it's the smallest remaining candidate. Relax C: "
+                          "3+1=4, cheaper than C's current 6 -- update dist[C]=4, push (4,C). "
+                          "heap=[(4,A) stale,(4,C),(6,C) stale].",
+                 locals={"nodes": [{"id": 0, "val": "S d=0*", "neighbors": [1, 2]},
+                                    {"id": 1, "val": "A d=3*", "neighbors": [3]},
+                                    {"id": 2, "val": "B d=1*", "neighbors": [1, 3]},
+                                    {"id": 3, "val": "C d=4", "neighbors": []}],
+                         "pointers": [["popped (3)", 1]]}),
+            dict(caption="Pop (4,A) -- but A is ALREADY in finalized. This is the earlier, worse candidate "
+                          "left over from before A got its better distance -- skip it without doing any "
+                          "work. This is exactly why finalized is checked on POP, not on push.",
+                 locals={"nodes": [{"id": 0, "val": "S d=0*", "neighbors": [1, 2]},
+                                    {"id": 1, "val": "A d=3*", "neighbors": [3]},
+                                    {"id": 2, "val": "B d=1*", "neighbors": [1, 3]},
+                                    {"id": 3, "val": "C d=4", "neighbors": []}],
+                         "pointers": [["popped (4) STALE", 1]]}),
+            dict(caption="Pop (4,C) -- C's true shortest distance is 4, confirmed. C has no outgoing edges, "
+                          "so nothing to relax. heap=[(6,C) stale] remains but every node is now finalized.",
+                 locals={"nodes": [{"id": 0, "val": "S d=0*", "neighbors": [1, 2]},
+                                    {"id": 1, "val": "A d=3*", "neighbors": [3]},
+                                    {"id": 2, "val": "B d=1*", "neighbors": [1, 3]},
+                                    {"id": 3, "val": "C d=4*", "neighbors": []}],
+                         "pointers": [["popped (4)", 3]]}),
+            dict(caption="Final shortest distances from S: S=0, B=1, A=3, C=4. Notice A was relaxed TWICE "
+                          "(4, then 3) before it was ever finalized -- flexibility BFS's plain FIFO queue "
+                          "doesn't have, since BFS never revisits a distance once assigned. Dijkstra can, as "
+                          "long as it always finalizes via the CHEAPEST remaining candidate.",
+                 locals={"nodes": [{"id": 0, "val": "S d=0*", "neighbors": [1, 2]},
+                                    {"id": 1, "val": "A d=3*", "neighbors": [3]},
+                                    {"id": 2, "val": "B d=1*", "neighbors": [1, 3]},
+                                    {"id": 3, "val": "C d=4*", "neighbors": []}],
+                         "pointers": []}),
+        ],
+        common_mistakes_markdown=(
+            "Only relaxing a neighbor the FIRST time it's seen (`if nxt not in dist`) instead of allowing a "
+            "cheaper update later (`if nxt not in dist or nd < dist[nxt]`) -- silently locks in a worse "
+            "distance forever the moment a node is first reached, even when a genuinely cheaper path through "
+            "a later-popped node exists. This is the single most common real Dijkstra bug. Running Dijkstra "
+            "with a NEGATIVE edge weight -- breaks the whole \"popped distance is final\" guarantee, since a "
+            "longer-looking path could still end up cheaper (needs Bellman-Ford instead). And skipping the "
+            "`if node in finalized: continue` stale-entry check -- not incorrect by itself (relaxing an "
+            "already-final node just does no updates), but wastes redundant work reprocessing leftover "
+            "entries."
+        ),
+        complexity_markdown=(
+            "`O((V + E) log V)` with a binary heap -- each of up to `E` relax operations can push onto the "
+            "heap (`O(log V)` each, since the heap holds at most `O(E)` entries), and each of the `V` nodes "
+            "is popped and finalized exactly once."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -3095,6 +3568,200 @@ CONCEPT_CHECKPOINTS = {
                                    "costs O(log k), since the heap is never allowed to hold more than k + 1 "
                                    "elements -- and its size never exceeds k regardless of how large n is."),
     ],
+    "graphs": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Representing a large, sparse graph (few edges relative to the number of "
+                              "possible node pairs) -- e.g. a road network with a few thousand cities, each "
+                              "connected to only a handful of neighbors. Which representation uses less "
+                              "memory?",
+             code=None,
+             choices_json=[
+                 "Adjacency list",
+                 "Adjacency matrix",
+                 "They always use the same amount of memory",
+                 "Neither -- you'd need a spanning tree",
+             ],
+             correct_answer="Adjacency list",
+             explanation_markdown="An adjacency list only stores edges that actually exist -- O(V+E) total. "
+                                   "An adjacency matrix allocates a full V x V grid regardless of how sparse "
+                                   "the graph is -- O(V^2), wasteful when E is much smaller than V^2."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to build an undirected graph, but looking up a node's neighbors "
+                              "after building it gives the wrong answer. What's the bug?",
+             code="def build_graph(edges):\n"
+                  "    graph = {}\n"
+                  "    for a, b in edges:\n"
+                  "        graph.setdefault(a, []).append(b)\n"
+                  "    return graph\n\n"
+                  "graph = build_graph([('A', 'B')])\n"
+                  "graph.get('B')  # returns None, not ['A']",
+             choices_json=None,
+             correct_answer="Only graph[a].append(b) runs -- the reverse graph[b].append(a) is missing. For "
+                             "an UNDIRECTED edge, both directions need to be recorded; as written this "
+                             "silently builds a DIRECTED graph (A -> B only), so looking up B's neighbors "
+                             "misses A entirely.",
+             explanation_markdown="Fix: add graph.setdefault(b, []).append(a) right alongside the first "
+                                   "line, exactly like the lesson's own build_graph. This is easy to miss "
+                                   "because the code still runs without error -- it just silently produces "
+                                   "the wrong graph shape."),
+        dict(kind="complexity",
+             prompt_markdown="Building an adjacency list from an edge list with V nodes and E edges takes "
+                              "how much time and space?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(V + E)",
+             explanation_markdown="Every edge is processed once (O(E) total appends), and every node gets "
+                                   "at least an empty list entry (O(V)) -- both time and memory scale with "
+                                   "V+E, not V^2 the way a matrix would."),
+    ],
+    "graph-bfs": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need the minimum number of moves from a start cell to a target cell in a "
+                              "grid, where every move costs the same. BFS or DFS?",
+             code=None,
+             choices_json=["BFS", "DFS", "Either works identically", "Neither -- you need Dijkstra"],
+             correct_answer="BFS",
+             explanation_markdown="BFS dequeues nodes in nondecreasing distance from the source, so the "
+                                   "FIRST time it reaches the target is guaranteed to be via the shortest "
+                                   "path. DFS reaches every node too, but with no such guarantee -- it can "
+                                   "stumble onto a long path before a short one."),
+        dict(kind="spot_bug",
+             prompt_markdown="This BFS still returns the correct final count, but does noticeably more work "
+                              "than necessary. What's the inefficiency?",
+             code="def bfs_count_wasteful(grid, sr, sc):\n"
+                  "    rows, cols = len(grid), len(grid[0])\n"
+                  "    visited = set()\n"
+                  "    queue = deque([(sr, sc)])\n"
+                  "    count = 0\n"
+                  "    while queue:\n"
+                  "        r, c = queue.popleft()\n"
+                  "        if (r, c) in visited:\n"
+                  "            continue\n"
+                  "        visited.add((r, c))\n"
+                  "        count += 1\n"
+                  "        for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):\n"
+                  "            nr, nc = r + dr, c + dc\n"
+                  "            if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 1:\n"
+                  "                queue.append((nr, nc))",
+             choices_json=None,
+             correct_answer="visited.add((r, c)) only happens when a cell is POPPED, not when it's "
+                             "enqueued -- so the same cell can be pushed onto the queue multiple times (once "
+                             "from each unvisited neighbor that reaches it) before it's ever processed once. "
+                             "The `if (r,c) in visited: continue` guard keeps the final count correct, but "
+                             "the queue does far more work than necessary.",
+             explanation_markdown="Fix: mark a cell visited the moment you enqueue it (right before "
+                                   "queue.append(...)), not when you dequeue it -- guarantees each cell is "
+                                   "only ever added to the queue once, matching the lesson's own "
+                                   "bfs_count_island."),
+        dict(kind="complexity",
+             prompt_markdown="BFS over a grid with R rows and C columns visits at most how many cells, and "
+                              "what's the total time?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(R*C) cells, O(R*C) time",
+             explanation_markdown="Every cell is enqueued (and dequeued) at most once, and checking a "
+                                   "cell's 4 neighbors is O(1) work -- so total time is proportional to the "
+                                   "number of cells, R*C."),
+    ],
+    "graph-dfs": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Detecting whether a directed graph has a cycle needs a set of nodes CURRENTLY "
+                              "on the DFS path, separate from the set of ALL nodes ever visited. What's this "
+                              "extra set usually called?",
+             code=None,
+             choices_json=["on_stack (or \"in progress\")", "visited", "frontier", "queue"],
+             correct_answer="on_stack (or \"in progress\")",
+             explanation_markdown="'visited' alone only tells you a node has been fully explored at some "
+                                   "point -- it can't distinguish a harmless shared descendant (reached via "
+                                   "two different paths) from a real back edge to an ancestor on the CURRENT "
+                                   "path. on_stack tracks exactly the second thing."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to detect a cycle, but it reports True on the graph "
+                              "D->A, D->B, A->C, B->C -- which has NO cycle (C just has two ancestors). "
+                              "What's the bug?",
+             code="def has_cycle_wrong(graph, node, visited, path):\n"
+                  "    visited.add(node)\n"
+                  "    path.append(node)\n"
+                  "    for nxt in graph[node]:\n"
+                  "        if nxt in visited:\n"
+                  "            return True\n"
+                  "        if has_cycle_wrong(graph, nxt, visited, path):\n"
+                  "            return True\n"
+                  "    path.pop()\n"
+                  "    return False",
+             choices_json=None,
+             correct_answer="The back-edge check is `if nxt in visited: return True` -- checking whether a "
+                             "neighbor has EVER been visited, not whether it's on the CURRENT path "
+                             "(on_stack). On the acyclic diamond D->A->C, D->B->C, C gets visited once via "
+                             "A, then DFS backtracks to D and explores B -> C again; C is already in "
+                             "visited (from the first path), so this wrongly reports a cycle that doesn't "
+                             "exist.",
+             explanation_markdown="Fix: track a separate on_stack set, added when entering a node and "
+                                   "removed (discard) when backtracking out of it, and check `nxt in "
+                                   "on_stack` instead of `nxt in visited` -- exactly this lesson's "
+                                   "has_cycle."),
+        dict(kind="complexity",
+             prompt_markdown="DFS cycle detection over a directed graph with V nodes and E edges costs how "
+                              "much time?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(V + E)",
+             explanation_markdown="Same as any DFS traversal -- every node is visited once and every edge "
+                                   "examined once (to check whether it points to something in on_stack), "
+                                   "regardless of whether a cycle is ultimately found."),
+    ],
+    "graph-shortest-paths": [
+        dict(kind="choose_pattern",
+             prompt_markdown="All edges in your graph cost exactly 1. Do you need Dijkstra, or is something "
+                              "simpler correct?",
+             code=None,
+             choices_json=[
+                 "Plain BFS is enough and simpler",
+                 "Dijkstra is required even here",
+                 "Neither works -- you'd need Bellman-Ford",
+                 "You need DFS instead",
+             ],
+             correct_answer="Plain BFS is enough and simpler",
+             explanation_markdown="When every edge costs the same, FIFO order and distance order are "
+                                   "identical -- Dijkstra's extra dist dict and heap earn their keep "
+                                   "specifically when weights DIFFER. With uniform weights, plain BFS gives "
+                                   "the same correct shortest distances with less bookkeeping."),
+        dict(kind="spot_bug",
+             prompt_markdown="This Dijkstra returns {'S':0,'A':4,'B':1,'C':6} on graph S->A(4), S->B(1), "
+                              "B->A(2), B->C(5), A->C(1) -- but the correct answer is "
+                              "{'S':0,'A':3,'B':1,'C':4}. What's the bug?",
+             code="def dijkstra_wrong(graph, start):\n"
+                  "    dist = {start: 0}\n"
+                  "    heap = [(0, start)]\n"
+                  "    while heap:\n"
+                  "        d, node = heapq.heappop(heap)\n"
+                  "        for nxt, w in graph.get(node, []):\n"
+                  "            if nxt not in dist:\n"
+                  "                dist[nxt] = d + w\n"
+                  "                heapq.heappush(heap, (d + w, nxt))\n"
+                  "    return dist",
+             choices_json=None,
+             correct_answer="The relax check is `if nxt not in dist`, which only ever sets a neighbor's "
+                             "distance the FIRST time it's reached -- it never updates dist[nxt] again even "
+                             "when a cheaper path through a later-popped node is found. Here A gets locked "
+                             "in at distance 4 (via S directly) and never gets updated to the true shortest "
+                             "distance 3 (via S -> B -> A), and C similarly gets stuck at 6 instead of the "
+                             "true 4.",
+             explanation_markdown="Fix: relax whenever a CHEAPER candidate is found, not just when the "
+                                   "neighbor is unseen -- `if nxt not in dist or nd < dist[nxt]:` -- exactly "
+                                   "this lesson's dijkstra. This is the single most common real bug in "
+                                   "hand-written Dijkstra."),
+        dict(kind="complexity",
+             prompt_markdown="Dijkstra with a binary min-heap on a graph with V nodes and E edges costs how "
+                              "much time?",
+             code=None,
+             choices_json=None,
+             correct_answer="O((V + E) log V)",
+             explanation_markdown="Each of the up to E relax operations can push onto the heap (O(log V) "
+                                   "each, since the heap holds at most O(E) entries), and each of the V "
+                                   "nodes is popped and finalized exactly once -- both bounded by "
+                                   "O((V+E) log V) total."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -3702,5 +4369,150 @@ CONCEPT_PRACTICE_EXERCISES = {
                             "FARTHEST from zero (largest abs(n)) becomes the SMALLEST tuple, which is what "
                             "heapq's min-heap evicts first. That's exactly the eviction you want: discard "
                             "the current worst (farthest) candidate whenever the heap grows past k."),
+    ],
+    "graphs": [
+        dict(prompt_markdown="Write `common_neighbors(graph, a, b)` that returns a sorted list of nodes "
+                              "adjacent to BOTH a and b -- e.g. with graph={'A':['B','C'], 'B':['A','C'], "
+                              "'C':['B','A','D'], 'D':['C']}, `common_neighbors(graph, 'A', 'B')` returns "
+                              "`['C']`.",
+             starter_code="def common_neighbors(graph, a, b):\n"
+                          "    # graph[a] and graph[b] are each a list of neighbor names --\n"
+                          "    # turn both into sets and intersect them\n"
+                          "    pass",
+             solution_code=(
+                 "def common_neighbors(graph, a, b):\n"
+                 "    return sorted(set(graph[a]) & set(graph[b]))"
+             ),
+             hint_markdown="set(graph[a]) & set(graph[b]) gives you exactly the nodes present in BOTH "
+                            "neighbor lists -- Python's set intersection operator does the comparison for "
+                            "you in one line. sorted() just gives a predictable, testable order back."),
+    ],
+    "graph-bfs": [
+        dict(prompt_markdown="Write `shortest_steps(grid, sr, sc, tr, tc)` that returns the minimum number "
+                              "of moves from (sr,sc) to (tr,tc), moving only through 1-cells (up/down/left/"
+                              "right), or -1 if the target is unreachable -- e.g. on "
+                              "`grid=[[1,1,0],[0,1,0],[0,1,1]]`, `shortest_steps(grid, 0, 0, 2, 2)` returns "
+                              "`4`.",
+             starter_code="from collections import deque\n\n"
+                          "def shortest_steps(grid, sr, sc, tr, tc):\n"
+                          "    rows, cols = len(grid), len(grid[0])\n"
+                          "    visited = {(sr, sc)}\n"
+                          "    queue = deque([(sr, sc, 0)])\n"
+                          "    while queue:\n"
+                          "        r, c, d = queue.popleft()\n"
+                          "        # check if (r, c) is the target; if not, enqueue unvisited\n"
+                          "        # 1-neighbors with distance d + 1\n"
+                          "        pass\n"
+                          "    return -1",
+             solution_code=(
+                 "from collections import deque\n\n"
+                 "def shortest_steps(grid, sr, sc, tr, tc):\n"
+                 "    rows, cols = len(grid), len(grid[0])\n"
+                 "    visited = {(sr, sc)}\n"
+                 "    queue = deque([(sr, sc, 0)])\n"
+                 "    while queue:\n"
+                 "        r, c, d = queue.popleft()\n"
+                 "        if (r, c) == (tr, tc):\n"
+                 "            return d\n"
+                 "        for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):\n"
+                 "            nr, nc = r + dr, c + dc\n"
+                 "            if (0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 1\n"
+                 "                    and (nr, nc) not in visited):\n"
+                 "                visited.add((nr, nc))\n"
+                 "                queue.append((nr, nc, d + 1))\n"
+                 "    return -1"
+             ),
+             hint_markdown="Check for the target the moment you POP a cell, not before enqueueing it -- "
+                            "that's what guarantees the first time you reach it, d is its true shortest "
+                            "distance. Mark a neighbor visited the moment you enqueue it (this lesson's own "
+                            "duplicate-enqueue bug otherwise)."),
+    ],
+    "graph-dfs": [
+        dict(prompt_markdown="Write `has_cycle_directed(graph)` that returns True if ANY part of the "
+                              "(possibly disconnected) directed graph contains a cycle -- unlike the "
+                              "lesson's has_cycle, which only checks reachability from one given start, "
+                              "this needs to try DFS from every node that hasn't been visited yet.",
+             starter_code="def has_cycle_directed(graph):\n"
+                          "    visited = set()\n\n"
+                          "    def dfs(node, on_stack):\n"
+                          "        visited.add(node)\n"
+                          "        on_stack.add(node)\n"
+                          "        for nxt in graph[node]:\n"
+                          "            # check nxt against on_stack (cycle) and visited (skip if\n"
+                          "            # already fully explored)\n"
+                          "            pass\n"
+                          "        on_stack.discard(node)\n"
+                          "        return False\n\n"
+                          "    for node in graph:\n"
+                          "        # try dfs from every node not yet visited\n"
+                          "        pass\n"
+                          "    return False",
+             solution_code=(
+                 "def has_cycle_directed(graph):\n"
+                 "    visited = set()\n\n"
+                 "    def dfs(node, on_stack):\n"
+                 "        visited.add(node)\n"
+                 "        on_stack.add(node)\n"
+                 "        for nxt in graph[node]:\n"
+                 "            if nxt in on_stack:\n"
+                 "                return True\n"
+                 "            if nxt not in visited and dfs(nxt, on_stack):\n"
+                 "                return True\n"
+                 "        on_stack.discard(node)\n"
+                 "        return False\n\n"
+                 "    for node in graph:\n"
+                 "        if node not in visited:\n"
+                 "            if dfs(node, set()):\n"
+                 "                return True\n"
+                 "    return False"
+             ),
+             hint_markdown="The inner dfs is identical to the lesson's has_cycle. The new part is the outer "
+                            "loop: a graph can have multiple disconnected pieces, so a single DFS from one "
+                            "start might never reach a cycle hiding in another piece -- loop over every node "
+                            "in graph, and only start a fresh DFS (with a fresh on_stack) from ones not "
+                            "already in visited."),
+    ],
+    "graph-shortest-paths": [
+        dict(prompt_markdown="Write `cheapest_flight(graph, start, end)` that returns the shortest total "
+                              "weight from start to end using Dijkstra, or -1 if end is unreachable -- e.g. "
+                              "with `graph={'S': [('A', 4), ('B', 1)], 'B': [('A', 2), ('C', 5)], "
+                              "'A': [('C', 1)], 'C': []}`, `cheapest_flight(graph, 'S', 'C')` returns `4`.",
+             starter_code="import heapq\n\n"
+                          "def cheapest_flight(graph, start, end):\n"
+                          "    dist = {start: 0}\n"
+                          "    heap = [(0, start)]\n"
+                          "    finalized = set()\n"
+                          "    while heap:\n"
+                          "        d, node = heapq.heappop(heap)\n"
+                          "        # skip if already finalized; otherwise finalize it, and return d\n"
+                          "        # if node == end -- then relax every (neighbor, weight) pair in\n"
+                          "        # graph.get(node, [])\n"
+                          "        pass\n"
+                          "    return -1",
+             solution_code=(
+                 "import heapq\n\n"
+                 "def cheapest_flight(graph, start, end):\n"
+                 "    dist = {start: 0}\n"
+                 "    heap = [(0, start)]\n"
+                 "    finalized = set()\n"
+                 "    while heap:\n"
+                 "        d, node = heapq.heappop(heap)\n"
+                 "        if node in finalized:\n"
+                 "            continue\n"
+                 "        finalized.add(node)\n"
+                 "        if node == end:\n"
+                 "            return d\n"
+                 "        for nxt, w in graph.get(node, []):\n"
+                 "            nd = d + w\n"
+                 "            if nxt not in dist or nd < dist[nxt]:\n"
+                 "                dist[nxt] = nd\n"
+                 "                heapq.heappush(heap, (nd, nxt))\n"
+                 "    return -1"
+             ),
+             hint_markdown="Check node == end right after finalizing it, not before -- popping the heap "
+                            "already guarantees d is the CHEAPEST possible way to reach node, since every "
+                            "other candidate still in the heap (or not yet discovered) can only be equal or "
+                            "worse. Skip an already-finalized node the same way the lesson's dijkstra does, "
+                            "via a stale-entry check on pop."),
     ],
 }

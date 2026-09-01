@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrayPointerView, LinkedListView, TreeView, HeapView } from "../Visualizers/Visualizers";
+import { ArrayPointerView, LinkedListView, TreeView, HeapView, GridGraphView, GraphNodeView } from "../Visualizers/Visualizers";
 
 // A teaching walkthrough steps through a hand-authored, VERIFIED-BY-HAND
 // sequence of {caption, locals} frames (see backend/db/seed_concepts.py) --
@@ -69,6 +69,28 @@ function buildTreeGraph(locals) {
   return { nodes, roots };
 }
 
+// GraphNodeView (unlike TreeView/LinkedListView) has no notion of an
+// "anchor" node the whole layout is built from -- it lays out every node
+// in `nodes` at a fixed angle around a circle regardless of `roots`, and
+// draws edges from each node's `neighborIds` (deduped, so an edge only
+// needs to be listed from one end). roots here is purely additive -- one
+// colored pointer TAG per [name, id] pair landing on whichever node has
+// that id, same as the other two adapters' pointers list, just without
+// their ordered-root-goes-first requirement (there's no "first" to matter).
+// So general-graph lessons author frames.locals as
+// { nodes: [{id, val, neighbors: [id, ...]}], pointers: [[name, id], ...] }
+// -- the same shape buildTreeGraph/buildLinkedListGraph already use, just
+// with `neighbors` (plural, arbitrary count, no left/right distinction)
+// instead of a fixed set of named fieldRefs.
+function buildGraphNodeGraph(locals) {
+  const nodes = new Map();
+  (locals.nodes || []).forEach((n) => {
+    nodes.set(n.id, { id: n.id, fields: { val: n.val }, neighborIds: n.neighbors || [] });
+  });
+  const roots = (locals.pointers || []).map(([name, id]) => ({ name, id: id ?? null }));
+  return { nodes, roots };
+}
+
 export default function ConceptWalkthrough({ frames, topic, pattern }) {
   const [index, setIndex] = useState(0);
   if (!frames || frames.length === 0) return null;
@@ -82,6 +104,16 @@ export default function ConceptWalkthrough({ frames, topic, pattern }) {
   // any array lesson authors {arr: [...]}, and this only needs to pick the
   // right renderer for topic === 'heaps'.
   const isHeap = topic === "heaps";
+  // Graph lessons split into two shapes, matching detectPrimaryView's own
+  // priority order in the real trace system (detect.js): a plain grid
+  // local (GridGraphView, which -- like HeapView -- takes locals directly,
+  // no adapter) for grid-BFS/DFS walkthroughs, and a node-and-edge shape
+  // (GraphNodeView via buildGraphNodeGraph above) for general adjacency-
+  // list walkthroughs. Checked as topic-plus-shape, same as isLinkedList/
+  // isTree, so a topic==='graphs' frame with neither shape just falls
+  // through to ArrayPointerView like any other frame would.
+  const isGraphGrid = topic === "graphs" && frame.locals && Array.isArray(frame.locals.grid);
+  const isGraphNode = topic === "graphs" && frame.locals && Array.isArray(frame.locals.nodes);
 
   return (
     <div className="concept-walkthrough">
@@ -119,6 +151,10 @@ export default function ConceptWalkthrough({ frames, topic, pattern }) {
         <TreeView graph={buildTreeGraph(frame.locals)} />
       ) : isHeap ? (
         <HeapView locals={frame.locals} />
+      ) : isGraphGrid ? (
+        <GridGraphView locals={frame.locals} />
+      ) : isGraphNode ? (
+        <GraphNodeView graph={buildGraphNodeGraph(frame.locals)} />
       ) : (
         <ArrayPointerView locals={frame.locals} topic={topic} pattern={pattern} />
       )}
