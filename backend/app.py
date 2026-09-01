@@ -286,7 +286,62 @@ def run_problem(slug):
     return jsonify(outcome)
 
 
+@app.route("/api/problems/<slug>/run-custom", methods=["POST"])
+def run_custom(slug):
+    """Custom test-case playground: run the learner's code against ONE
+    input THEY provide, rather than the problem's seeded test cases. This
+    is deliberately ungraded (there's no "expected" to compare against --
+    the learner is exploring, not being scored) so it reuses the exact
+    same sandboxed grading harness as /run with expected=None; the caller
+    ignores the resulting "passed" field and just shows the actual output
+    or error. Kept as a thin variant of run_problem rather than new
+    sandbox code, so it inherits the same timeout/crash handling for free.
+    """
+    payload = request.get_json(silent=True) or {}
+    code = payload.get("code", "")
+    args = payload.get("args")
+    if not code.strip():
+        return jsonify({"error": "code is required"}), 400
+    if not isinstance(args, list):
+        return jsonify({"error": "args must be a JSON array matching the function's parameters"}), 400
+
+    conn = get_connection()
+    problem = conn.execute("SELECT * FROM problems WHERE slug = ?", (slug,)).fetchone()
+    conn.close()
+    if problem is None:
+        return jsonify({"error": f"No problem '{slug}'"}), 404
+
+    outcome = run_against_tests(code, problem["function_signature"], [{"args": args, "expected": None}], "exact")
+    if outcome["crashed"] or not outcome["results"]:
+        return jsonify({"crashed": True, "error": None, "actual": None,
+                         "stdout": outcome["stdout"], "stderr": outcome["stderr"]})
+    r = outcome["results"][0]
+    return jsonify({"crashed": False, "actual": r["actual"], "error": r["error"],
+                     "stdout": outcome["stdout"], "stderr": outcome["stderr"]})
+
+
 # --------------------------------------------------------------- attempts --
+
+@app.route("/api/problems/<slug>/attempts", methods=["GET"])
+def get_attempts(slug):
+    """Attempt history / solution journey for one problem: every logged
+    submission in order, so the learner can revisit how they actually got
+    from first try to Accepted (or see they're stuck repeating the same
+    mistake). Reuses the attempts table that log_attempt already writes to
+    -- no new tracking, just a read view of data collected all along."""
+    conn = get_connection()
+    problem = conn.execute("SELECT id FROM problems WHERE slug = ?", (slug,)).fetchone()
+    if problem is None:
+        conn.close()
+        return jsonify({"error": f"No problem '{slug}'"}), 404
+    rows = conn.execute(
+        """SELECT id, submitted_code, passed, hints_used, max_hint_rung_seen,
+                  solution_revealed, is_independent, time_taken_seconds, created_at
+           FROM attempts WHERE problem_id = ? ORDER BY id""",
+        (problem["id"],),
+    ).fetchall()
+    conn.close()
+    return jsonify({"attempts": [dict(r) for r in rows]})
 
 @app.route("/api/attempts", methods=["POST"])
 def log_attempt():
@@ -527,6 +582,12 @@ def trace_problem(slug):
     payload = request.get_json(silent=True) or {}
     code = payload.get("code", "")
     test_case_index = payload.get("test_case_index", 0)
+    # Custom test-case playground: lets the trace be driven by args the
+    # learner typed themselves instead of one of the problem's seeded
+    # cases -- "Enter test input -> Run -> Trace -> Inspect" needs this to
+    # reach the Trace step for input that was never one of the stored
+    # examples. When present, this takes priority over test_case_index.
+    custom_args = payload.get("custom_args")
     if not isinstance(code, str) or not code.strip():
         return jsonify({"error": "Request body must include non-empty 'code'"}), 400
 
@@ -537,21 +598,29 @@ def trace_problem(slug):
     if problem is None:
         conn.close()
         return jsonify({"error": f"No problem '{slug}'"}), 404
-    test_case_rows = conn.execute(
-        "SELECT input_args_json FROM test_cases WHERE problem_id = ? AND is_hidden = 0 ORDER BY id",
-        (problem["id"],),
-    ).fetchall()
-    conn.close()
-
-    if not test_case_rows:
-        return jsonify({"error": "This problem has no visible test cases to trace against"}), 400
     try:
         fn_name = _extract_function_name(problem["function_signature"])
     except ValueError as e:
+        conn.close()
         return jsonify({"error": str(e)}), 500
 
-    idx = test_case_index if isinstance(test_case_index, int) and 0 <= test_case_index < len(test_case_rows) else 0
-    args = json.loads(test_case_rows[idx]["input_args_json"])
+    if isinstance(custom_args, list):
+        conn.close()
+        args = custom_args
+        idx = None
+        test_case_count = None
+    else:
+        test_case_rows = conn.execute(
+            "SELECT input_args_json FROM test_cases WHERE problem_id = ? AND is_hidden = 0 ORDER BY id",
+            (problem["id"],),
+        ).fetchall()
+        conn.close()
+        if not test_case_rows:
+            return jsonify({"error": "This problem has no visible test cases to trace against"}), 400
+        idx = test_case_index if isinstance(test_case_index, int) and 0 <= test_case_index < len(test_case_rows) else 0
+        args = json.loads(test_case_rows[idx]["input_args_json"])
+        test_case_count = len(test_case_rows)
+
     # repr(), not json.dumps(): JSON's true/false/null aren't valid Python
     # syntax -- the exact same class of bug the grading harness already
     # hit once and fixed the same way (see test_runner.py).
@@ -560,7 +629,8 @@ def trace_problem(slug):
     result = trace_code(augmented_code)
     result["traced_test_case_index"] = idx
     result["traced_test_case_args"] = args
-    result["traced_test_case_count"] = len(test_case_rows)
+    result["traced_test_case_count"] = test_case_count
+    result["traced_custom"] = isinstance(custom_args, list)
     return jsonify(result)
 
 

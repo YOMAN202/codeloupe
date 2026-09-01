@@ -14,9 +14,12 @@ import {
   fetchComplexityEstimate,
   logAttempt,
   traceProblem,
+  traceProblemCustom,
+  runProblemCustom,
+  fetchAttempts,
 } from "../../api/client";
 
-const TABS = ["Tests", "Hints", "Trace", "Complexity"];
+const TABS = ["Tests", "Hints", "Trace", "Complexity", "Playground", "History"];
 
 // Optional pattern-recognition practice: the standard pattern categories a
 // learner should be building intuition for. Deliberately not tied 1:1 to
@@ -88,6 +91,88 @@ function FailureAnalysis({ runResult, onInspect }) {
 // than being told "correct" or "wrong" (auto-grading a coarse category
 // guess against a free-text pattern description would be either falsely
 // strict or falsely lenient).
+// Custom test-case playground: suggests a handful of beginner-friendly edge
+// cases (empty / single element / duplicates / negative / reverse-sorted /
+// boundary) derived from the SHAPE of a real example the problem already
+// has, rather than a fixed generic list -- so a string problem gets string
+// presets and a numeric-list problem gets numeric-list presets. Only the
+// first parameter is varied; deliberately small (never more than ~4
+// buttons) per "do not automatically overwhelm me with tests."
+function buildEdgeCasePresets(sampleArgs) {
+  if (!Array.isArray(sampleArgs) || sampleArgs.length === 0) return [];
+  const [first, ...rest] = sampleArgs;
+  if (Array.isArray(first)) {
+    const presets = [{ label: "Empty list", args: [[], ...rest] }];
+    if (first.length > 0) presets.push({ label: "Single element", args: [[first[0]], ...rest] });
+    if (first.every((x) => typeof x === "number")) {
+      const v = typeof first[0] === "number" ? first[0] : 1;
+      presets.push({ label: "Duplicates", args: [[v, v, v], ...rest] });
+      presets.push({ label: "Negative values", args: [first.map((x) => -Math.abs(x) - 1), ...rest] });
+    }
+    return presets;
+  }
+  if (typeof first === "string") {
+    return [
+      { label: "Empty string", args: ["", ...rest] },
+      { label: "Single character", args: [first[0] || "a", ...rest] },
+    ];
+  }
+  if (typeof first === "number") {
+    return [
+      { label: "Zero", args: [0, ...rest] },
+      { label: "Negative", args: [-Math.abs(first) - 1, ...rest] },
+      { label: "Large boundary", args: [(first || 100) * 1000, ...rest] },
+    ];
+  }
+  return [];
+}
+
+// Explain-your-thinking: optional interview-prep step, entirely client-side
+// (no backend persistence -- it's ungraded scratch reflection, not
+// something that needs a schema migration to be useful). Write a plan
+// before running, then compare it against the problem's real pattern (and,
+// if already computed, the actual estimated complexity) after.
+function ExplainThinking({ problem, plan, setPlan, open, setOpen, hasRun, complexity }) {
+  return (
+    <div className="explain-thinking">
+      <button className="explain-thinking-toggle" onClick={() => setOpen((o) => !o)}>
+        {open ? "▾" : "▸"} &#127908; Explain your thinking (optional)
+      </button>
+      {open && (
+        <>
+          <p className="viz-caption">
+            Before you run: briefly describe the approach you're planning, like you would out loud in
+            an interview. After you run, compare it with the problem's actual pattern.
+          </p>
+          <textarea
+            className="predict-input"
+            rows={2}
+            placeholder="e.g. I'll use a hash map to track values I've already seen..."
+            value={plan}
+            onChange={(e) => setPlan(e.target.value)}
+          />
+          {hasRun && (
+            <div className="pattern-reveal">
+              <p>
+                <strong>What you planned:</strong> {plan.trim() || "(nothing written)"}
+              </p>
+              <p>
+                <strong>This problem's pattern:</strong> {problem.pattern}
+              </p>
+              {complexity?.structural?.structural_time_estimate && (
+                <p className="muted small">
+                  Your code's estimated complexity: {complexity.structural.structural_time_estimate}
+                  {problem.expected_time_complexity && <> (target: {problem.expected_time_complexity})</>}
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function PatternPractice({ problem, open, setOpen, guess, setGuess, revealed, setRevealed }) {
   return (
     <div className="pattern-practice">
@@ -161,6 +246,20 @@ export default function ProblemWorkspace() {
   const [patternGuess, setPatternGuess] = useState(null);
   const [patternRevealed, setPatternRevealed] = useState(false);
 
+  const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [approachPlan, setApproachPlan] = useState("");
+
+  const [customArgsText, setCustomArgsText] = useState("[]");
+  const [customResult, setCustomResult] = useState(null);
+  const [customRunning, setCustomRunning] = useState(false);
+  const [customArgsError, setCustomArgsError] = useState(null);
+
+  const [attempts, setAttempts] = useState([]);
+  const [loadingAttempts, setLoadingAttempts] = useState(false);
+  const [expandedAttemptId, setExpandedAttemptId] = useState(null);
+  const [complexityCompare, setComplexityCompare] = useState(null);
+  const [comparingAttemptId, setComparingAttemptId] = useState(null);
+
   const [startedAt, setStartedAt] = useState(Date.now());
   const [attemptFeedback, setAttemptFeedback] = useState(null);
 
@@ -178,6 +277,14 @@ export default function ProblemWorkspace() {
     setPatternOpen(false);
     setPatternGuess(null);
     setPatternRevealed(false);
+    setThinkingOpen(false);
+    setApproachPlan("");
+    setCustomArgsText("[]");
+    setCustomResult(null);
+    setCustomArgsError(null);
+    setAttempts([]);
+    setExpandedAttemptId(null);
+    setComplexityCompare(null);
     setAttemptFeedback(null);
     setStartedAt(Date.now());
     setTab("Tests");
@@ -185,10 +292,24 @@ export default function ProblemWorkspace() {
       .then((p) => {
         setProblem(p);
         setCode(p.starter_code || "");
+        if (p.visible_test_cases?.[0]) {
+          setCustomArgsText(JSON.stringify(p.visible_test_cases[0].args));
+        }
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [slug]);
+
+  // History tab loads lazily -- attempt data isn't needed until the learner
+  // actually asks to see their journey on this problem.
+  useEffect(() => {
+    if (tab !== "History" || !slug) return;
+    setLoadingAttempts(true);
+    fetchAttempts(slug)
+      .then((result) => setAttempts(result.attempts || []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoadingAttempts(false));
+  }, [tab, slug]);
 
   async function handleRun() {
     setRunning(true);
@@ -208,6 +329,11 @@ export default function ProblemWorkspace() {
         time_taken_seconds: timeTakenSeconds,
       });
       setAttemptFeedback(attempt);
+      if (tab === "History") {
+        fetchAttempts(slug)
+          .then((result) => setAttempts(result.attempts || []))
+          .catch(() => {});
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -288,6 +414,79 @@ export default function ProblemWorkspace() {
     setTraceTestCaseIndex(testCaseIndex);
     setTraceFocusEnd(true);
     runTrace(testCaseIndex);
+  }
+
+  // Custom test-case playground: parses the learner's own JSON args and
+  // runs them ungraded (see backend app.py's run_custom) -- this is
+  // exploration, not scoring, so there's no pass/fail here, just output.
+  function parsePlaygroundArgs() {
+    try {
+      const parsed = JSON.parse(customArgsText);
+      if (!Array.isArray(parsed)) throw new Error("must be a JSON array, e.g. [[1,2,3], 5]");
+      setCustomArgsError(null);
+      return parsed;
+    } catch (e) {
+      setCustomArgsError(`Couldn't parse that as JSON: ${e.message}`);
+      return null;
+    }
+  }
+
+  async function runPlayground() {
+    const args = parsePlaygroundArgs();
+    if (args === null) return;
+    setCustomRunning(true);
+    setCustomResult(null);
+    try {
+      const result = await runProblemCustom(slug, code, args);
+      setCustomResult(result);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCustomRunning(false);
+    }
+  }
+
+  // Enter or modify test input -> Run -> Trace -> Inspect: this is the
+  // "Trace" half of the playground loop, reusing the same TraceViewer
+  // (with focusEnd so the final step is immediately visible) rather than
+  // building a second trace UI.
+  async function tracePlaygroundInput() {
+    const args = parsePlaygroundArgs();
+    if (args === null) return;
+    setTab("Trace");
+    setTraceFocusEnd(true);
+    setTracing(true);
+    setTrace(null);
+    try {
+      const result = await traceProblemCustom(slug, code, args);
+      setTrace(result);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setTracing(false);
+    }
+  }
+
+  // Compare approaches / complexity: re-estimates complexity for an OLD
+  // submission's code side by side with the current editor content, so the
+  // learner can see concretely how their solution improved (or didn't).
+  // Reuses the existing complexity-estimate endpoint against stored
+  // attempt code -- no new estimation logic, no overclaiming beyond what
+  // that endpoint already carefully scopes as structural vs empirical.
+  async function compareAttemptComplexity(attempt) {
+    setComparingAttemptId(attempt.id);
+    setComplexityCompare(null);
+    try {
+      const [past, current] = await Promise.all([
+        fetchComplexityEstimate(slug, attempt.submitted_code),
+        fetchComplexityEstimate(slug, code),
+      ]);
+      setComplexityCompare({ attemptId: attempt.id, past, current });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setComparingAttemptId(null);
+    }
   }
 
   if (loading) return <p className="muted">Loading problem...</p>;
@@ -377,6 +576,16 @@ export default function ProblemWorkspace() {
                 : `Solved with help (hints/solution used). Next review: ${attemptFeedback.next_due_date}.`}
             </p>
           )}
+
+          <ExplainThinking
+            problem={problem}
+            plan={approachPlan}
+            setPlan={setApproachPlan}
+            open={thinkingOpen}
+            setOpen={setThinkingOpen}
+            hasRun={!!runResult}
+            complexity={complexity}
+          />
 
           <div className="tab-row">
             {TABS.map((t) => (
@@ -535,6 +744,126 @@ export default function ProblemWorkspace() {
                       </>
                     )}
                   </div>
+                )}
+              </div>
+            )}
+
+            {tab === "Playground" && (
+              <div>
+                <p className="muted small">
+                  Enter your own test input -- ungraded. See exactly what your code returns (or the
+                  error it raises) for input you choose, then trace it if you want to inspect further.
+                </p>
+                <label className="trace-testcase-picker">Args (JSON array matching the function's parameters):</label>
+                <textarea
+                  className="predict-input"
+                  rows={2}
+                  value={customArgsText}
+                  onChange={(e) => setCustomArgsText(e.target.value)}
+                />
+                {problem.visible_test_cases?.[0]?.args && buildEdgeCasePresets(problem.visible_test_cases[0].args).length > 0 && (
+                  <div className="playground-presets">
+                    <span className="muted small">Quick edge cases: </span>
+                    {buildEdgeCasePresets(problem.visible_test_cases[0].args).map((preset) => (
+                      <button
+                        key={preset.label}
+                        className="chip chip-small"
+                        onClick={() => setCustomArgsText(JSON.stringify(preset.args))}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {customArgsError && <p className="error">{customArgsError}</p>}
+                <div className="hint-buttons">
+                  <button className="chip" onClick={runPlayground} disabled={customRunning}>
+                    {customRunning ? "Running..." : "Run with this input"}
+                  </button>
+                  {customResult && !customResult.crashed && !customResult.error && (
+                    <button className="chip" onClick={tracePlaygroundInput} disabled={tracing}>
+                      Trace this input &rarr;
+                    </button>
+                  )}
+                </div>
+                {customResult && (
+                  <div className="playground-result">
+                    {customResult.crashed || customResult.error ? (
+                      <p className="error">
+                        {customResult.error || "Your code crashed before producing a result for this input."}
+                      </p>
+                    ) : (
+                      <p>
+                        <strong>Output:</strong> <code>{JSON.stringify(customResult.actual)}</code>
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === "History" && (
+              <div>
+                {loadingAttempts && <p className="muted">Loading your attempts...</p>}
+                {!loadingAttempts && attempts.length === 0 && (
+                  <p className="muted">No attempts logged yet -- run your code once to start your history here.</p>
+                )}
+                {attempts.length > 0 && (
+                  <ol className="attempt-history">
+                    {attempts.map((a, i) => (
+                      <li key={a.id} className={a.passed ? "attempt-pass" : "attempt-fail"}>
+                        <div className="attempt-history-row">
+                          <span>
+                            <strong>Attempt {i + 1}</strong> &middot; {a.passed ? "Accepted" : "Not passing"}
+                          </span>
+                          <span className="muted small">{a.created_at}</span>
+                        </div>
+                        <div className="attempt-history-row muted small">
+                          {a.hints_used > 0 && <span>{a.hints_used} hint(s) used</span>}
+                          {a.solution_revealed ? <span>solution revealed</span> : null}
+                          {a.time_taken_seconds != null && <span>{a.time_taken_seconds}s</span>}
+                          {a.is_independent ? <span className="success">independent solve</span> : null}
+                        </div>
+                        <div className="hint-buttons">
+                          <button
+                            className="chip chip-small"
+                            onClick={() => setExpandedAttemptId(expandedAttemptId === a.id ? null : a.id)}
+                          >
+                            {expandedAttemptId === a.id ? "Hide code" : "View code"}
+                          </button>
+                          <button
+                            className="chip chip-small"
+                            onClick={() => compareAttemptComplexity(a)}
+                            disabled={comparingAttemptId === a.id}
+                          >
+                            {comparingAttemptId === a.id ? "Comparing..." : "Compare complexity to current code"}
+                          </button>
+                        </div>
+                        {expandedAttemptId === a.id && <pre className="code-block">{a.submitted_code}</pre>}
+                        {complexityCompare?.attemptId === a.id && (
+                          <div className="failure-analysis" style={{ marginTop: "0.5rem" }}>
+                            <h4 style={{ color: "#7ec8ff" }}>Complexity comparison</h4>
+                            <div className="failure-analysis-row">
+                              <span>
+                                <strong>This attempt:</strong>{" "}
+                                {complexityCompare.past.structural?.structural_time_estimate ||
+                                  complexityCompare.past.structural?.error}
+                              </span>
+                              <span>
+                                <strong>Current code:</strong>{" "}
+                                {complexityCompare.current.structural?.structural_time_estimate ||
+                                  complexityCompare.current.structural?.error}
+                              </span>
+                            </div>
+                            <p className="muted small">
+                              Structural estimates from each version's code shape -- see the Complexity tab for
+                              empirical timing on either version.
+                            </p>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
                 )}
               </div>
             )}

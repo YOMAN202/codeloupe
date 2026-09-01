@@ -52,10 +52,19 @@ export const fetchComplexityEstimate = (slug, code) =>
 // it raw would never actually run the function body at all.
 export const traceProblem = (slug, code, testCaseIndex = 0) =>
   send("POST", `/problems/${slug}/trace`, { code, test_case_index: testCaseIndex });
+// Custom test-case playground variant: trace the learner's OWN input
+// instead of one of the problem's stored examples.
+export const traceProblemCustom = (slug, code, args) =>
+  send("POST", `/problems/${slug}/trace`, { code, custom_args: args });
+// Runs the learner's code against one input THEY provide -- ungraded (no
+// pass/fail, just the actual output or error). See app.py's run_custom.
+export const runProblemCustom = (slug, code, args) =>
+  send("POST", `/problems/${slug}/run-custom`, { code, args });
 
 // ---- attempts / progress ------------------------------------------------
 export const logAttempt = (attempt) => send("POST", "/attempts", attempt);
 export const fetchProgress = () => get("/progress");
+export const fetchAttempts = (slug) => get(`/problems/${slug}/attempts`);
 
 // ---- plain run / trace (scratchpad + trace visualizer) -----------------
 export const runCode = (code) => send("POST", "/run", { code });

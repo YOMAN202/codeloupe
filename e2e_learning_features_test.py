@@ -1,8 +1,11 @@
 """
-Playwright E2E check for the 3 learning features added this phase:
+Playwright E2E check for the learning features added this phase:
   1. Predict -> Run -> Compare (TraceViewer's optional predict mode)
   2. Better failure analysis (ProblemWorkspace's FailureAnalysis panel + jump-to-trace)
   3. Pattern-recognition practice (ProblemWorkspace's PatternPractice block)
+  4. Custom test-case playground (Playground tab: run + trace arbitrary input)
+  5. Attempt history / solution journey (History tab)
+  8. Compare approaches/complexity across attempts (History tab's per-attempt compare)
 
 Exercised against BOTH a correct and an intentionally wrong two-sum submission,
 per the explicit requirement to test learning features against real success
@@ -102,6 +105,65 @@ def main():
         check("failure analysis absent on all-passing run", page.locator(".failure-analysis").count() == 0)
 
         check("no console errors across the whole flow", len(console_errors) == 0)
+
+        # ---- Custom test-case playground ----
+        page.get_by_role("button", name="Playground", exact=True).click()
+        page.wait_for_selector(".playground-presets")
+        preset_buttons = page.locator(".playground-presets button")
+        check("edge-case presets suggested for a list-shaped arg", preset_buttons.count() > 0)
+        preset_buttons.first.click()  # e.g. "Empty list"
+        page.get_by_role("button", name="Run with this input").click()
+        page.wait_for_selector(".playground-result", timeout=10000)
+        check("playground shows an output for a valid (correct-code) run",
+              "Output" in page.locator(".playground-result").inner_text())
+        trace_this_btn = page.get_by_role("button", name=re.compile("Trace this input"))
+        check("'trace this input' offered after a clean playground run", trace_this_btn.count() > 0)
+        trace_this_btn.click()
+        page.wait_for_selector(".trace-viewer", timeout=15000)
+        check("playground trace opened the Trace tab", page.locator(".trace-viewer").count() > 0)
+
+        # buggy code in the playground should show an error, not crash the UI
+        page.get_by_role("button", name="Playground", exact=True).click()
+        set_code(page, "def two_sum(nums, target):\n    return nums[999]\n")
+        page.get_by_role("button", name="Run with this input").click()
+        page.wait_for_selector(".playground-result", timeout=10000)
+        pg_text = page.locator(".playground-result").inner_text()
+        check("playground surfaces an error for crashing code", "Error" in pg_text or "error" in pg_text)
+        check("no 'trace this input' offered after a crashing run",
+              page.get_by_role("button", name=re.compile("Trace this input")).count() == 0)
+
+        # ---- Attempt history / solution journey ----
+        set_code(page, """def two_sum(nums, target):
+    seen = {}
+    for i, n in enumerate(nums):
+        if target - n in seen:
+            return [seen[target - n], i]
+        seen[n] = i
+    return []
+""")
+        page.get_by_role("button", name="Tests", exact=True).click()
+        page.get_by_role("button", name="Run tests").click()
+        page.wait_for_selector("text=PASS", timeout=10000)
+
+        page.get_by_role("button", name="History", exact=True).click()
+        page.wait_for_selector(".attempt-history", timeout=10000)
+        entries = page.locator(".attempt-history li")
+        check("attempt history shows at least the attempts made this session", entries.count() >= 2)
+        check("history includes at least one failed attempt (from earlier wrong submission)",
+              page.locator(".attempt-history li.attempt-fail").count() >= 1)
+        check("history includes at least one passed attempt", page.locator(".attempt-history li.attempt-pass").count() >= 1)
+
+        view_code_btn = page.get_by_role("button", name="View code").first
+        view_code_btn.click()
+        check("view code expands the submitted code for that attempt", page.locator(".attempt-history pre.code-block").count() > 0)
+
+        compare_btn = page.get_by_role("button", name=re.compile("Compare complexity")).first
+        compare_btn.click()
+        page.wait_for_selector(".attempt-history .failure-analysis", timeout=10000)
+        check("complexity comparison rendered for a past attempt",
+              "This attempt" in page.locator(".attempt-history .failure-analysis").first.inner_text())
+
+        check("no console errors after playground/history checks", len(console_errors) == 0)
 
         browser.close()
 

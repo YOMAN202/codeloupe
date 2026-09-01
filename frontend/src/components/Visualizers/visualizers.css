@@ -269,3 +269,49 @@
 .failure-analysis h4 { margin: 0 0 0.4rem; color: #ff8a8a; font-size: 0.88rem; }
 .failure-analysis-row { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.8rem; margin: 0.25rem 0; }
 .failure-analysis-diff { font-size: 0.8rem; color: #f0c060; margin: 0.4rem 0; }
+
+/* ---- Explain-your-thinking (interview practice) ----------------------- */
+
+.explain-thinking {
+  background: #182028;
+  border: 1px solid #2a3a4a;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  margin: 0.6rem 0;
+}
+.explain-thinking-toggle {
+  background: none;
+  border: none;
+  color: #7ec8ff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+/* ---- Custom test-case playground --------------------------------------- */
+
+.playground-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin: 0.4rem 0; }
+.playground-result {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  background: #1c1c1c;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+/* ---- Attempt history / solution journey -------------------------------- */
+
+.attempt-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.attempt-history li {
+  border: 1px solid #333;
+  border-left: 3px solid #666;
+  border-radius: 6px;
+  background: #1c1c1c;
+  padding: 0.5rem 0.7rem;
+}
+.attempt-history li.attempt-pass { border-left-color: #6bcb77; }
+.attempt-history li.attempt-fail { border-left-color: #e06666; }
+.attempt-history-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.3rem 0.8rem; margin: 0.2rem 0; }
