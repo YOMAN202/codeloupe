@@ -10,9 +10,21 @@
 ' This uses WScript.Shell.Exec, the standard, long-established Windows
 ' Script Host mechanism for running a console command invisibly -- it's
 ' been part of Windows since Windows 98/2000, so there's nothing extra
-' to install. It's called from start.bat, not meant to be run directly:
+' to install. It's called from start.bat with exactly 4 arguments and
+' is not meant to be run directly:
 '
 '   wscript run-hidden.vbs <workdir> <command> <logfile> <pidfile>
+'
+' Running it any other way (double-clicking it in Explorer, or from a
+' command line without all 4 arguments) shows a message explaining that,
+' instead of a raw "Subscript out of range" runtime error.
+
+If WScript.Arguments.Count < 4 Then
+    WScript.Echo "run-hidden.vbs needs 4 arguments -- <workdir> <command> <logfile> <pidfile>" & vbCrLf & _
+        "-- and is meant to be run by start.bat, not directly." & vbCrLf & vbCrLf & _
+        "Got " & WScript.Arguments.Count & " argument(s)."
+    WScript.Quit 1
+End If
 
 workDir = WScript.Arguments(0)
 command = WScript.Arguments(1)
