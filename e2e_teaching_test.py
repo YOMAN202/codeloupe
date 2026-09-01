@@ -2,23 +2,28 @@
 Playwright E2E check for the teaching system (Learn hub + concept lessons,
 see backend/db/seed_concepts.py and docs/decisions.md "Teaching system
 content architecture"). Covers the original Arrays + Two Pointers pilot
-plus batch 1 (Prefix Sums, Strings, Hashing -- Days 9-12) and batch 2
-(Sliding Window -- Days 15-16) of the curriculum expansion.
+plus batch 1 (Prefix Sums, Strings, Hashing -- Days 9-12), batch 2
+(Sliding Window -- Days 15-16), and batch 3 (Linked Lists, Fast/Slow
+Pointers -- Days 25-27) of the curriculum expansion.
 
-Covers: the Learn hub lists all five lessons grouped by topic in the
-correct topic-before-pattern order; a concept lesson page renders every
-section (what/why/recognize/intuition/walkthrough/common mistakes/
-complexity/checkpoints/practice/related problems); the teaching
-walkthrough steps through its authored frames; a choose_pattern checkpoint
-gives right/wrong feedback; lesson-status progress persists; and the
-lesson links INTO the rest of the app (a related problem, a prerequisite
-lesson) and the rest of the app links back INTO it (a problem page's
-"concepts you should know" callout, a day-lesson's related-concept
-callout) -- including the negative case, that a day with no authored
-concept content (Day 1) shows no broken/empty callout. Also covers
-batch-1-specific content: the prefix-sums negative-indexing spot_bug
-checkpoint, the strings expand-around-center walkthrough, and the
-hashing lesson's honest disclaimer that dict state isn't visualized.
+Covers: the Learn hub lists all lessons grouped by topic in the correct
+topic-before-pattern order; a concept lesson page renders every section
+(what/why/recognize/intuition/walkthrough/common mistakes/complexity/
+checkpoints/practice/related problems); the teaching walkthrough steps
+through its authored frames; a choose_pattern checkpoint gives
+right/wrong feedback; lesson-status progress persists; and the lesson
+links INTO the rest of the app (a related problem, a prerequisite lesson)
+and the rest of the app links back INTO it (a problem page's "concepts
+you should know" callout, a day-lesson's related-concept callout) --
+including the negative case, that a day with no authored concept content
+(Day 1) shows no broken/empty callout. Also covers batch-specific
+content: the prefix-sums negative-indexing spot_bug checkpoint, the
+strings expand-around-center walkthrough, the hashing lesson's honest
+disclaimer that dict state isn't visualized, the sliding-window
+double-shrink walkthrough frame, and the linked-list reversal/cycle-
+detection walkthroughs that reuse LinkedListView (a node-chain renderer,
+not the array-box one every other lesson uses) via a small adapter in
+ConceptWalkthrough.jsx.
 
 Run with the dev server (port 5173) and backend (port 5001) already up.
 """
@@ -45,13 +50,14 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all six concept lessons (pilot + batch 1 + batch 2)", cards.count() == 6)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window)",
+        check("Learn hub lists all eight concept lessons (pilot + batches 1-3)", cards.count() == 8)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
               and page.locator("h3", has_text="hashing").count() > 0
-              and page.locator("h3", has_text="sliding window").count() > 0)
+              and page.locator("h3", has_text="sliding window").count() > 0
+              and page.locator("h3", has_text="linked lists").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -63,7 +69,12 @@ def main():
               arrays_idx < prefix_idx)
 
         # ---- Concept lesson page: every section present ---------------------
-        page.get_by_role("link", name=re.compile("Two pointers")).first.click()
+        # href-exact, not a text/regex match: as more lessons are added, a
+        # lesson's own SUMMARY can legitimately contain another lesson's
+        # title as a substring (e.g. Fast/slow pointers' summary literally
+        # starts "Two pointers moving through..."), which a fuzzy text match
+        # against a card's full accessible name would wrongly click.
+        page.locator('a.lesson-card[href="#/learn/two-pointers"]').click()
         page.wait_for_selector("h2:has-text('Two pointers')", timeout=10000)
         for heading in ["What it is", "Why it matters", "When should I use this?",
                          "Core intuition", "Worked example", "Common mistakes",
@@ -233,6 +244,49 @@ def main():
         page.wait_for_selector("text=Day 15", timeout=10000)
         check("day-15 lesson page shows a 'Learn: Sliding window' callout",
               page.locator("a.callout", has_text="Learn: Sliding window").count() > 0)
+
+        # ---- batch 3: linked-lists lesson (reversal walkthrough) --------------
+        page.goto(f"{BASE}/#/learn/linked-lists", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Linked lists')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("linked-lists walkthrough renders via the node-chain view, not array boxes",
+              walkthrough.locator(".ll-chain").count() > 0 and walkthrough.locator(".seq-boxes").count() == 0)
+        check("linked-lists walkthrough starts at step 1 of 4", "step 1 / 4" in walkthrough.inner_text())
+        # step to the "split" frame: prev's chain and curr's still-linked
+        # remainder become genuinely separate pieces until the loop reaches them
+        page.get_by_role("button", name=re.compile("Next")).click()
+        page.wait_for_timeout(150)
+        check("split-chain frame shows the not-yet-relinked portion as a separate, labeled group",
+              "not reachable" in page.locator(".concept-walkthrough").inner_text().lower())
+        # step to the final frame: the fully-reversed chain should read 3 -> 2 -> 1
+        page.get_by_role("button", name=re.compile("Next")).click()
+        page.wait_for_timeout(120)
+        page.get_by_role("button", name=re.compile("Next")).click()
+        page.wait_for_timeout(150)
+        ll_nodes = page.locator(".concept-walkthrough .ll-node:not(.ll-node-orphan):not(.ll-node-none)").all_inner_texts()
+        check("final frame's reversed chain reads 3, 2, 1 in order (a real in-place reversal, not a relabeling)",
+              ll_nodes == ["3", "2", "1"])
+
+        # ---- batch 3: fast/slow-pointers lesson (cycle-detection walkthrough) --
+        page.goto(f"{BASE}/#/learn/linked-list-fast-slow", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Fast/slow pointers')", timeout=10000)
+        check("fast/slow prerequisites link to both Linked lists and Two pointers",
+              page.get_by_role("link", name="Linked lists").count() > 0
+              and page.get_by_role("link", name="Two pointers").count() > 0)
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        check("cycle-detection final frame shows the cycle indicator, not a plain None tail",
+              page.locator(".concept-walkthrough .ll-cycle").count() > 0)
+        check("both slow and fast pointer chips land on the same node when the cycle is detected",
+              page.locator(".concept-walkthrough .ll-pointer-tags .pointer-chip").count() >= 2)
+
+        # ---- integration: day-27 (reversal + cycle detection) links to both ---
+        page.goto(f"{BASE}/#/lessons/27", wait_until="networkidle")
+        page.wait_for_selector("text=Day 27", timeout=10000)
+        check("day-27 lesson page shows callouts for both Linked lists and Fast/slow pointers",
+              page.locator("a.callout", has_text="Learn: Linked lists").count() > 0
+              and page.locator("a.callout", has_text="Learn: Fast/slow pointers").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 

@@ -536,6 +536,211 @@ CONCEPT_LESSONS = [
             "`O(n^2)` or worse time of checking every contiguous window directly."
         ),
     ),
+    # ---- Batch 3: item 5 of the curriculum-ordered expansion -- linked
+    # lists (Days 25-27). First topic whose primary data structure isn't
+    # array-shaped, so ConceptWalkthrough.jsx gained a small adapter that
+    # builds LinkedListView's graph shape from a much simpler
+    # {nodes: [{id, val, next}], pointers: [[name, id], ...]} authoring
+    # format (pointers is an ORDERED list of pairs, not a dict -- Flask's
+    # JSON serializer sorts dict keys alphabetically, which would silently
+    # scramble which pointer becomes the rendered chain's starting point;
+    # see ConceptWalkthrough.jsx's own comment) --
+    # see that file's comment and docs/decisions.md "Teaching system
+    # expansion: batch 3."
+    dict(
+        slug="linked-lists",
+        kind="topic",
+        topic="linked-lists",
+        pattern_family=None,
+        title="Linked lists",
+        display_order=1,
+        estimated_minutes=18,
+        summary="A chain of node objects linked by .next references instead of one contiguous block of "
+                "memory -- O(1) insertion/deletion once you're at the right node, but no random access.",
+        prerequisite_slugs="arrays",
+        what_markdown=(
+            "A linked list is a sequence built from individual node objects, each holding a value and a "
+            "reference (`.next`) to the following node -- unlike a Python list, which is one contiguous block "
+            "of memory. The list itself is just a reference to the first node (`head`); walking it means "
+            "following `.next` one node at a time until you reach `None`."
+        ),
+        why_markdown=(
+            "Arrays give `O(1)` random access but `O(n)` insertion/deletion in the middle -- everything after "
+            "the insertion point has to shift. Linked lists flip that trade: `O(n)` to reach a given position "
+            "(no shortcuts, you have to walk there one node at a time), but `O(1)` insertion/deletion ONCE "
+            "you're already at the right node -- no shifting, just rewiring a couple of `.next` references. "
+            "That's why linked lists show up wherever insertion/removal happens far more often than random "
+            "lookup by position."
+        ),
+        recognize_markdown=(
+            "The tell isn't just \"the input is a linked list\" -- it's being asked to manipulate node "
+            "references directly: reverse it, remove a specific node, merge two lists by splicing their nodes "
+            "together, detect whether it loops back on itself. If the problem only needed a sequence you could "
+            "index into or scan, an array would already do the job. A `dummy head` node (a throwaway node "
+            "placed before the real head) is worth reaching for whenever the node you might insert/remove could "
+            "be the head itself -- it turns \"the head is a special case\" into \"every node is rewired the "
+            "same way.\""
+        ),
+        intuition_markdown=(
+            "**Traversal**: `current = head`, then `while current is not None: ... current = current.next` -- "
+            "one step at a time, no shortcuts. **Deletion**: `prev.next = prev.next.next` skips over the "
+            "unwanted node entirely; the deleted node itself doesn't need to be touched, Python's garbage "
+            "collector reclaims it once nothing references it anymore. **Insertion**: rewire the new node's "
+            "`.next` FIRST (pointing it at what comes after), THEN point the previous node at the new one -- "
+            "reversed order loses the rest of the list. **Reversal**: walk with three references at once -- "
+            "`prev`, `curr`, and a temporary `next_node` -- and save `next_node = curr.next` BEFORE overwriting "
+            "`curr.next`, or the rest of the original list becomes unreachable forever."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `reverse_list(head)` on a 3-node list (values 1, 2, 3) -- the classic three-pointer in-place "
+            "reversal. Watch how the picture splits as it runs: the growing chain from `prev` shows the "
+            "already-reversed portion; any node not yet reachable from `prev` (still only referenced via "
+            "`curr`) renders separately below as \"not reachable from the main chain\" -- that's not a "
+            "rendering glitch, it's genuinely a separate, not-yet-relinked piece of the list until the loop "
+            "reaches it."
+        ),
+        walkthrough_code=(
+            "class Node:\n"
+            "    def __init__(self, val):\n"
+            "        self.val = val\n"
+            "        self.next = None\n\n"
+            "def reverse_list(head):\n"
+            "    prev = None\n"
+            "    curr = head\n"
+            "    while curr is not None:\n"
+            "        next_node = curr.next\n"
+            "        curr.next = prev\n"
+            "        prev = curr\n"
+            "        curr = next_node\n"
+            "    return prev"
+        ),
+        walkthrough_frames=[
+            dict(caption="Before the loop: prev=None, curr=head (value 1). The list is untouched: 1 -> 2 -> 3 -> None.",
+                 locals={"nodes": [{"id": 0, "val": 1, "next": 1}, {"id": 1, "val": 2, "next": 2}, {"id": 2, "val": 3, "next": None}],
+                         "pointers": [["prev", None], ["curr", 0]]}),
+            dict(caption="First node reversed: node value 1's .next now points to prev (None) -- it's cut loose from the old chain, becoming the new tail. prev advances to it; curr advances to value 2. Values 2 and 3 are still linked to each other but no longer reachable from prev, so they render separately below.",
+                 locals={"nodes": [{"id": 0, "val": 1, "next": None}, {"id": 1, "val": 2, "next": 2}, {"id": 2, "val": 3, "next": None}],
+                         "pointers": [["prev", 0], ["curr", 1]]}),
+            dict(caption="Second node reversed: node value 2's .next now points to node value 1 -- two nodes are correctly reversed (2 -> 1 -> None). prev advances to value 2; curr advances to value 3, the last original node.",
+                 locals={"nodes": [{"id": 0, "val": 1, "next": None}, {"id": 1, "val": 2, "next": 0}, {"id": 2, "val": 3, "next": None}],
+                         "pointers": [["prev", 1], ["curr", 2]]}),
+            dict(caption="Third and final node reversed: node value 3's .next now points to node value 2. curr becomes None (the original last node had no next) -- the while loop ends. Return prev = node value 3, the new head. The list is now 3 -> 2 -> 1 -> None, fully reversed in place with zero new nodes allocated.",
+                 locals={"nodes": [{"id": 0, "val": 1, "next": None}, {"id": 1, "val": 2, "next": 0}, {"id": 2, "val": 3, "next": 1}],
+                         "pointers": [["prev", 2], ["curr", None]]}),
+        ],
+        common_mistakes_markdown=(
+            "Overwriting `curr.next` before saving it -- `curr.next = prev` first, THEN `curr = curr.next`, "
+            "reads back the value you just overwrote (`prev`), not the original next node, silently truncating "
+            "the list after one node. Always save `next_node = curr.next` before mutating `curr.next` (see this "
+            "lesson's walkthrough). Forgetting to check for `None` while walking -- accessing `.next` on a "
+            "`None` current node raises an `AttributeError`. Forgetting the head itself needs special handling "
+            "on insertion/deletion at the front (there's no \"previous node\" to rewire) -- a dummy head node "
+            "sidesteps this entirely. And comparing nodes with `==` when you meant `.val ==` -- a hand-rolled "
+            "class with no `__eq__` compares object identity by default, so two different nodes holding the "
+            "same value are never `==` to each other."
+        ),
+        complexity_markdown=(
+            "Traversal: `O(n)` to reach a given position, no shortcuts. Insertion/deletion: `O(1)` once you're "
+            "already at the right node (just rewire a couple of `.next` references), versus `O(n)` for the same "
+            "operation in the middle of a Python list, which has to shift every following element. Reversal: "
+            "`O(n)` time (visit every node once), `O(1)` extra space -- no new nodes are created, only existing "
+            "`.next` references are rewired."
+        ),
+    ),
+    dict(
+        slug="linked-list-fast-slow",
+        kind="pattern",
+        topic="linked-lists",
+        pattern_family="Fast/slow pointers",
+        title="Fast/slow pointers",
+        display_order=2,
+        estimated_minutes=16,
+        summary="Two pointers moving through the same list at different speeds -- the fast one laps the slow "
+                "one if (and only if) there's a cycle, or reaches the end exactly when slow reaches the middle.",
+        prerequisite_slugs="linked-lists,two-pointers",
+        what_markdown=(
+            "Two pointers, `slow` and `fast`, start at the same node and both move forward by following "
+            "`.next` -- but `fast` moves two steps for every one step `slow` takes. That speed difference is "
+            "the whole trick: it lets you answer questions about a linked list's SHAPE (does it loop back on "
+            "itself? where's the middle?) in a single pass, without counting the list's length first."
+        ),
+        why_markdown=(
+            "Both questions this pattern answers -- \"is there a cycle?\" and \"what's the middle node?\" -- "
+            "look like they need two passes: count the length first, then walk again to the right spot (or "
+            "walk the whole list storing every visited node just to check for a repeat, `O(n)` space). "
+            "Fast/slow answers both in ONE pass with `O(1)` extra space, because the speed difference itself "
+            "carries the information a length-count or a visited-set would otherwise be needed for."
+        ),
+        recognize_markdown=(
+            "The tell is needing to know something about a linked list's structure without being told its "
+            "length up front: does it cycle back on itself, where's its midpoint, is it a palindrome (walk to "
+            "the middle, reverse the second half, compare halves). If your first instinct is \"I'd need to "
+            "know the length first\" or \"I'd need to remember every node I've already visited,\" fast/slow is "
+            "very often the `O(1)`-space alternative -- this is a same-direction two-pointer technique, just "
+            "with an unequal step size instead of an unequal start condition."
+        ),
+        intuition_markdown=(
+            "**Cycle detection**: if there's no cycle, `fast` (moving 2 steps at a time) reaches `None` first "
+            "and the loop simply ends -- no cycle. If there IS a cycle, `fast` enters it and, being faster, "
+            "eventually LAPS `slow` from behind -- they land on the same node at the same step. That's "
+            "guaranteed, not just likely: once both pointers are inside the cycle, the gap between them "
+            "(measured going forward around the loop) shrinks by exactly one node every step, and a shrinking "
+            "gap around a finite loop must eventually hit zero. **Finding the middle**: when `fast` reaches the "
+            "end (or one node before it), `slow` -- moving half as fast -- has covered exactly half the "
+            "distance, landing on the middle node."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `has_cycle(head)` on a 4-node list where the last node's `.next` loops back to the SECOND "
+            "node (not the first) -- a genuine cycle, not just a long list. Watch the gap between `slow` and "
+            "`fast` close by one node every step once both are inside the loop."
+        ),
+        walkthrough_code=(
+            "class Node:\n"
+            "    def __init__(self, val):\n"
+            "        self.val = val\n"
+            "        self.next = None\n\n"
+            "def has_cycle(head):\n"
+            "    slow = fast = head\n"
+            "    while fast is not None and fast.next is not None:\n"
+            "        slow = slow.next\n"
+            "        fast = fast.next.next\n"
+            "        if slow is fast:\n"
+            "            return True\n"
+            "    return False"
+        ),
+        walkthrough_frames=[
+            dict(caption="Both pointers start at head (value 10). slow will move 1 step at a time; fast will move 2.",
+                 locals={"nodes": [{"id": 0, "val": 10, "next": 1}, {"id": 1, "val": 20, "next": 2}, {"id": 2, "val": 30, "next": 3}, {"id": 3, "val": 40, "next": 1}],
+                         "pointers": [["slow", 0], ["fast", 0]]}),
+            dict(caption="One iteration: slow moves 1 step (10 -> 20), fast moves 2 steps (10 -> 20 -> 30). fast is now ahead by one full node -- no match yet. (Value 10 no longer appears in either pointer's trail below -- the list itself hasn't changed, neither pointer references it anymore.)",
+                 locals={"nodes": [{"id": 0, "val": 10, "next": 1}, {"id": 1, "val": 20, "next": 2}, {"id": 2, "val": 30, "next": 3}, {"id": 3, "val": 40, "next": 1}],
+                         "pointers": [["slow", 1], ["fast", 2]]}),
+            dict(caption="Second iteration: slow moves to value 30. fast moves 2 more steps, wrapping around the cycle back to value 20 -- fast has gone around and is 'behind' slow in list order, but it's still gaining: the forward gap between them has shrunk by one node since the last step.",
+                 locals={"nodes": [{"id": 0, "val": 10, "next": 1}, {"id": 1, "val": 20, "next": 2}, {"id": 2, "val": 30, "next": 3}, {"id": 3, "val": 40, "next": 1}],
+                         "pointers": [["slow", 2], ["fast", 1]]}),
+            dict(caption="Third iteration: slow moves to value 40. fast moves 2 more steps and lands on the SAME node -- slow is fast. The gap has closed to zero: a cycle is confirmed. Return True.",
+                 locals={"nodes": [{"id": 0, "val": 10, "next": 1}, {"id": 1, "val": 20, "next": 2}, {"id": 2, "val": 30, "next": 3}, {"id": 3, "val": 40, "next": 1}],
+                         "pointers": [["slow", 3], ["fast", 3]]}),
+        ],
+        common_mistakes_markdown=(
+            "Checking only `while fast.next is not None` -- on a list with NO cycle and an even number of "
+            "nodes, `fast` itself can become `None` (after landing exactly on the last node's `.next`), and the "
+            "next loop check crashes with `AttributeError: 'NoneType' object has no attribute 'next'`. The "
+            "condition needs both: `while fast is not None and fast.next is not None`. Using `==` instead of "
+            "`is` to compare `slow` and `fast` -- for hand-rolled node classes with no `__eq__`, `is` (identity) "
+            "is what actually means \"the same node,\" and happens to be what `==` falls back to anyway, but "
+            "`is` states the intent directly. And initializing `slow` and `fast` to different starting points "
+            "when the problem calls for both starting at `head` -- an off-by-one start throws off exactly when "
+            "(or whether) they meet."
+        ),
+        complexity_markdown=(
+            "`O(n)` time, `O(1)` space. Even though `fast` moves 2 steps at a time, the total work stays "
+            "bounded by a constant factor of `n`: with no cycle, `fast` reaches the end in at most `n/2` "
+            "iterations; with a cycle, `fast` is guaranteed to catch `slow` within at most one full lap of the "
+            "cycle. Either way, `O(n)` time -- versus `O(n)` space (not just time) for a visited-set approach "
+            "that stores every node to check for a repeat."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -798,6 +1003,96 @@ CONCEPT_CHECKPOINTS = {
                                    "inside another n. The same amortized argument that makes two pointers O(n) "
                                    "applies here."),
     ],
+    "linked-lists": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need to delete a specific node from a singly linked list, given only a "
+                              "pointer to the head. What do you actually need in hand to delete it in O(1) "
+                              "once you've found the right spot?",
+             code=None,
+             choices_json=[
+                 "A pointer to the node BEFORE the one you want to delete",
+                 "A pointer to the node you want to delete itself",
+                 "The value stored in the node you want to delete",
+                 "Convert the whole list to an array first",
+             ],
+             correct_answer="A pointer to the node BEFORE the one you want to delete",
+             explanation_markdown="Deletion is prev.next = prev.next.next -- you rewire the PREVIOUS node's "
+                                   "pointer. A singly linked list has no way to reach backward, so a reference "
+                                   "to the node itself isn't enough to unlink it."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to reverse a linked list in place, but it returns just the first "
+                              "node -- the rest of the list is gone. What's the bug?",
+             code="def reverse_list(head):\n"
+                  "    prev = None\n"
+                  "    curr = head\n"
+                  "    while curr is not None:\n"
+                  "        curr.next = prev\n"
+                  "        prev = curr\n"
+                  "        curr = curr.next\n"
+                  "    return prev",
+             choices_json=None,
+             correct_answer="curr.next is overwritten (curr.next = prev) BEFORE the original next node is "
+                             "read. By the time curr = curr.next runs, curr.next is now prev, not the "
+                             "original next node -- the rest of the list is lost after the very first node.",
+             explanation_markdown="Save next_node = curr.next as a separate variable BEFORE mutating "
+                                   "curr.next, then advance curr = next_node at the end -- exactly the order "
+                                   "shown in this lesson's own walkthrough."),
+        dict(kind="complexity",
+             prompt_markdown="Reversing an n-node linked list in place with the three-pointer technique takes "
+                              "how much extra space, beyond the list itself?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(1)",
+             explanation_markdown="No new nodes are allocated -- only existing .next references are rewired "
+                                   "using a constant number of pointer variables (prev, curr, next_node), "
+                                   "regardless of how long the list is."),
+    ],
+    "linked-list-fast-slow": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need to find the middle node of a singly linked list in one pass, without "
+                              "knowing its length in advance. What's the right technique?",
+             code=None,
+             choices_json=[
+                 "Fast/slow pointers -- fast moves 2 steps for every 1 slow takes",
+                 "Two pointers from opposite ends of the list",
+                 "Count the length first, then walk halfway",
+                 "Convert the list to an array and index into the middle",
+             ],
+             correct_answer="Fast/slow pointers -- fast moves 2 steps for every 1 slow takes",
+             explanation_markdown="Opposite-ends two pointers doesn't apply to a singly linked list -- there's "
+                                   "no O(1) way to start from the end without already having it reversed or in "
+                                   "an array. Counting the length first works, but takes two passes; fast/slow "
+                                   "finds the middle in one."),
+        dict(kind="spot_bug",
+             prompt_markdown="This cycle-detection sometimes crashes with an AttributeError on lists that have "
+                              "NO cycle. What's the bug?",
+             code="def has_cycle(head):\n"
+                  "    slow = fast = head\n"
+                  "    while fast.next is not None:\n"
+                  "        slow = slow.next\n"
+                  "        fast = fast.next.next\n"
+                  "        if slow is fast:\n"
+                  "            return True\n"
+                  "    return False",
+             choices_json=None,
+             correct_answer="The loop only checks fast.next is not None, not fast itself. On a cycle-free "
+                             "list with an even number of nodes, fast can land exactly on None -- then the "
+                             "next iteration's fast.next crashes, since None has no .next.",
+             explanation_markdown="The condition needs both: while fast is not None and fast.next is not "
+                                   "None. Checking fast.next alone assumes fast is always a real node when the "
+                                   "check runs, which stops being true the moment fast itself becomes None."),
+        dict(kind="complexity",
+             prompt_markdown="Fast/slow cycle detection visits nodes with fast moving 2 steps per iteration. "
+                              "What's the overall time complexity for a list of n nodes, with or without a "
+                              "cycle?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n)",
+             explanation_markdown="With no cycle, fast reaches the end in at most n/2 iterations. With a "
+                                   "cycle, fast is guaranteed to catch slow within at most one full lap of the "
+                                   "cycle. Either way, O(n) time -- and O(1) space, versus O(n) space for a "
+                                   "visited-set approach that stores every node to check for a repeat."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -917,5 +1212,52 @@ CONCEPT_PRACTICE_EXERCISES = {
              ),
              hint_markdown="The window is always valid as long as zeros <= k. Grow right unconditionally each "
                             "step; only shrink left (in a while, not an if) when zeros exceeds k."),
+    ],
+    "linked-lists": [
+        dict(prompt_markdown="Write `remove_value(head, target)` that removes the FIRST node whose `.val == "
+                              "target` and returns the (possibly new) head. Use a dummy node before `head` so "
+                              "removing the actual head isn't a special case separate from removing any other "
+                              "node.",
+             starter_code="class Node:\n    def __init__(self, val):\n        self.val = val\n        self.next = None\n\n"
+                          "def remove_value(head, target):\n    # dummy.next = head means 'skip the node after prev'\n"
+                          "    # is always the same operation, even when the node to remove IS head\n"
+                          "    dummy = Node(0)\n    dummy.next = head\n    pass",
+             solution_code=(
+                 "class Node:\n"
+                 "    def __init__(self, val):\n"
+                 "        self.val = val\n"
+                 "        self.next = None\n\n"
+                 "def remove_value(head, target):\n"
+                 "    dummy = Node(0)\n"
+                 "    dummy.next = head\n"
+                 "    prev = dummy\n"
+                 "    while prev.next is not None:\n"
+                 "        if prev.next.val == target:\n"
+                 "            prev.next = prev.next.next\n"
+                 "            break\n"
+                 "        prev = prev.next\n"
+                 "    return dummy.next"
+             ),
+             hint_markdown="prev starts at dummy, one step before head. Walk prev forward until "
+                            "prev.next.val == target, then skip over it: prev.next = prev.next.next. Return "
+                            "dummy.next, not head -- head itself might be the node you removed."),
+    ],
+    "linked-list-fast-slow": [
+        dict(prompt_markdown="Write `find_middle_val(head)` that returns the value of the middle node of a "
+                              "non-empty linked list in one pass, without computing the length first. For an "
+                              "even-length list, return the SECOND of the two middle nodes.",
+             starter_code="def find_middle_val(head):\n    # fast moves 2 steps for every 1 slow takes --\n"
+                          "    # when fast runs out of room, slow is at the middle\n    pass",
+             solution_code=(
+                 "def find_middle_val(head):\n"
+                 "    slow = fast = head\n"
+                 "    while fast is not None and fast.next is not None:\n"
+                 "        slow = slow.next\n"
+                 "        fast = fast.next.next\n"
+                 "    return slow.val"
+             ),
+             hint_markdown="Both start at head. Each iteration: slow advances one node, fast advances two. "
+                            "Stop as soon as fast can't take a full 2-step move (fast is None or fast.next is "
+                            "None) -- slow is sitting on the middle at that point."),
     ],
 }

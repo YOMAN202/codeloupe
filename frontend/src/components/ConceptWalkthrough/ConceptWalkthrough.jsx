@@ -1,22 +1,51 @@
 import { useState } from "react";
-import { ArrayPointerView } from "../Visualizers/Visualizers";
+import { ArrayPointerView, LinkedListView } from "../Visualizers/Visualizers";
 
 // A teaching walkthrough steps through a hand-authored, VERIFIED-BY-HAND
 // sequence of {caption, locals} frames (see backend/db/seed_concepts.py) --
 // a controlled example chosen to demonstrate a concept clearly. It reuses
-// ArrayPointerView, the same component the real trace-your-own-code system
-// (TraceViewer.jsx) uses to render array/pointer state, so a learner sees
-// one consistent visual language for "array + pointers" everywhere in the
-// app. That is where the reuse stops on purpose: this component never
-// touches /api/.../trace or sys.settrace. Codeloupe's actual differentiator
-// -- write your own code, run it, trace what IT actually did -- lives only
-// in TraceViewer.jsx. This is clearly a separate, simpler stepper (no
-// play/predict-mode, no event/line/depth -- there's no real execution here
-// to report on) so the two are never visually confusable.
+// the same presentation components the real trace-your-own-code system
+// (TraceViewer.jsx) uses -- ArrayPointerView for array/string/pointer
+// state, LinkedListView for node chains -- so a learner sees one
+// consistent visual language everywhere in the app. That is where the
+// reuse stops on purpose: this component never touches /api/.../trace or
+// sys.settrace. Codeloupe's actual differentiator -- write your own code,
+// run it, trace what IT actually did -- lives only in TraceViewer.jsx.
+// This is clearly a separate, simpler stepper (no play/predict-mode, no
+// event/line/depth -- there's no real execution here to report on) so the
+// two are never visually confusable.
+
+// LinkedListView expects a real trace's { nodes: Map(id -> {fields,
+// fieldRefs}), roots: [{name, id}] } shape (built by nodeGraph.js from
+// live sys.settrace output). Hand-authoring a Map is inconvenient, so
+// linked-list lessons author frames.locals as the much simpler
+// { nodes: [{id, val, next}], pointers: [[name, id], ...] } and this
+// adapter builds the shape LinkedListView actually needs -- the same
+// node-chain rendering (including its cycle/orphan handling) with no
+// changes to the visualizer itself.
+//
+// pointers is a list of [name, id] PAIRS, not a plain {name: id} object --
+// deliberately, since which pointer LinkedListView picks as the chain's
+// starting point depends on root order (the first root with a non-null id,
+// absent a "head"-named one -- see its own namedRoot logic), and Flask's
+// JSON serializer sorts object keys alphabetically before this ever
+// reaches the browser, silently discarding whatever order seed_concepts.py
+// authored. Array element order survives that round-trip; object key
+// order does not.
+function buildLinkedListGraph(locals) {
+  const nodes = new Map();
+  (locals.nodes || []).forEach((n) => {
+    nodes.set(n.id, { id: n.id, fields: { val: n.val }, fieldRefs: { next: n.next ?? null } });
+  });
+  const roots = (locals.pointers || []).map(([name, id]) => ({ name, id: id ?? null }));
+  return { nodes, roots };
+}
+
 export default function ConceptWalkthrough({ frames, topic, pattern }) {
   const [index, setIndex] = useState(0);
   if (!frames || frames.length === 0) return null;
   const frame = frames[index];
+  const isLinkedList = topic === "linked-lists" && frame.locals && Array.isArray(frame.locals.nodes);
 
   return (
     <div className="concept-walkthrough">
@@ -48,7 +77,11 @@ export default function ConceptWalkthrough({ frames, topic, pattern }) {
       />
 
       <p className="concept-walkthrough-caption">{frame.caption}</p>
-      <ArrayPointerView locals={frame.locals} topic={topic} pattern={pattern} />
+      {isLinkedList ? (
+        <LinkedListView graph={buildLinkedListGraph(frame.locals)} />
+      ) : (
+        <ArrayPointerView locals={frame.locals} topic={topic} pattern={pattern} />
+      )}
     </div>
   );
 }
