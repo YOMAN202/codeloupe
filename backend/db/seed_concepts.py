@@ -1922,6 +1922,200 @@ CONCEPT_LESSONS = [
             "stack which scales with height."
         ),
     ),
+    # ---- Batch 9: item 11 of the curriculum-ordered expansion -- heaps
+    # (Days 33-34). Two lessons, matching the curriculum's own two-day
+    # split (heap concept/heapq, then the top-K pattern specifically) --
+    # continuing the same departure from strict pattern_family-backing
+    # that batch 8 made explicit for BSTs: pattern_families.py has only
+    # ONE rule for topic="heaps" ("Heap / top-K selection", covering all 7
+    # curated problems with no sub-split), so top-k-heap leaves
+    # pattern_family unset like heaps itself, same tradeoff as
+    # binary-search-trees. HeapView (Visualizers.jsx) needs no new
+    # ConceptWalkthrough.jsx adapter at all -- unlike LinkedListView/
+    # TreeView, it takes locals directly (any numeric-list-shaped local
+    # is rendered as its own heap-tree via plain 2i+1/2i+2 index math, no
+    # Map/graph construction), so both lessons just pass locals={"heap":
+    # [...]} straight through, selected via topic === 'heaps'. See
+    # docs/decisions.md "Teaching system expansion: batch 9".
+    dict(
+        slug="heaps",
+        kind="topic",
+        topic="heaps",
+        pattern_family=None,
+        title="Heaps: priority queues",
+        display_order=1,
+        estimated_minutes=17,
+        summary="A binary tree (stored as a plain array) that only guarantees a parent is smaller than its "
+                "children -- weaker than fully sorted, which is exactly why push/pop are O(log n) instead of "
+                "needing a full re-sort.",
+        prerequisite_slugs="trees",
+        what_markdown=(
+            "A (min-)heap is a complete binary tree where every parent is `<=` both of its children -- "
+            "weaker than a sorted order (siblings and cousins have no guaranteed relationship to each other), "
+            "which is exactly what makes it cheap to maintain. It's stored as a plain array: the node at "
+            "index `i` has children at `2i + 1` and `2i + 2`, so no pointers or node objects are needed at "
+            "all. Python's `heapq` module gives you a MIN-heap on a plain list: `heapq.heappush(heap, x)` "
+            "adds `x` and restores the invariant; `heapq.heappop(heap)` removes and returns the smallest "
+            "element, then restores the invariant among what's left."
+        ),
+        why_markdown=(
+            "If you only need the min/max ONCE, sort or scan. But if you need to repeatedly pull the current "
+            "min/max while the collection keeps changing (new elements arriving, or one at a time being "
+            "removed), a heap keeps that operation at `O(log n)` every time, instead of `O(n)` per scan or "
+            "`O(n log n)` to re-sort after every change. `heapq.heapify(list)` even converts an existing list "
+            "into a valid heap in `O(n)`, not `O(n log n)` -- cheaper than pushing every element one at a "
+            "time."
+        ),
+        recognize_markdown=(
+            "The tell is needing the current smallest/largest of a collection repeatedly, especially while "
+            "the collection keeps changing -- \"process tasks by priority\", \"merge K sorted lists/streams\", "
+            "\"find the running median\", or the top-K pattern this batch's other lesson builds on top of "
+            "this one. If you only need the min/max ONE time and the collection is static, a heap is overkill "
+            "-- `min()`/`max()` or a single sort is simpler and just as fast."
+        ),
+        intuition_markdown=(
+            "Both `heappush` and `heappop` work by fixing the invariant along a SINGLE path from root to leaf "
+            "(or leaf to root), never touching the rest of the tree -- that's the whole reason they're "
+            "`O(log n)` (the tree's height) instead of `O(n)`. Pushing: append the new value at the next open "
+            "slot, then \"sift up\" -- repeatedly compare it to its parent and swap if it's smaller, stopping "
+            "once it isn't (or it reaches the root). Popping: save the root (the value being returned), move "
+            "the LAST element into the root's spot, then \"sift down\" -- repeatedly swap it with its smaller "
+            "child, stopping once it's smaller than both children (or has none). Sift-up and sift-down are "
+            "both loops for the same reason a sliding window's shrink step is: one swap doesn't always finish "
+            "the job."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace four `heappush` calls building a heap from scratch, then one `heappop`. Watch the fourth "
+            "push (`1`) closely -- it needs two separate sift-up swaps to bubble all the way to the root."
+        ),
+        walkthrough_code=(
+            "import heapq\n"
+            "heap = []\n"
+            "heapq.heappush(heap, 5)\n"
+            "heapq.heappush(heap, 3)\n"
+            "heapq.heappush(heap, 8)\n"
+            "heapq.heappush(heap, 1)\n"
+            "heapq.heappop(heap)"
+        ),
+        walkthrough_frames=[
+            dict(caption="heappush(heap, 5): heap starts empty, so 5 becomes the only element (trivially the root).",
+                 locals={"heap": [5]}),
+            dict(caption="heappush(heap, 3): 3 is appended at index 1. Its parent (index 0) is 5 -- 3 < 5, so sift up: swap.",
+                 locals={"heap": [3, 5]}),
+            dict(caption="heappush(heap, 8): 8 is appended at index 2. Its parent (index 0) is 3 -- 8 is NOT less than 3, so no swap needed. The invariant already holds.",
+                 locals={"heap": [3, 5, 8]}),
+            dict(caption="heappush(heap, 1): 1 is appended at index 3. Its parent (index 1) is 5. 1 < 5 -- sift up begins: swap.",
+                 locals={"heap": [3, 5, 8, 1]}),
+            dict(caption="1 is now at index 1. Its NEW parent (index 0) is 3. 1 < 3 -- sift up continues: swap again.",
+                 locals={"heap": [3, 1, 8, 5]}),
+            dict(caption="1 is now at index 0 (the root), which has no parent -- sift-up stops. Two swaps were needed to bubble 1 all the way up -- exactly why sift-up is a loop, not a single comparison.",
+                 locals={"heap": [1, 3, 8, 5]}),
+            dict(caption="heappop(heap): removes and returns the root, 1 (the minimum). The LAST element (5) moves into the root's spot, then sifts DOWN -- swapping with its smaller child (3, at index 1) since 5 > 3. Final heap: [3, 5, 8].",
+                 locals={"heap": [3, 5, 8]}),
+        ],
+        common_mistakes_markdown=(
+            "Building a heap by just `.append()`-ing values instead of `heapq.heappush()` (or `heapq.heapify()` "
+            "once at the end) -- a list built this way LOOKS like a heap but never had its invariant "
+            "established, so `heapq.heappop()` on it silently returns the wrong \"minimum\" instead of "
+            "erroring, since `heappop` only fixes up the structure around the root it removes, not the whole "
+            "list. Needing a MAX-heap and reaching for a different data structure -- `heapq` is min-heap only, "
+            "but negating every value on the way in (and negating again on the way out) turns it into a "
+            "working max-heap with no extra code. And assuming a heap is fully sorted -- popping repeatedly "
+            "DOES yield sorted order, but the array itself, at any given moment, is only heap-valid, not "
+            "sorted (compare `heap[1]` and `heap[2]` in any frame above -- neither is guaranteed smaller)."
+        ),
+        complexity_markdown=(
+            "`O(log n)` per `heappush`/`heappop` (bounded by the tree's height). `O(n)` for `heapq.heapify()` "
+            "on an existing list (cheaper than `n` individual pushes, which would be `O(n log n)`). Repeatedly "
+            "extracting the min/max `n` times, one at a time, is therefore `O(n log n)` total -- better than "
+            "`O(n^2)` from repeatedly scanning linearly for the min, and avoids re-sorting the whole "
+            "collection (also `O(n log n)`, but redundantly, on every single change)."
+        ),
+    ),
+    dict(
+        slug="top-k-heap",
+        kind="pattern",
+        topic="heaps",
+        pattern_family=None,
+        title="Top-K with a bounded heap",
+        display_order=2,
+        estimated_minutes=16,
+        summary="Find the K largest (or smallest) of n values by keeping a heap of size AT MOST K, evicting "
+                "the current worst candidate whenever a better one arrives -- O(n log k), not O(n log n).",
+        prerequisite_slugs="heaps",
+        what_markdown=(
+            "To find the K LARGEST values among n candidates, keep a MIN-heap bounded to size `k` -- not a "
+            "max-heap, which is the intuitive-sounding but less efficient choice. Push every candidate; "
+            "whenever the heap's size exceeds `k`, pop the minimum. That pop evicts the current WORST of your "
+            "top-K candidates -- anything smaller than the heap's current minimum can't possibly belong in "
+            "the true top K, so it's safe to discard. At the end, the heap holds exactly the K largest values "
+            "seen, and its root is the Kth largest overall."
+        ),
+        why_markdown=(
+            "Keeping every element in a full-size heap (or sorting everything) costs `O(n log n)`. Bounding "
+            "the heap to size `k` keeps every push/pop to `O(log k)` instead of `O(log n)` -- when `k` is much "
+            "smaller than `n` (the 5 largest among a million streaming values), that's a real difference, and "
+            "the heap never needs to hold more than `k` elements at once."
+        ),
+        recognize_markdown=(
+            "\"Find the K largest/smallest\", \"K closest points\", \"top K frequent elements\", \"Kth largest "
+            "in a stream\" (where new values keep arriving and the answer must stay current) -- any \"best K "
+            "of N\" question, especially when N is large or arrives incrementally, is reaching for a bounded "
+            "heap. If K is close to N, a full sort is simpler and just as fast; the bounded-heap technique "
+            "earns its complexity specifically when K is small relative to N."
+        ),
+        intuition_markdown=(
+            "The counterintuitive part worth internalizing: for the K LARGEST values, you bound a MIN-heap "
+            "(not a max-heap). The heap's root is always the SMALLEST of your current top-K candidates -- "
+            "which is precisely the one value you want fast access to, since it's the one that gets evicted "
+            "the moment something bigger shows up. A max-heap would put the wrong end (the current largest, "
+            "which you never need to evict) at the root instead."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace finding the 3 largest values from the stream `[4, 1, 7, 3, 9, 2]` using a min-heap bounded "
+            "to size 3. Watch the last push (`2`) closely -- it gets evicted immediately, since it's smaller "
+            "than everything already confirmed to be in the top 3."
+        ),
+        walkthrough_code=(
+            "def top_k_largest(nums, k):\n"
+            "    heap = []\n"
+            "    for n in nums:\n"
+            "        heapq.heappush(heap, n)\n"
+            "        if len(heap) > k:\n"
+            "            heapq.heappop(heap)\n"
+            "    return heap"
+        ),
+        walkthrough_frames=[
+            dict(caption="Push 4. heap=[4], size 1 (<= k=3) -- no eviction needed.",
+                 locals={"heap": [4]}),
+            dict(caption="Push 1. heap=[1, 4], size 2 (<= 3) -- no eviction needed.",
+                 locals={"heap": [1, 4]}),
+            dict(caption="Push 7. heap=[1, 4, 7], size 3 (== k) -- the heap is now full, but still no eviction needed.",
+                 locals={"heap": [1, 4, 7]}),
+            dict(caption="Push 3. Size is now 4, exceeding k=3 -- pop the minimum (1). 1 is now confirmed NOT among the 3 largest, since 3 other values already beat it.",
+                 locals={"heap": [3, 4, 7]}),
+            dict(caption="Push 9. Size becomes 4 again -- pop the minimum (3). heap=[4, 9, 7].",
+                 locals={"heap": [4, 9, 7]}),
+            dict(caption="Push 2. Size becomes 4 again -- pop the minimum. Since 2 IS the new minimum, it gets evicted right back out, changing nothing.",
+                 locals={"heap": [4, 9, 7]}),
+            dict(caption="Every value processed. Final heap=[4, 9, 7] -- confirmed to be the 3 largest values seen: 9, 7, 4 (the heap's own array order isn't sorted order, just the heap invariant).",
+                 locals={"heap": [4, 9, 7]}),
+        ],
+        common_mistakes_markdown=(
+            "Using a MAX-heap instead of a bounded min-heap for \"K largest\" -- it works, but a full max-heap "
+            "of all `n` elements costs `O(n log n)` and doesn't let you cheaply discard bad candidates the way "
+            "a size-bounded min-heap does. Forgetting the `if len(heap) > k: heapq.heappop(heap)` check after "
+            "every push -- without it the heap grows unbounded, silently returning ALL `n` elements instead "
+            "of just the top `k`, and losing the entire `O(n log k)` benefit. And assuming the returned heap "
+            "is already in sorted order -- it holds the right SET of values, but reading it out in ranked "
+            "order needs additional pops (or a final `sorted()` call), same as any heap."
+        ),
+        complexity_markdown=(
+            "`O(n log k)` time -- each of the `n` pushes (and the pops that follow when the heap overflows) "
+            "costs `O(log k)`, since the heap never holds more than `k + 1` elements at once. `O(k)` space, "
+            "regardless of how large `n` is -- the heap's size is capped by `k`, not by the input."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -2812,6 +3006,95 @@ CONCEPT_CHECKPOINTS = {
                                    "with how WIDE the tree gets, unlike DFS's recursion stack, which scales "
                                    "with how tall/deep it is."),
     ],
+    "heaps": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Python's heapq only gives you a MIN-heap. What's the standard trick for using "
+                              "it as a max-heap?",
+             code=None,
+             choices_json=[
+                 "Negate every value on the way in (and negate again on the way out)",
+                 "Sort the whole list every time you need the max",
+                 "heapq doesn't support this -- you must write a custom class",
+                 "Call heapq.heappush twice for each value",
+             ],
+             correct_answer="Negate every value on the way in (and negate again on the way out)",
+             explanation_markdown="Negating flips the ordering: the SMALLEST negated value corresponds to "
+                                   "the LARGEST original value, so heapq's min-heap behavior gives you "
+                                   "max-heap behavior for free, no extra code needed beyond negating on push "
+                                   "and pop."),
+        dict(kind="spot_bug",
+             prompt_markdown="This code builds what looks like a heap, but heapq.heappop() on it returns the "
+                              "wrong \"minimum\". What's the bug?",
+             code="def build_heap_wrong(values):\n"
+                  "    heap = []\n"
+                  "    for v in values:\n"
+                  "        heap.append(v)\n"
+                  "    return heap\n\n"
+                  "heap = build_heap_wrong([5, 3, 8, 1])\n"
+                  "heapq.heappop(heap)  # returns 5, not 1",
+             choices_json=None,
+             correct_answer="heap.append(v) just adds values in input order -- it never establishes the "
+                             "heap invariant. heapq.heappop() assumes the list it's given is ALREADY a valid "
+                             "heap; it only fixes up the structure around the root it removes, not the whole "
+                             "list, so popping an unheapified list returns whatever happens to be at index 0, "
+                             "not the true minimum.",
+             explanation_markdown="Fix: use heapq.heappush(heap, v) for each value (maintains the invariant "
+                                   "incrementally), or build the plain list first and call "
+                                   "heapq.heapify(heap) once afterward -- O(n), cheaper than n individual "
+                                   "pushes."),
+        dict(kind="complexity",
+             prompt_markdown="Repeatedly extracting the min from a collection of n elements total, one "
+                              "heappush/heappop at a time, costs how much total time?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n log n)",
+             explanation_markdown="Each push/pop is O(log n) (bounded by the tree's height), and there are n "
+                                   "of them -- O(n log n) total, versus O(n^2) from repeatedly scanning "
+                                   "linearly for the min."),
+    ],
+    "top-k-heap": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need the 5 largest numbers from a stream of a million values, without "
+                              "storing all million. What's the efficient approach?",
+             code=None,
+             choices_json=[
+                 "A MIN-heap bounded to size 5 -- push each value, evict the minimum whenever size exceeds 5",
+                 "A MAX-heap containing all million values",
+                 "Sort the entire stream, then take the last 5",
+                 "Track only the single largest value seen so far",
+             ],
+             correct_answer="A MIN-heap bounded to size 5 -- push each value, evict the minimum whenever "
+                             "size exceeds 5",
+             explanation_markdown="Bounding the heap to size 5 keeps every push/pop at O(log 5) instead of "
+                                   "O(log n), and the heap never needs to hold more than 5 elements at a "
+                                   "time -- the min-heap's root is exactly the one value worth cheap access "
+                                   "to, since it's the first to get evicted."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to return the 3 largest values from nums, but it silently "
+                              "returns ALL of them instead. What's missing?",
+             code="def top_k_largest(nums, k):\n"
+                  "    heap = []\n"
+                  "    for n in nums:\n"
+                  "        heapq.heappush(heap, n)\n"
+                  "    return heap",
+             choices_json=None,
+             correct_answer="The eviction check is missing entirely -- there's no `if len(heap) > k: "
+                             "heapq.heappop(heap)` after each push, so the heap just keeps growing to hold "
+                             "every element that was ever pushed, silently returning the whole input instead "
+                             "of only the top k.",
+             explanation_markdown="Without bounding the heap's size, this technique degrades back into a "
+                                   "full heap-sort -- the entire point of the bounded-heap pattern is "
+                                   "discarding candidates that can no longer possibly be in the top k."),
+        dict(kind="complexity",
+             prompt_markdown="Finding the k largest of n values with a bounded min-heap takes how much time "
+                              "and space?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n log k) time, O(k) space",
+             explanation_markdown="Each of the n pushes (and the pops that follow when the heap overflows) "
+                                   "costs O(log k), since the heap is never allowed to hold more than k + 1 "
+                                   "elements -- and its size never exceeds k regardless of how large n is."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -3371,5 +3654,53 @@ CONCEPT_PRACTICE_EXERCISES = {
              hint_markdown="This is the exact same level_size-snapshot technique from the lesson's own "
                             "walkthrough -- the only new part is checking `i == level_size - 1` inside the "
                             "inner loop to know when you've reached the LAST node of the current level."),
+    ],
+    "heaps": [
+        dict(prompt_markdown="Write `is_min_heap(arr)` that returns True if arr satisfies the min-heap "
+                              "property (every parent <= both of its children) at every index -- e.g. "
+                              "`is_min_heap([1, 3, 8, 5])` returns `True`, but `is_min_heap([5, 3, 8, 1])` "
+                              "returns `False`.",
+             starter_code="def is_min_heap(arr):\n    n = len(arr)\n    for i in range(n):\n"
+                          "        left, right = 2 * i + 1, 2 * i + 2\n"
+                          "        # check arr[i] against arr[left] and arr[right], when those indices exist\n"
+                          "        pass\n    return True",
+             solution_code=(
+                 "def is_min_heap(arr):\n"
+                 "    n = len(arr)\n"
+                 "    for i in range(n):\n"
+                 "        left, right = 2 * i + 1, 2 * i + 2\n"
+                 "        if left < n and arr[left] < arr[i]:\n"
+                 "            return False\n"
+                 "        if right < n and arr[right] < arr[i]:\n"
+                 "            return False\n"
+                 "    return True"
+             ),
+             hint_markdown="For every index i, its children live at 2i+1 and 2i+2 -- the exact same index "
+                            "math HeapView uses to lay out the tree diagram above. A child index only needs "
+                            "checking if it's actually within bounds (< n); if a check ever fails, you can "
+                            "return False immediately, no need to keep scanning."),
+    ],
+    "top-k-heap": [
+        dict(prompt_markdown="Write `k_closest_to_zero(nums, k)` that returns the k values closest to 0, "
+                              "sorted -- e.g. `k_closest_to_zero([4, -1, 7, -3, 9, 2], 3)` returns "
+                              "`[-3, -1, 2]`. Use a bounded heap, evicting the FARTHEST point (not the "
+                              "smallest value) whenever size exceeds k.",
+             starter_code="def k_closest_to_zero(nums, k):\n    heap = []\n    for n in nums:\n"
+                          "        # push a tuple so the heap orders by DISTANCE from zero, not raw value --\n"
+                          "        # this lesson's own max-heap-via-negation trick applies here too\n"
+                          "        pass\n    return sorted(v for _, v in heap)",
+             solution_code=(
+                 "def k_closest_to_zero(nums, k):\n"
+                 "    heap = []\n"
+                 "    for n in nums:\n"
+                 "        heapq.heappush(heap, (-abs(n), n))\n"
+                 "        if len(heap) > k:\n"
+                 "            heapq.heappop(heap)\n"
+                 "    return sorted(v for _, v in heap)"
+             ),
+             hint_markdown="Push (-abs(n), n) instead of just n -- negating the distance means the point "
+                            "FARTHEST from zero (largest abs(n)) becomes the SMALLEST tuple, which is what "
+                            "heapq's min-heap evicts first. That's exactly the eviction you want: discard "
+                            "the current worst (farthest) candidate whenever the heap grows past k."),
     ],
 }

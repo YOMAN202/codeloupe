@@ -7,8 +7,9 @@ plus batch 1 (Prefix Sums, Strings, Hashing -- Days 9-12), batch 2
 Pointers -- Days 25-27), batch 4 (Stacks, Queues -- Days 28-29), batch 5
 (Recursion, Backtracking -- Days 23-24), batch 6 (Binary Search, Binary
 Search Variants -- Days 21-22), batch 7 (Sorting, Divide-and-conquer
-sorting -- Days 17-20), and batch 8 (Trees, Binary Search Trees, Tree
-BFS -- Days 30-32) of the curriculum expansion.
+sorting -- Days 17-20), batch 8 (Trees, Binary Search Trees, Tree
+BFS -- Days 30-32), and batch 9 (Heaps, Top-K with a bounded heap --
+Days 33-34) of the curriculum expansion.
 
 Covers: the Learn hub lists all lessons grouped by topic in the correct
 topic-before-pattern order; a concept lesson page renders every section
@@ -54,8 +55,8 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all nineteen concept lessons (pilot + batches 1-8)", cards.count() == 19)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting, trees)",
+        check("Learn hub lists all twenty-one concept lessons (pilot + batches 1-9)", cards.count() == 21)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting, trees, heaps)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
@@ -67,7 +68,8 @@ def main():
               and page.locator("h3", has_text="recursion").count() > 0
               and page.locator("h3", has_text="binary search").count() > 0
               and page.locator("h3", has_text="sorting").count() > 0
-              and page.locator("h3", has_text="trees").count() > 0)
+              and page.locator("h3", has_text="trees").count() > 0
+              and page.locator("h3", has_text="heaps").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -587,6 +589,64 @@ def main():
               page.locator("a.callout", has_text="Learn: Trees").count() > 0
               and page.locator("a.callout", has_text="Learn: Binary search trees").count() > 0
               and page.locator("a.callout", has_text="Learn: Tree BFS").count() > 0)
+
+        # ---- batch 9: heaps lesson (sift-up via HeapView, no new adapter needed) --
+        page.goto(f"{BASE}/#/learn/heaps", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Heaps')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("heaps walkthrough renders via HeapView's heap-node shape, not the array/pointer or tree view",
+              walkthrough.locator(".heap-node").count() > 0 and walkthrough.locator(".seq-boxes").count() == 0)
+        check("heaps walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(4):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("fifth frame's caption confirms sift-up needed a second swap",
+              "sift up continues" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        for _ in range(2):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        final_values = page.locator(".concept-walkthrough .heap-node").all_inner_texts()
+        check("final frame's heap holds [3, 5, 8] after popping the minimum (1)",
+              final_values == ["3", "5", "8"])
+        reveal_btns = page.get_by_role("button", name="Reveal answer")
+        check("heaps has reveal-style checkpoints", reveal_btns.count() > 0)
+        reveal_btns.first.click()
+        page.wait_for_timeout(150)
+        check("revealed checkpoint explanation renders",
+              page.locator(".checkpoint-explanation").first.inner_text().strip() != "")
+
+        # ---- batch 9: top-k-heap lesson (bounded-heap eviction) -----------------
+        page.goto(f"{BASE}/#/learn/top-k-heap", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Top-K')", timeout=10000)
+        check("top-k-heap prerequisite links to Heaps",
+              page.get_by_role("link", name="Heaps: priority queues").count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("top-k-heap walkthrough renders via HeapView", walkthrough.locator(".heap-node").count() > 0)
+        check("top-k-heap walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(6):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("final frame's caption confirms the 3 largest values found",
+              "9, 7, 4" in page.locator(".concept-walkthrough-caption").inner_text())
+        checkpoint_choice = page.get_by_role("button", name=re.compile("A MIN-heap bounded to size 5"))
+        check("top-k-heap has a choose_pattern checkpoint about a bounded min-heap",
+              checkpoint_choice.count() > 0)
+        checkpoint_choice.click()
+        page.wait_for_timeout(150)
+        check("correct choice gets positive feedback styling",
+              "checkpoint-correct" in (checkpoint_choice.get_attribute("class") or ""))
+
+        # ---- integration: days 33-34 both link to both heap lessons ------------
+        page.goto(f"{BASE}/#/lessons/33", wait_until="networkidle")
+        page.wait_for_selector("text=Day 33", timeout=10000)
+        check("day-33 lesson page shows callouts for both heap lessons",
+              page.locator("a.callout", has_text="Learn: Heaps").count() > 0
+              and page.locator("a.callout", has_text="Learn: Top-K").count() > 0)
+        page.goto(f"{BASE}/#/lessons/34", wait_until="networkidle")
+        page.wait_for_selector("text=Day 34", timeout=10000)
+        check("day-34 lesson page shows callouts for both heap lessons",
+              page.locator("a.callout", has_text="Learn: Heaps").count() > 0
+              and page.locator("a.callout", has_text="Learn: Top-K").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 

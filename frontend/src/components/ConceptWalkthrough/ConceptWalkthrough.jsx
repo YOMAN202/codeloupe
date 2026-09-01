@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrayPointerView, LinkedListView, TreeView } from "../Visualizers/Visualizers";
+import { ArrayPointerView, LinkedListView, TreeView, HeapView } from "../Visualizers/Visualizers";
 
 // A teaching walkthrough steps through a hand-authored, VERIFIED-BY-HAND
 // sequence of {caption, locals} frames (see backend/db/seed_concepts.py) --
@@ -75,6 +75,13 @@ export default function ConceptWalkthrough({ frames, topic, pattern }) {
   const frame = frames[index];
   const isLinkedList = topic === "linked-lists" && frame.locals && Array.isArray(frame.locals.nodes);
   const isTree = topic === "trees" && frame.locals && Array.isArray(frame.locals.nodes);
+  // HeapView (unlike LinkedListView/TreeView) takes locals directly -- no
+  // Map/graph adapter needed. It scans locals for any numeric-list-shaped
+  // value and renders it as a heap-tree via plain 2i+1/2i+2 index math, so
+  // heap lessons just author frames.locals = {heap: [...]} the same way
+  // any array lesson authors {arr: [...]}, and this only needs to pick the
+  // right renderer for topic === 'heaps'.
+  const isHeap = topic === "heaps";
 
   return (
     <div className="concept-walkthrough">
@@ -110,6 +117,8 @@ export default function ConceptWalkthrough({ frames, topic, pattern }) {
         <LinkedListView graph={buildLinkedListGraph(frame.locals)} />
       ) : isTree ? (
         <TreeView graph={buildTreeGraph(frame.locals)} />
+      ) : isHeap ? (
+        <HeapView locals={frame.locals} />
       ) : (
         <ArrayPointerView locals={frame.locals} topic={topic} pattern={pattern} />
       )}
