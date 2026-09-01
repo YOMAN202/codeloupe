@@ -4,9 +4,9 @@ see backend/db/seed_concepts.py and docs/decisions.md "Teaching system
 content architecture"). Covers the original Arrays + Two Pointers pilot
 plus batch 1 (Prefix Sums, Strings, Hashing -- Days 9-12), batch 2
 (Sliding Window -- Days 15-16), batch 3 (Linked Lists, Fast/Slow
-Pointers -- Days 25-27), batch 4 (Stacks, Queues -- Days 28-29), and
-batch 5 (Recursion, Backtracking -- Days 23-24) of the curriculum
-expansion.
+Pointers -- Days 25-27), batch 4 (Stacks, Queues -- Days 28-29), batch 5
+(Recursion, Backtracking -- Days 23-24), and batch 6 (Binary Search,
+Binary Search Variants -- Days 21-22) of the curriculum expansion.
 
 Covers: the Learn hub lists all lessons grouped by topic in the correct
 topic-before-pattern order; a concept lesson page renders every section
@@ -52,8 +52,8 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all twelve concept lessons (pilot + batches 1-5)", cards.count() == 12)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion)",
+        check("Learn hub lists all fourteen concept lessons (pilot + batches 1-6)", cards.count() == 14)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
@@ -62,7 +62,8 @@ def main():
               and page.locator("h3", has_text="linked lists").count() > 0
               and page.locator("h3", has_text="stacks").count() > 0
               and page.locator("h3", has_text="queues").count() > 0
-              and page.locator("h3", has_text="recursion").count() > 0)
+              and page.locator("h3", has_text="recursion").count() > 0
+              and page.locator("h3", has_text="binary search").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -390,6 +391,61 @@ def main():
         check("day-24 lesson page shows callouts for both Recursion and Backtracking",
               page.locator("a.callout", has_text="Learn: Recursion").count() > 0
               and page.locator("a.callout", has_text="Learn: Backtracking").count() > 0)
+
+        # ---- batch 6: binary-search lesson (lo/hi/mid closing in on a target) --
+        page.goto(f"{BASE}/#/learn/binary-search", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Binary search')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("binary-search walkthrough renders via the plain array/pointer view",
+              walkthrough.locator(".seq-boxes").count() > 0)
+        check("binary-search walkthrough starts at step 1 of 6", "step 1 / 6" in walkthrough.inner_text())
+        for _ in range(5):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        check("final frame's caption confirms the target was found",
+              "found" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        reveal_btns = page.get_by_role("button", name="Reveal answer")
+        check("binary-search has reveal-style checkpoints", reveal_btns.count() > 0)
+        reveal_btns.first.click()
+        page.wait_for_timeout(150)
+        check("revealed checkpoint explanation renders",
+              page.locator(".checkpoint-explanation").first.inner_text().strip() != "")
+
+        # ---- batch 6: binary-search-variants lesson (rotated-array search) -----
+        page.goto(f"{BASE}/#/learn/binary-search-variants", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Binary search variants')", timeout=10000)
+        check("binary-search-variants prerequisite links to Binary search",
+              page.get_by_role("link", name="Binary search").count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("binary-search-variants walkthrough renders (rotated-array search)", walkthrough.count() > 0)
+        check("binary-search-variants walkthrough starts at step 1 of 6", "step 1 / 6" in walkthrough.inner_text())
+        page.get_by_role("button", name=re.compile("Next")).click()
+        page.wait_for_timeout(120)
+        check("second frame's caption identifies which half of the rotated array is sorted",
+              "sorted" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        for _ in range(4):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        check("final frame's caption confirms the target was found",
+              "found" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        checkpoint_choice = page.get_by_role("button", name=re.compile("Binary search over candidate speeds"))
+        check("binary-search-variants has a choose_pattern checkpoint about searching an answer space",
+              checkpoint_choice.count() > 0)
+        checkpoint_choice.click()
+        page.wait_for_timeout(150)
+        check("correct choice gets positive feedback styling",
+              "checkpoint-correct" in (checkpoint_choice.get_attribute("class") or ""))
+
+        # ---- integration: day-21/22 link to their respective lessons ----------
+        page.goto(f"{BASE}/#/lessons/21", wait_until="networkidle")
+        page.wait_for_selector("text=Day 21", timeout=10000)
+        check("day-21 lesson page shows a 'Learn: Binary search' callout",
+              page.locator("a.callout", has_text="Learn: Binary search").count() > 0)
+        page.goto(f"{BASE}/#/lessons/22", wait_until="networkidle")
+        page.wait_for_selector("text=Day 22", timeout=10000)
+        check("day-22 lesson page shows callouts for both Binary search and Binary search variants",
+              page.locator("a.callout", has_text="Learn: Binary search").count() > 0
+              and page.locator("a.callout", has_text="Learn: Binary search variants").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 

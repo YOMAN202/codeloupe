@@ -1123,6 +1123,207 @@ CONCEPT_LESSONS = [
             "one frame per element currently included in the partial solution, not one frame per final answer."
         ),
     ),
+    # ---- Batch 6: item 8 of the curriculum-ordered expansion -- binary
+    # search (Days 21-22). topic="binary-search" is already a narrow,
+    # dedicated topic (not shared with another topic the way "arrays" is
+    # shared with Prefix Sums), so both lessons below deliberately leave
+    # pattern_family=None -- exactly mirroring the pilot's own
+    # topic="two-pointer" / pattern_family=None choice for the Two Pointers
+    # lesson -- and both naturally pick up all 7 curated binary-search
+    # problems via the plain topic match, with no narrowing needed. See
+    # docs/decisions.md "Teaching system expansion: batch 6".
+    dict(
+        slug="binary-search",
+        kind="topic",
+        topic="binary-search",
+        pattern_family=None,
+        title="Binary search",
+        display_order=1,
+        estimated_minutes=16,
+        summary="Cut the search space in half every step instead of scanning linearly -- O(log n) instead of "
+                "O(n), and the single most common sub-routine hiding inside harder problems.",
+        prerequisite_slugs="arrays",
+        what_markdown=(
+            "Binary search finds a target in a **sorted** sequence by repeatedly checking the middle element "
+            "and discarding the half that can't contain the answer. Keep two boundaries, `lo` and `hi`, "
+            "spanning the range still worth checking; each step looks at `mid = (lo + hi) // 2`, compares "
+            "`arr[mid]` to the target, and moves whichever boundary rules out the half that's now known to be "
+            "wrong. The range shrinks by half every step, so it's gone in `O(log n)` steps."
+        ),
+        why_markdown=(
+            "A linear scan checks every element -- `O(n)` -- because it has no way to rule anything out "
+            "without looking at it. Sortedness is what makes ruling things out possible without looking: if "
+            "`arr[mid]` is less than the target, EVERY element at or before `mid` is also too small (the "
+            "array is sorted), so the entire left half can be discarded in one comparison. That's the whole "
+            "trick -- one comparison eliminates half the remaining space, not just one element."
+        ),
+        recognize_markdown=(
+            "The direct case: a sorted array and a target value to locate (or the nearest valid insertion "
+            "point). The less obvious case, which shows up constantly in harder problems: any time you can "
+            "phrase a question as \"what is the smallest/largest value for which some yes/no condition first "
+            "becomes true (or stops being true)\", where that condition is **monotonic** -- true for every "
+            "value on one side of a threshold, false on the other -- you can binary search over that value "
+            "directly, even if it was never in an array to begin with. Sortedness is really just the simplest "
+            "case of monotonicity."
+        ),
+        intuition_markdown=(
+            "Keep the invariant \"the answer, if it exists, is somewhere in `arr[lo..hi]`\" true at every "
+            "step. `while lo <= hi` (a closed interval -- `lo == hi` is still one element worth checking): "
+            "compute `mid`, compare `arr[mid]` to the target, and move `lo` to `mid + 1` or `hi` to `mid - 1` "
+            "-- never to `mid` itself, since `mid` has already been checked and ruled out. Getting that `+1` / "
+            "`-1` right is what keeps the loop making progress every step instead of stalling."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `binary_search([1, 3, 5, 7, 9, 11], 7)` -- watch how `lo` and `hi` close in on index 3 in "
+            "three comparisons, instead of scanning up to six elements one at a time."
+        ),
+        walkthrough_code=(
+            "def binary_search(arr, target):\n"
+            "    lo, hi = 0, len(arr) - 1\n"
+            "    while lo <= hi:\n"
+            "        mid = (lo + hi) // 2\n"
+            "        if arr[mid] == target:\n"
+            "            return mid\n"
+            "        elif arr[mid] < target:\n"
+            "            lo = mid + 1\n"
+            "        else:\n"
+            "            hi = mid - 1\n"
+            "    return -1"
+        ),
+        walkthrough_frames=[
+            dict(caption="Search for target=7 in [1, 3, 5, 7, 9, 11]. lo=0, hi=5 -- the whole array is still in play.",
+                 locals={"arr": [1, 3, 5, 7, 9, 11], "lo": 0, "hi": 5}),
+            dict(caption="mid=(0+5)//2=2. arr[2]=5 is less than target 7, so 7 (if present) must be to the right of mid. Move lo to mid+1=3.",
+                 locals={"arr": [1, 3, 5, 7, 9, 11], "lo": 0, "hi": 5, "mid": 2}),
+            dict(caption="lo is now 3. Range shrunk to arr[3..5] = [7, 9, 11].",
+                 locals={"arr": [1, 3, 5, 7, 9, 11], "lo": 3, "hi": 5}),
+            dict(caption="mid=(3+5)//2=4. arr[4]=9 is greater than target 7, so 7 must be to the left of mid. Move hi to mid-1=3.",
+                 locals={"arr": [1, 3, 5, 7, 9, 11], "lo": 3, "hi": 5, "mid": 4}),
+            dict(caption="hi is now 3. Range shrunk to just arr[3..3] = [7] -- one element left.",
+                 locals={"arr": [1, 3, 5, 7, 9, 11], "lo": 3, "hi": 3}),
+            dict(caption="mid=(3+3)//2=3. arr[3]=7 equals the target -- found at index 3. Return immediately.",
+                 locals={"arr": [1, 3, 5, 7, 9, 11], "lo": 3, "hi": 3, "mid": 3}),
+        ],
+        common_mistakes_markdown=(
+            "Moving a boundary TO `mid` instead of past it (`lo = mid` instead of `lo = mid + 1`) -- when "
+            "`hi == lo + 1`, integer division rounds `mid` down to `lo`, so `lo = mid` leaves `lo` completely "
+            "unchanged and the loop never makes progress (an infinite loop, not a wrong answer -- often the "
+            "more confusing failure mode to debug). Using `while lo < hi` when the logic actually needs the "
+            "closed-interval `lo <= hi` (or vice versa) -- the two conventions require different boundary "
+            "updates and mixing them is the single most common source of off-by-one bugs here. And assuming "
+            "the input is sorted without checking -- binary search on unsorted data doesn't error, it just "
+            "silently returns a wrong answer, since the half-elimination logic quietly assumes sortedness."
+        ),
+        complexity_markdown=(
+            "`O(log n)` time -- the search range is cut in half every step, so it takes about `log2(n)` steps "
+            "to shrink from `n` elements down to one. `O(1)` extra space for the iterative version shown here "
+            "(just `lo`, `hi`, `mid`); a recursive version would be `O(log n)` space for the call stack."
+        ),
+    ),
+    dict(
+        slug="binary-search-variants",
+        kind="pattern",
+        topic="binary-search",
+        pattern_family=None,
+        title="Binary search variants",
+        display_order=2,
+        estimated_minutes=18,
+        summary="The textbook version rarely shows up as-is in interviews -- searching a rotated array and "
+                "binary-searching a monotonic answer space (not an array at all) are the two variants worth "
+                "knowing cold.",
+        prerequisite_slugs="binary-search",
+        what_markdown=(
+            "Two variant shapes cover most real interview binary-search questions. **Searching a rotated "
+            "sorted array**: the array was sorted, then rotated at some unknown pivot (e.g. `[4, 5, 6, 7, 0, "
+            "1, 2]`), so it's no longer sorted end-to-end -- but at every `mid`, one of the two halves around "
+            "it IS still fully sorted, and checking which one (and whether the target falls inside that "
+            "sorted half's range) is enough to decide which way to go. **Binary search on the answer space**: "
+            "there's no array at all -- just a range of candidate answers and a yes/no check function that's "
+            "monotonic over that range, and you binary search directly over the candidate VALUES instead of "
+            "array indices."
+        ),
+        why_markdown=(
+            "Interviewers rarely hand you the textbook \"find x in a sorted array\" problem directly -- it's "
+            "too mechanical to reveal whether you understand WHY binary search works, only whether you "
+            "memorized it. Both variants here test the deeper idea (a monotonic property lets you eliminate "
+            "half the space with one check) in a shape where the array is no longer sorted, or isn't an array "
+            "at all."
+        ),
+        recognize_markdown=(
+            "Rotated-array shape: the problem says a sorted array was \"rotated\" and asks you to search or "
+            "find its minimum -- the array LOOKS unsorted overall but still has exploitable local structure. "
+            "Answer-space shape: the problem asks for a minimum/maximum value satisfying some condition (\"the "
+            "minimum speed such that...\", \"the smallest capacity such that...\"), and increasing the "
+            "candidate value only ever makes the condition easier (or only ever harder) to satisfy -- never "
+            "flips back and forth. That monotonic \"only easier / only harder as the candidate grows\" "
+            "property is the real tell, not the presence of an array."
+        ),
+        intuition_markdown=(
+            "Rotated array: at `mid`, compare `arr[lo]` to `arr[mid]`. If `arr[lo] <= arr[mid]`, the LEFT half "
+            "(`lo..mid`) is the sorted one; otherwise the RIGHT half (`mid..hi`) is. Once you know which half "
+            "is sorted, a normal range check (`is the target between its two ends?`) tells you whether the "
+            "target could be in that sorted half -- if so, search there; if not, it must be in the other "
+            "(unsorted-looking, but still valid) half. Answer space: write a helper `works(candidate) -> "
+            "bool` that's monotonic over the candidate range, then binary search over the candidates "
+            "themselves exactly like the classic version -- `lo`/`hi`/`mid` now hold candidate VALUES instead "
+            "of array indices, and `works(mid)` replaces the `arr[mid]` comparison."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `search_rotated([4, 5, 6, 7, 0, 1, 2], 0)` -- the array was `[0, 1, 2, 4, 5, 6, 7]` before "
+            "being rotated. Watch which half gets identified as sorted at each step."
+        ),
+        walkthrough_code=(
+            "def search_rotated(arr, target):\n"
+            "    lo, hi = 0, len(arr) - 1\n"
+            "    while lo <= hi:\n"
+            "        mid = (lo + hi) // 2\n"
+            "        if arr[mid] == target:\n"
+            "            return mid\n"
+            "        if arr[lo] <= arr[mid]:        # left half is sorted\n"
+            "            if arr[lo] <= target < arr[mid]:\n"
+            "                hi = mid - 1\n"
+            "            else:\n"
+            "                lo = mid + 1\n"
+            "        else:                           # right half is sorted\n"
+            "            if arr[mid] < target <= arr[hi]:\n"
+            "                lo = mid + 1\n"
+            "            else:\n"
+            "                hi = mid - 1\n"
+            "    return -1"
+        ),
+        walkthrough_frames=[
+            dict(caption="Search for target=0 in [4, 5, 6, 7, 0, 1, 2]. lo=0, hi=6.",
+                 locals={"arr": [4, 5, 6, 7, 0, 1, 2], "lo": 0, "hi": 6}),
+            dict(caption="mid=3. arr[3]=7. arr[lo]=4 <= arr[mid]=7, so the LEFT half (indices 0-3, values 4-7) is the sorted one. Is target 0 inside [4, 7)? No. So the target must be in the other half: lo = mid+1 = 4.",
+                 locals={"arr": [4, 5, 6, 7, 0, 1, 2], "lo": 0, "hi": 6, "mid": 3}),
+            dict(caption="lo is now 4. Range shrunk to arr[4..6] = [0, 1, 2].",
+                 locals={"arr": [4, 5, 6, 7, 0, 1, 2], "lo": 4, "hi": 6}),
+            dict(caption="mid=5. arr[5]=1. arr[lo]=arr[4]=0 <= arr[mid]=1, so the LEFT half (indices 4-5, values 0-1) is sorted. Is target 0 inside [0, 1)? Yes. Search there: hi = mid-1 = 4.",
+                 locals={"arr": [4, 5, 6, 7, 0, 1, 2], "lo": 4, "hi": 6, "mid": 5}),
+            dict(caption="hi is now 4. Range shrunk to just arr[4..4] = [0] -- one element left.",
+                 locals={"arr": [4, 5, 6, 7, 0, 1, 2], "lo": 4, "hi": 4}),
+            dict(caption="mid=4. arr[4]=0 equals the target -- found at index 4. Return immediately.",
+                 locals={"arr": [4, 5, 6, 7, 0, 1, 2], "lo": 4, "hi": 4, "mid": 4}),
+        ],
+        common_mistakes_markdown=(
+            "Rotated array: checking `arr[lo] < arr[mid]` (strict) instead of `arr[lo] <= arr[mid]` -- when "
+            "the searched range has shrunk to exactly one element, `lo == mid`, and the strict version wrongly "
+            "concludes \"neither half is sorted\" instead of correctly treating a single element as trivially "
+            "sorted. Also using strict `<` in the target-range check (`arr[lo] < target < arr[mid]`) instead "
+            "of `arr[lo] <= target < arr[mid]` -- misses the case where the target IS `arr[lo]` itself, "
+            "routing it into the wrong half and losing it. Answer space: forgetting that `works()` needs to "
+            "be genuinely monotonic over the WHOLE candidate range -- binary search silently gives a wrong "
+            "answer (not an error) if the yes/no condition flips back and forth instead of crossing exactly "
+            "one threshold."
+        ),
+        complexity_markdown=(
+            "Rotated-array search stays `O(log n)` -- still one comparison eliminating half the range each "
+            "step, just with an extra check first to figure out which half is sorted. Answer-space search is "
+            "`O(log R)` steps, where `R` is the size of the candidate range, but each step also calls "
+            "`works(candidate)` -- if that check itself costs `O(n)`, the total is `O(n log R)`, not `O(log "
+            "R)` alone."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -1663,6 +1864,105 @@ CONCEPT_CHECKPOINTS = {
                                    "actually LISTS all of them must take at least that long -- the answer "
                                    "itself is that size, regardless of how the search is implemented."),
     ],
+    "binary-search": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Binary search needs the data (or the answer space) to have which property "
+                              "before you can use it?",
+             code=None,
+             choices_json=[
+                 "Sorted, or otherwise monotonic, order",
+                 "All unique values",
+                 "A power-of-two length",
+                 "Already stored as a linked list",
+             ],
+             correct_answer="Sorted, or otherwise monotonic, order",
+             explanation_markdown="Each step eliminates half the remaining space based on ONE comparison at "
+                                   "mid. That's only valid if you can be sure the discarded half genuinely "
+                                   "can't contain the answer -- which requires sorted (or monotonic) order."),
+        dict(kind="spot_bug",
+             prompt_markdown="This binary search on [1, 2] for target=2 never terminates. What's the bug?",
+             code="def binary_search(arr, target):\n"
+                  "    lo, hi = 0, len(arr) - 1\n"
+                  "    while lo <= hi:\n"
+                  "        mid = (lo + hi) // 2\n"
+                  "        if arr[mid] < target:\n"
+                  "            lo = mid\n"
+                  "        elif arr[mid] > target:\n"
+                  "            hi = mid - 1\n"
+                  "        else:\n"
+                  "            return mid\n"
+                  "    return -1",
+             choices_json=None,
+             correct_answer="lo = mid should be lo = mid + 1. When hi == lo + 1, integer division rounds mid "
+                             "down to lo -- so lo = mid leaves lo completely unchanged, and the loop never "
+                             "makes progress.",
+             explanation_markdown="Moving a boundary TO mid (instead of past it) is the classic way to write "
+                                   "an infinite loop rather than a wrong answer -- often more confusing to "
+                                   "debug, since nothing crashes."),
+        dict(kind="complexity",
+             prompt_markdown="Binary searching a sorted array of n elements takes how much time?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(log n)",
+             explanation_markdown="The remaining search range is cut in half every step, so it takes about "
+                                   "log2(n) steps to shrink from n elements down to one."),
+    ],
+    "binary-search-variants": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need the minimum integer speed k such that Koko can eat all the piles "
+                              "within h hours -- eating faster always finishes in the same or fewer hours, "
+                              "never more. What's the right approach?",
+             code=None,
+             choices_json=[
+                 "Binary search over candidate speeds k, using a hours-needed(k) check as the monotonic "
+                 "predicate",
+                 "Try every possible k starting from 1 upward",
+                 "Sort the piles and take the median pile size",
+                 "Two pointers over the pile sizes",
+             ],
+             correct_answer="Binary search over candidate speeds k, using a hours-needed(k) check as the "
+                             "monotonic predicate",
+             explanation_markdown="k is never an array index -- it's a candidate VALUE. \"Can Koko finish "
+                                   "within h hours at speed k\" is a monotonic yes/no condition over k (true "
+                                   "for every k above some threshold, false below), which is exactly what "
+                                   "binary search needs -- no array required, just a monotonic predicate."),
+        dict(kind="spot_bug",
+             prompt_markdown="This rotated-array search sometimes fails to find a target that equals "
+                              "arr[lo] itself, even though it's clearly in the array. What's the bug?",
+             code="def search_rotated(arr, target):\n"
+                  "    lo, hi = 0, len(arr) - 1\n"
+                  "    while lo <= hi:\n"
+                  "        mid = (lo + hi) // 2\n"
+                  "        if arr[mid] == target:\n"
+                  "            return mid\n"
+                  "        if arr[lo] <= arr[mid]:\n"
+                  "            if arr[lo] < target < arr[mid]:\n"
+                  "                hi = mid - 1\n"
+                  "            else:\n"
+                  "                lo = mid + 1\n"
+                  "        else:\n"
+                  "            if arr[mid] < target <= arr[hi]:\n"
+                  "                lo = mid + 1\n"
+                  "            else:\n"
+                  "                hi = mid - 1\n"
+                  "    return -1",
+             choices_json=None,
+             correct_answer="arr[lo] < target < arr[mid] should be arr[lo] <= target < arr[mid]. With strict "
+                             "<, a target equal to arr[lo] itself gets routed to the wrong half (lo = mid + "
+                             "1), permanently discarding the very index where it lives, since arr[mid] was "
+                             "already checked and ruled out.",
+             explanation_markdown="Boundary inclusivity matters here exactly like the classic version's "
+                                   "lo/hi updates -- the sorted-half range check has to include the endpoint "
+                                   "you're actually standing on."),
+        dict(kind="complexity",
+             prompt_markdown="Binary searching over a numeric answer space of size R, where checking one "
+                              "candidate costs O(n), takes how much total time?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n log R)",
+             explanation_markdown="Each of the O(log R) binary-search steps over the candidate range calls "
+                                   "the O(n) predicate check once -- the two costs multiply, not add."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -1922,5 +2222,56 @@ CONCEPT_PRACTICE_EXERCISES = {
              hint_markdown="Unlike subsets' include/exclude (2 choices per position), here each position has "
                             "as many choices as its digit has letters (3 or 4) -- loop over them, choosing "
                             "and un-choosing each one before moving to the next position."),
+    ],
+    "binary-search": [
+        dict(prompt_markdown="Write `find_first_occurrence(arr, target)` that returns the index of the "
+                              "FIRST occurrence of target in a sorted array that may contain duplicates, or "
+                              "-1 if it's not present -- e.g. `find_first_occurrence([1,2,2,2,3,4,5], 2)` "
+                              "returns `1`.",
+             starter_code="def find_first_occurrence(arr, target):\n    lo, hi = 0, len(arr) - 1\n"
+                          "    result = -1\n    # when you find target, don't stop -- record it and keep\n"
+                          "    # searching the LEFT half for an even earlier occurrence\n    pass",
+             solution_code=(
+                 "def find_first_occurrence(arr, target):\n"
+                 "    lo, hi = 0, len(arr) - 1\n"
+                 "    result = -1\n"
+                 "    while lo <= hi:\n"
+                 "        mid = (lo + hi) // 2\n"
+                 "        if arr[mid] == target:\n"
+                 "            result = mid\n"
+                 "            hi = mid - 1   # keep searching left for an earlier one\n"
+                 "        elif arr[mid] < target:\n"
+                 "            lo = mid + 1\n"
+                 "        else:\n"
+                 "            hi = mid - 1\n"
+                 "    return result"
+             ),
+             hint_markdown="A normal binary search returns the instant it finds target. Here, finding it "
+                            "isn't the end -- record the index, then keep narrowing toward the LEFT (hi = "
+                            "mid - 1) in case an even earlier occurrence exists."),
+    ],
+    "binary-search-variants": [
+        dict(prompt_markdown="Write `find_rotation_point(arr)` that returns the index of the minimum "
+                              "element in a rotated sorted array with no duplicates -- e.g. "
+                              "`find_rotation_point([4,5,6,7,0,1,2])` returns `4` (the array was originally "
+                              "sorted, then rotated so it starts at index 4).",
+             starter_code="def find_rotation_point(arr):\n    lo, hi = 0, len(arr) - 1\n"
+                          "    # compare arr[mid] to arr[hi] to decide which half the minimum is in\n"
+                          "    pass",
+             solution_code=(
+                 "def find_rotation_point(arr):\n"
+                 "    lo, hi = 0, len(arr) - 1\n"
+                 "    while lo < hi:\n"
+                 "        mid = (lo + hi) // 2\n"
+                 "        if arr[mid] > arr[hi]:\n"
+                 "            lo = mid + 1   # minimum is to the right of mid\n"
+                 "        else:\n"
+                 "            hi = mid       # minimum is at mid or to its left\n"
+                 "    return lo"
+             ),
+             hint_markdown="Compare arr[mid] against arr[hi], not arr[lo] -- if arr[mid] > arr[hi], the "
+                            "rotation point (and the minimum) must be somewhere to the right of mid; "
+                            "otherwise mid itself could BE the minimum, so hi shrinks down to mid, not past "
+                            "it."),
     ],
 }
