@@ -9,6 +9,7 @@ frontend/dist/
 .env.local
 .DS_Store
 *.log
+.codeloupe-run/
 
 # editor/OS cruft
 .vscode/

@@ -2,27 +2,31 @@
 REM Codeloupe launcher (Windows).
 REM
 REM Double-click this. It checks your setup is in place, starts the
-REM backend and frontend each in their own MINIMIZED window (so they're
-REM out of your way in the taskbar, not full windows on your screen),
-REM waits until the frontend is actually responding to HTTP requests
-REM (not a fixed timer), then opens http://localhost:5173/ automatically.
-REM This window closes itself when that's done; the backend/frontend
-REM windows keep running until you run stop.bat.
+REM backend and frontend completely invisibly (no window at all, not
+REM even minimized), waits until the frontend is actually responding to
+REM HTTP requests (not a fixed timer), then opens http://localhost:5173/
+REM automatically and closes itself. The backend/frontend keep running
+REM in the background until you run stop.bat -- since there's no window
+REM for either of them, that's the only way to stop them.
 REM
 REM This is a convenience on top of the manual steps in README.md -- it
 REM does NOT run "pip install" or "npm install" for you. Do that
 REM one-time setup first; after that, this script (and stop.bat) is all
 REM you need for every subsequent start.
 REM
-REM Deliberately plain batch, no PowerShell/hidden-process tricks: this
-REM replaced an earlier version that used those, which turned out to
-REM fail silently on some real Windows setups. This is simpler and uses
-REM only well-worn Windows batch primitives (start /min, curl, taskkill
-REM by window title), which is worth the trade-off of "minimized" over
-REM "fully invisible" windows.
+REM Plain batch plus one small VBScript helper (scripts\run-hidden.vbs)
+REM for the invisible part -- Windows Script Host's WshShell.Exec is the
+REM standard, decades-old way to run a console command with no window,
+REM built into Windows already. No PowerShell involved: an earlier
+REM version of this launcher used PowerShell for the same job and failed
+REM silently on a real machine, which is why it isn't used here. Backend
+REM and frontend output goes to .codeloupe-run\*.log, since there's no
+REM window left to read it from directly if something goes wrong.
 
 setlocal
 set "ROOT=%~dp0"
+set "RUNDIR=%ROOT%.codeloupe-run"
+if not exist "%RUNDIR%" mkdir "%RUNDIR%"
 title Codeloupe Launcher
 
 where python >nul 2>nul
@@ -48,6 +52,15 @@ if errorlevel 1 (
     echo Windows 10/11 by default, so this is unusual -- if you're on an
     echo older or customized Windows install without it, install curl
     echo and try again.
+    pause
+    exit /b 1
+)
+
+where wscript >nul 2>nul
+if errorlevel 1 (
+    echo [Codeloupe] "wscript" was not found on PATH. It's part of
+    echo Windows Script Host, which ships with Windows 10/11 by default --
+    echo if it's been disabled on this PC, re-enable it and try again.
     pause
     exit /b 1
 )
@@ -87,33 +100,28 @@ if not exist "%ROOT%backend\db\traceviz.db" (
 )
 
 REM Start the backend, unless it's already up from a previous start.bat
-REM run. This is deliberately the exact "cd /d ... && python app.py"
-REM invocation used manually (and in the very first version of this
-REM launcher) -- same command, just handed to "start /min" instead of
-REM typed at a prompt, so there's nothing new here to behave
-REM differently. Uses /k (not /c): if python crashes right away, /k
-REM leaves the window open with the error still on screen instead of
-REM vanishing before anyone can read it -- open the minimized "Codeloupe
-REM Backend" window from the taskbar to see it.
+REM run. Runs completely invisibly via scripts\run-hidden.vbs; its PID
+REM is written to backend.pid (for stop.bat) and its output goes to
+REM backend.log (since there's no window to read it from directly).
 curl -f -s -o nul -m 2 http://127.0.0.1:5001/api/health
 if errorlevel 1 (
     echo [Codeloupe] Starting backend...
-    start "Codeloupe Backend" /min cmd /k "cd /d "%ROOT%backend" && python app.py"
+    wscript.exe //nologo "%ROOT%scripts\run-hidden.vbs" "%ROOT%backend" "python app.py" "%RUNDIR%\backend.log" "%RUNDIR%\backend.pid"
 ) else (
     echo [Codeloupe] Backend already running.
 )
 
-REM Start the frontend, unless it's already up. --strictPort makes Vite
-REM fail loudly instead of silently moving to 5174+ if 5173 is taken by
-REM something else, so a real port conflict shows up as a clear error
-REM in the "Codeloupe Frontend" window rather than a confusing mismatch.
-REM Polling "localhost" here (not 127.0.0.1) is deliberate: Vite listens
-REM on [::1] (IPv6 localhost) by default, which "localhost" resolves to
-REM on Windows but the literal 127.0.0.1 never matches.
+REM Start the frontend the same way, unless it's already up. --strictPort
+REM makes Vite fail loudly instead of silently moving to 5174+ if 5173 is
+REM taken by something else, so a real port conflict shows up clearly in
+REM frontend.log rather than a confusing mismatch. Polling "localhost"
+REM here (not 127.0.0.1) is deliberate: Vite listens on [::1] (IPv6
+REM localhost) by default, which "localhost" resolves to on Windows but
+REM the literal 127.0.0.1 never matches.
 curl -f -s -o nul -m 2 http://localhost:5173/
 if errorlevel 1 (
     echo [Codeloupe] Starting frontend...
-    start "Codeloupe Frontend" /min cmd /k "cd /d "%ROOT%frontend" && npm run dev -- --port 5173 --strictPort"
+    wscript.exe //nologo "%ROOT%scripts\run-hidden.vbs" "%ROOT%frontend" "npm run dev -- --port 5173 --strictPort" "%RUNDIR%\frontend.log" "%RUNDIR%\frontend.pid"
 ) else (
     echo [Codeloupe] Frontend already running.
 )
@@ -131,9 +139,8 @@ goto waitbackend
 :backendfailed
 echo.
 echo [Codeloupe] The backend didn't respond within 30 seconds.
-echo If a "Codeloupe Backend" window is minimized in your taskbar, open
-echo it to see the actual error (for example, a port already in use by
-echo something else, or a missing dependency).
+echo Check .codeloupe-run\backend.log for the actual error (for example,
+echo a port already in use by something else, or a missing dependency).
 pause
 exit /b 1
 
@@ -153,9 +160,8 @@ goto waitfrontend
 :frontendfailed
 echo.
 echo [Codeloupe] The frontend didn't respond within 45 seconds.
-echo If a "Codeloupe Frontend" window is minimized in your taskbar, open
-echo it to see the actual error (for example, a port already in use by
-echo something else, or a dependency problem).
+echo Check .codeloupe-run\frontend.log for the actual error (for example,
+echo a port already in use by something else, or a dependency problem).
 pause
 exit /b 1
 
