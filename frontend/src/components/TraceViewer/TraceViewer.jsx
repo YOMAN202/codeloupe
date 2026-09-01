@@ -14,7 +14,7 @@ import { diffLocals } from "../../utils/compare";
 // too, as the guaranteed fallback for anything a specialized view doesn't
 // (or can't) cover -- see docs/decisions.md's "Phase 3" section.
 
-// Traceviz's core promise: this shows what YOUR code actually did, bugs
+// Codeloupe's core promise: this shows what YOUR code actually did, bugs
 // included -- not a canned animation of the correct algorithm. That means
 // staying useful across all 5 outcomes a submission can hit. See
 // backend/execution/tracer.py's module docstring for the full breakdown;
@@ -55,7 +55,7 @@ function TraceStatusBanner({ trace, onJumpToFailure, atFailure }) {
       {trace.status === "syntax_error" && trace.error && (
         <span className="trace-status-error-detail">
           <code>{trace.error.type}</code>: {trace.error.message}
-          {trace.error.line != null && <> (line {trace.error.line})</>} — fix this before Traceviz
+          {trace.error.line != null && <> (line {trace.error.line})</>} — fix this before Codeloupe
           can trace anything, since Python can't even parse the code yet.
         </span>
       )}
@@ -225,7 +225,7 @@ export default function TraceViewer({ trace, problem, focusEnd }) {
           onClick={() => setPredictMode((p) => !p)}
           title="Optional: guess what happens next before revealing it"
         >
-          &#128302; Predict mode {predictMode ? "on" : "off"}
+          Predict mode {predictMode ? "on" : "off"}
         </button>
       </div>
 
@@ -241,6 +241,8 @@ export default function TraceViewer({ trace, problem, focusEnd }) {
           setIndex(Number(e.target.value));
         }}
         className="trace-scrubber"
+        style={{ "--scrub-pct": `${steps.length > 1 ? (index / (steps.length - 1)) * 100 : 100}%` }}
+        aria-label={`Trace step ${index + 1} of ${steps.length}`}
       />
 
       <div className={`trace-step-info ${atFailure && trace.status === "runtime_error" ? "trace-step-failure" : ""}`}>

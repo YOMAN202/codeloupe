@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import CodeEditor from "../../components/Editor/CodeEditor";
 import TraceViewer from "../../components/TraceViewer/TraceViewer";
 import { DifficultyBadge, PriorityBadge, TierBadge } from "../../components/Badges/Badges";
-import MultilineText from "../../components/MultilineText/MultilineText";
+import MultilineText, { renderInlineCode } from "../../components/MultilineText/MultilineText";
 import { describeMismatch } from "../../utils/compare";
 import {
   fetchProblem,
@@ -21,7 +21,12 @@ import {
   updateMistake,
 } from "../../api/client";
 
-const TABS = ["Tests", "Hints", "Trace", "Complexity", "Approaches", "Playground", "History"];
+// Ordered to match the actual learning loop: write code -> run tests ->
+// (if something fails) trace it -> (if still stuck) hints -> the more
+// analytical/optional tabs after. Was previously Tests/Hints/Trace/... --
+// reordered so Trace sits directly next to Tests, since it's the natural
+// next step after seeing a failure, not something to reach past Hints for.
+const TABS = ["Tests", "Trace", "Hints", "Complexity", "Approaches", "Playground", "History"];
 
 // Mirrors logic/mistakes.py's MISTAKE_CATEGORIES exactly -- the backend is
 // the source of truth and rejects anything outside this list, so this
@@ -212,7 +217,7 @@ function ExplainThinking({ problem, plan, setPlan, open, setOpen, hasRun, comple
   return (
     <div className="explain-thinking">
       <button className="explain-thinking-toggle" onClick={() => setOpen((o) => !o)}>
-        {open ? "▾" : "▸"} &#127908; Explain your thinking (optional)
+        {open ? "▾" : "▸"} Explain your thinking (optional)
       </button>
       {open && (
         <>
@@ -253,7 +258,7 @@ function PatternPractice({ problem, open, setOpen, guess, setGuess, revealed, se
   return (
     <div className="pattern-practice">
       <button className="pattern-practice-toggle" onClick={() => setOpen((o) => !o)}>
-        {open ? "▾" : "▸"} 🧩 Pattern practice (optional) — what approach do you think applies?
+        {open ? "▾" : "▸"} Pattern practice (optional) — what approach do you think applies?
       </button>
       {open && (
         <>
@@ -282,7 +287,7 @@ function PatternPractice({ problem, open, setOpen, guess, setGuess, revealed, se
                 <strong>Actual pattern:</strong> {problem.pattern}
               </p>
               {problem.optimal_approach && (
-                <p className="muted small">{problem.optimal_approach}</p>
+                <p className="muted small">{renderInlineCode(problem.optimal_approach)}</p>
               )}
             </div>
           )}
@@ -897,13 +902,13 @@ export default function ProblemWorkspace() {
                   (rung) =>
                     hintsShown.includes(rung) && (
                       <p key={rung} className="hint-text">
-                        <strong>Hint {rung}:</strong> {codeHint?.[`static-${rung}`]}
+                        <strong>Hint {rung}:</strong> {renderInlineCode(codeHint?.[`static-${rung}`])}
                       </p>
                     )
                 )}
                 {codeHint?.fromCode && (
                   <p className="hint-text">
-                    <strong>About your code:</strong> {codeHint.fromCode}
+                    <strong>About your code:</strong> {renderInlineCode(codeHint.fromCode)}
                   </p>
                 )}
                 <hr />
@@ -918,10 +923,10 @@ export default function ProblemWorkspace() {
                       system.
                     </p>
                     <p>
-                      <strong>Brute force:</strong> {solution.brute_force_approach}
+                      <strong>Brute force:</strong> {renderInlineCode(solution.brute_force_approach)}
                     </p>
                     <p>
-                      <strong>Optimal:</strong> {solution.optimal_approach}
+                      <strong>Optimal:</strong> {renderInlineCode(solution.optimal_approach)}
                     </p>
                     <pre className="code-block">{solution.solution_code}</pre>
                   </div>
@@ -931,6 +936,21 @@ export default function ProblemWorkspace() {
 
             {tab === "Trace" && (
               <div>
+                {!runResult ? (
+                  <p className="muted small">
+                    Tracing works on any code, even before you run tests -- but it's most useful once
+                    you've seen which case actually fails: run your tests first, then come back here
+                    (or use "Inspect this case in the Trace tab" on the Tests tab) to step through
+                    exactly what your code did on that input.
+                  </p>
+                ) : (
+                  !runResult.all_passed && (
+                    <p className="muted small">
+                      Tracing this test case will show you exactly what your code did, line by line --
+                      the fastest way to find where your logic diverges from what's expected.
+                    </p>
+                  )
+                )}
                 {problem.visible_test_cases?.length > 1 && (
                   <label className="trace-testcase-picker">
                     Trace against:{" "}
@@ -1180,8 +1200,8 @@ export default function ProblemWorkspace() {
                         </div>
                         {expandedAttemptId === a.id && <pre className="code-block">{a.submitted_code}</pre>}
                         {complexityCompare?.attemptId === a.id && (
-                          <div className="failure-analysis" style={{ marginTop: "0.5rem" }}>
-                            <h4 style={{ color: "#7ec8ff" }}>Complexity comparison</h4>
+                          <div className="failure-analysis complexity-compare-card">
+                            <h4>Complexity comparison</h4>
                             <div className="failure-analysis-row">
                               <span>
                                 <strong>This attempt:</strong>{" "}

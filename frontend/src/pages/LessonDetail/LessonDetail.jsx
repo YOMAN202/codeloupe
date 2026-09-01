@@ -2,7 +2,20 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { fetchLesson, setLessonProgress } from "../../api/client";
 import { StatusBadge, DifficultyBadge } from "../../components/Badges/Badges";
-import MultilineText from "../../components/MultilineText/MultilineText";
+import MultilineText, { renderInlineCode } from "../../components/MultilineText/MultilineText";
+
+// A prediction question is usually one plain sentence ("How many times
+// does `for i in range(5):` run?"), but a few (e.g. Day 1) are a short
+// question followed by a blank line and a small code snippet to read
+// before answering. Splitting on the first blank line and rendering the
+// second part as a real code block (same treatment as the Example
+// section) avoids collapsing that snippet into one run-on sentence,
+// which is what a plain <p> did with embedded newlines.
+function splitPredictionQuestion(text) {
+  const parts = text.split(/\n\s*\n/);
+  if (parts.length < 2) return { question: text, code: null };
+  return { question: parts[0], code: parts.slice(1).join("\n\n") };
+}
 
 export default function LessonDetail() {
   const { day } = useParams();
@@ -103,19 +116,23 @@ export default function LessonDetail() {
         </section>
       )}
 
-      {lesson.prediction_question && (
-        <section className="lesson-section">
-          <h3>Predict before you run it</h3>
-          <p>{lesson.prediction_question}</p>
-          {!showAnswer ? (
-            <button className="chip" onClick={() => setShowAnswer(true)}>
-              Reveal answer
-            </button>
-          ) : (
-            <p className="prediction-answer">{lesson.prediction_answer}</p>
-          )}
-        </section>
-      )}
+      {lesson.prediction_question && (() => {
+        const { question, code } = splitPredictionQuestion(lesson.prediction_question);
+        return (
+          <section className="lesson-section">
+            <h3>Predict before you run it</h3>
+            <p>{renderInlineCode(question)}</p>
+            {code && <pre className="code-block">{code}</pre>}
+            {!showAnswer ? (
+              <button className="chip" onClick={() => setShowAnswer(true)}>
+                Reveal answer
+              </button>
+            ) : (
+              <p className="prediction-answer">{renderInlineCode(lesson.prediction_answer)}</p>
+            )}
+          </section>
+        );
+      })()}
 
       <section className="lesson-section">
         <h3>Exercises</h3>

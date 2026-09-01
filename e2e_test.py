@@ -28,8 +28,15 @@ def run():
         page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
         page.on("pageerror", lambda exc: console_errors.append(str(exc)))
 
-        # 1. Open the app -> curriculum map
+        # 1. Open the app -> Dashboard (the landing route -- see App.jsx's
+        #    NAV_ITEMS comment for why it moved off Curriculum: Dashboard
+        #    already carries the adaptive "what to do right now" content).
         page.goto(f"{BASE}/", wait_until="networkidle")
+        page.wait_for_selector(".stat-grid", timeout=10000)
+        check("Dashboard is the landing page", page.locator("h2").first.inner_text() == "Dashboard")
+
+        # Curriculum now lives at its own route -- still fully browsable.
+        page.goto(f"{BASE}/curriculum", wait_until="networkidle")
         page.wait_for_selector(".lesson-grid", timeout=10000)
         check("Curriculum map loads with lesson cards", page.locator(".lesson-card").count() > 0)
         check("Curriculum map shows all 7 blocks", page.locator(".block-section").count() == 7)
@@ -166,11 +173,22 @@ def reverse_list(values):
         stat_values = page.locator(".stat-value").all_inner_texts()
         check("Dashboard shows at least 1 problem attempted", any(v not in ("0", "--") for v in stat_values), stat_values)
 
-        # Curriculum map reflects the lesson status change + resume pointer
+        # Dashboard (now home) reflects the lesson status change + resume
+        # pointer -- it surfaces the same resume-lesson callout Curriculum
+        # does, since it's meant to be the single "what do I do right now"
+        # landing page.
         page.goto(f"{BASE}/", wait_until="networkidle")
+        page.wait_for_selector(".stat-grid", timeout=10000)
+        page.wait_for_timeout(300)
+        check("Resume callout appears on the dashboard after marking a lesson in_progress",
+              page.locator(".callout-resume").count() > 0)
+
+        # Curriculum keeps its own resume callout too, for when a learner
+        # lands there directly instead of via the dashboard.
+        page.goto(f"{BASE}/curriculum", wait_until="networkidle")
         page.wait_for_selector(".lesson-grid", timeout=10000)
         page.wait_for_timeout(300)
-        check("Resume callout appears on curriculum map after marking a lesson in_progress",
+        check("Resume callout also appears on the curriculum map directly",
               page.locator(".callout-resume").count() > 0)
 
         # Problem bank tier structure (Core 45-Day Path / Extended Practice /

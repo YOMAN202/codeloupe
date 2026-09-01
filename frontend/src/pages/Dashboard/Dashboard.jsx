@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchProgress, fetchPracticeSession } from "../../api/client";
-import { TIER_META } from "../../components/Badges/Badges";
 
 const SESSION_KIND_LABEL = {
   revision: "Revision",
@@ -49,6 +48,36 @@ export default function Dashboard() {
         <p className="muted">Where you actually stand -- no points, no streak badges, just data.</p>
       </div>
 
+      {(progress.resume_lesson || progress.recommended_next_lesson) && (
+        <div className="callout-row">
+          {progress.resume_lesson && (
+            <Link to={`/lessons/${progress.resume_lesson.day}`} className="callout callout-resume">
+              <strong>Resume</strong>
+              <span>
+                Day {progress.resume_lesson.day}: {progress.resume_lesson.title}
+              </span>
+            </Link>
+          )}
+          {progress.recommended_next_lesson && (
+            <Link
+              to={`/lessons/${progress.recommended_next_lesson.day}`}
+              className="callout callout-next"
+            >
+              <strong>Recommended next</strong>
+              <span>
+                Day {progress.recommended_next_lesson.day}: {progress.recommended_next_lesson.title}
+              </span>
+            </Link>
+          )}
+          {progress.problems_due_for_revision?.length > 0 && (
+            <Link to="#due-for-revision" className="callout callout-revision">
+              <strong>{progress.problems_due_for_revision.length} due for revision</strong>
+              <span>See below</span>
+            </Link>
+          )}
+        </div>
+      )}
+
       {session?.items?.length > 0 && (
         <section className="practice-session">
           <div className="practice-session-header">
@@ -75,12 +104,13 @@ export default function Dashboard() {
         <section className="core-path-progress">
           <div className="core-path-progress-header">
             <h3>
-              {TIER_META.core.emoji} Core 45-Day Path: {progress.path_tier_progress.core.solved} /{" "}
+              Core 45-Day Path: {progress.path_tier_progress.core.solved} /{" "}
               {progress.path_tier_progress.core.total} solved
             </h3>
             <span className="muted small">
-              This is the required, job-ready foundation. Extended and Advanced below are optional
-              add-ons -- they never count against Core Path completion.
+              The recommended, job-ready foundation -- not a gate. Extended and Advanced below are
+              optional add-ons that never count against it, and every problem stays open regardless
+              of order or what you've solved so far.
             </span>
           </div>
           <div className="core-path-progress-bar">
@@ -93,12 +123,12 @@ export default function Dashboard() {
           </div>
           <div className="core-path-tier-mini-stats">
             <span>
-              {TIER_META.extended.emoji} Extended: {progress.path_tier_progress.extended.solved} /{" "}
+              Extended: {progress.path_tier_progress.extended.solved} /{" "}
               {progress.path_tier_progress.extended.total}{" "}
               <span className="muted">(optional reinforcement)</span>
             </span>
             <span>
-              {TIER_META.advanced.emoji} Advanced: {progress.path_tier_progress.advanced.solved} /{" "}
+              Advanced: {progress.path_tier_progress.advanced.solved} /{" "}
               {progress.path_tier_progress.advanced.total}{" "}
               <span className="muted">(optional Hard challenges)</span>
             </span>
@@ -160,7 +190,7 @@ export default function Dashboard() {
           </ul>
         </section>
 
-        <section className="lesson-section">
+        <section className="lesson-section" id="due-for-revision">
           <h3>Due for revision</h3>
           {progress.problems_due_for_revision.length === 0 ? (
             <p className="muted">Nothing due right now.</p>
@@ -181,7 +211,7 @@ export default function Dashboard() {
         <section className="lesson-section">
           <h3>Weakest topics</h3>
           {progress.top_weaknesses.length === 0 ? (
-            <p className="muted">No data yet.</p>
+            <p className="muted">No data yet -- this fills in once you've attempted a few problems.</p>
           ) : (
             <ul>
               {progress.top_weaknesses.map((t) => (
@@ -201,7 +231,7 @@ export default function Dashboard() {
             for individual entries.
           </p>
           {!progress.pattern_weaknesses || progress.pattern_weaknesses.length === 0 ? (
-            <p className="muted">No data yet.</p>
+            <p className="muted">No data yet -- same as above, more specific once you've made a few attempts.</p>
           ) : (
             <ul>
               {progress.pattern_weaknesses.map((p) => (
@@ -217,7 +247,7 @@ export default function Dashboard() {
         <section className="lesson-section">
           <h3>Strongest topics</h3>
           {progress.top_strengths.length === 0 ? (
-            <p className="muted">No data yet.</p>
+            <p className="muted">No data yet -- this fills in as you solve problems independently.</p>
           ) : (
             <ul>
               {progress.top_strengths.map((t) => (

@@ -6,46 +6,46 @@ import { DifficultyBadge, PriorityBadge, TIER_META } from "../../components/Badg
 const TIER_ORDER = ["core", "extended", "advanced"];
 
 const TIER_NOTE = {
-  core: "The required 45-day path. Primarily Easy/Medium. Finishing this is a strong foundation for internship and entry-level interviews on its own.",
-  extended: "Optional Easy/Medium reinforcement for weak topics or extra pattern practice — not required within the 45 days.",
+  core: "The recommended 45-day path, not a gate -- primarily Easy/Medium, and a strong foundation for internship and entry-level interviews on its own. Every problem here stays open regardless of order or what else you've solved.",
+  extended: "Optional Easy/Medium reinforcement for weak topics or extra pattern practice -- not required within the 45 days.",
   advanced: "Optional Hard problems for going further after Easy/Medium fundamentals are solid. Never required, never blocks Core Path completion.",
 };
 
-function ProblemTable({ problems }) {
+// A responsive row list rather than an HTML table -- a table can only
+// ever be shrunk (or scrolled sideways) on a narrow screen, never
+// genuinely redesigned for one. Below 760px (see App.css) each row
+// collapses from a grid into a stacked card instead.
+function ProblemList({ problems }) {
   return (
-    <table className="problem-table">
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th>Topic</th>
-          <th>Pattern</th>
-          <th>Difficulty</th>
-          <th>Priority</th>
-          <th>Est. time</th>
-        </tr>
-      </thead>
-      <tbody>
-        {problems.map((p) => (
-          <tr key={p.slug}>
-            <td>
-              <Link to={`/problems/${p.slug}`}>{p.title}</Link>
-              {p.progression_stage === "variation" && (
-                <span className="muted small"> (variation)</span>
-              )}
-            </td>
-            <td>{p.topic}</td>
-            <td className="muted">{p.pattern}</td>
-            <td>
-              <DifficultyBadge difficulty={p.difficulty} />
-            </td>
-            <td>
-              <PriorityBadge priority={p.interview_priority} />
-            </td>
-            <td className="muted">{p.estimated_solve_minutes} min</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="problem-list-rows">
+      <div className="problem-list-header" aria-hidden="true">
+        <span>Title</span>
+        <span>Topic</span>
+        <span>Pattern</span>
+        <span>Difficulty</span>
+        <span>Priority</span>
+        <span>Est. time</span>
+      </div>
+      {problems.map((p) => (
+        <Link key={p.slug} to={`/problems/${p.slug}`} className="problem-list-row">
+          <span className="problem-list-row-title">
+            <span>{p.title}</span>
+            {p.progression_stage === "variation" && (
+              <span className="problem-list-row-meta">variation</span>
+            )}
+          </span>
+          <span className="problem-list-row-topic">{p.topic}</span>
+          <span className="problem-list-row-pattern">{p.pattern}</span>
+          <span>
+            <DifficultyBadge difficulty={p.difficulty} />
+          </span>
+          <span>
+            <PriorityBadge priority={p.interview_priority} />
+          </span>
+          <span className="problem-list-row-time">{p.estimated_solve_minutes} min</span>
+        </Link>
+      ))}
+    </div>
   );
 }
 
@@ -104,7 +104,7 @@ export default function ProblemBrowser() {
             className={`chip ${tierFilter === t ? "chip-active" : ""}`}
             onClick={() => setTierFilter(t)}
           >
-            {TIER_META[t].emoji} {TIER_META[t].label} ({tierCounts[t]})
+            {TIER_META[t].label} ({tierCounts[t]})
           </button>
         ))}
       </div>
@@ -116,12 +116,13 @@ export default function ProblemBrowser() {
           <div key={tier}>
             <div className="tier-section-heading">
               <h3>
-                {TIER_META[tier].emoji} {TIER_META[tier].label}
+                <span className={`tier-dot tier-dot-${tier}`} aria-hidden="true" />
+                {TIER_META[tier].label}
               </h3>
               <span className="tier-count">{tierProblems.length} problems</span>
             </div>
             <p className="tier-section-note">{TIER_NOTE[tier]}</p>
-            <ProblemTable problems={tierProblems} />
+            <ProblemList problems={tierProblems} />
           </div>
         );
       })}

@@ -48,7 +48,9 @@ export default function MistakeJournal() {
       </div>
 
       {journal.total_mistakes === 0 ? (
-        <p className="muted">No mistakes logged yet -- this fills in as you attempt problems.</p>
+        <div className="empty-state">
+          No mistakes logged yet -- this fills in as you attempt problems.
+        </div>
       ) : (
         <>
           <section className="lesson-section">

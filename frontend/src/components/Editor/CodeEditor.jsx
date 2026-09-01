@@ -8,9 +8,10 @@ export default function CodeEditor({ value, onChange }) {
       defaultLanguage="python"
       value={value}
       onChange={(v) => onChange(v ?? "")}
-      theme="vs-dark"
+      theme="codeloupe-dark"
       options={{
         fontSize: 14,
+        fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
       }}

@@ -349,7 +349,7 @@ export function TreeView({ graph }) {
                   y1={a.y * CELL_H + 34}
                   x2={b.x * CELL_W + CELL_W / 2}
                   y2={b.y * CELL_H + 34}
-                  stroke="#555"
+                  stroke="#7a8492"
                   strokeWidth="2"
                 />
               );
@@ -553,7 +553,7 @@ export function GraphNodeView({ graph }) {
           {edges.map(([a, b], i) => {
             const pa = positions.get(a);
             const pb = positions.get(b);
-            return <line key={i} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#555" strokeWidth="2" />;
+            return <line key={i} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#7a8492" strokeWidth="2" />;
           })}
         </svg>
         {ids.map((id) => {
@@ -627,11 +627,11 @@ export function HeapView({ locals }) {
                     const lines = [];
                     if (left < arr.length) {
                       const c = positions[left];
-                      lines.push(<line key={`${i}-l`} x1={p.x} y1={p.y + 20} x2={c.x} y2={c.y + 20} stroke="#555" strokeWidth="2" />);
+                      lines.push(<line key={`${i}-l`} x1={p.x} y1={p.y + 20} x2={c.x} y2={c.y + 20} stroke="#7a8492" strokeWidth="2" />);
                     }
                     if (right < arr.length) {
                       const c = positions[right];
-                      lines.push(<line key={`${i}-r`} x1={p.x} y1={p.y + 20} x2={c.x} y2={c.y + 20} stroke="#555" strokeWidth="2" />);
+                      lines.push(<line key={`${i}-r`} x1={p.x} y1={p.y + 20} x2={c.x} y2={c.y + 20} stroke="#7a8492" strokeWidth="2" />);
                     }
                     return lines;
                   })}

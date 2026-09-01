@@ -25,3 +25,35 @@ self.MonacoEnvironment = {
 };
 
 loader.config({ monaco });
+
+// A Monaco theme drawn from the same tokens as the rest of the app
+// (App.css's :root) instead of the stock "vs-dark", so the editor reads
+// as part of Codeloupe rather than a generic embedded widget dropped on
+// top of it. Kept intentionally simple -- a handful of token colors, not
+// a full syntax-highlight redesign.
+monaco.editor.defineTheme("codeloupe-dark", {
+  base: "vs-dark",
+  inherit: true,
+  rules: [
+    { token: "comment", foreground: "7a8492", fontStyle: "italic" },
+    { token: "keyword", foreground: "8a7bff" },
+    { token: "string", foreground: "43d17a" },
+    { token: "number", foreground: "f2b134" },
+    { token: "type", foreground: "5fb0e6" },
+    { token: "identifier", foreground: "eef1f5" },
+  ],
+  colors: {
+    "editor.background": "#171b22",
+    "editor.foreground": "#eef1f5",
+    "editor.lineHighlightBackground": "#1e232c",
+    "editor.lineHighlightBorder": "#00000000",
+    "editorCursor.foreground": "#2fd0b7",
+    "editorLineNumber.foreground": "#7a8492",
+    "editorLineNumber.activeForeground": "#9aa3b2",
+    "editor.selectionBackground": "#2fd0b733",
+    "editorIndentGuide.background": "#242a34",
+    "editorIndentGuide.activeBackground": "#333b47",
+    "editorWidget.background": "#11141a",
+    "editorWidget.border": "#242a34",
+  },
+});

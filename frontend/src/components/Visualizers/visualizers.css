@@ -1,55 +1,62 @@
-/* Specialized data-structure-aware trace visualizations. Dark theme,
-   matching the palette already established in App.css (bg #1e1e1e,
-   cards #262626, borders #333/#444, text #ccc/#888). */
+/* Specialized data-structure-aware trace visualizations. Draws entirely
+   from the tokens defined in App.css -- see that file's top-of-file
+   comment for the two-accent rule this stylesheet follows throughout:
+   amber marks whatever is the direct visual result of the CURRENT step
+   (a just-swapped bar, a freshly-written DP cell, the top/active call
+   frame, a tracked cursor position) -- never a structural warning. Cycle
+   detection, orphaned nodes and other correctness flags use --caution or
+   --err instead, so amber keeps meaning exactly one thing everywhere a
+   learner encounters it. */
 
 .viz-panels { display: flex; flex-direction: column; gap: 1rem; margin: 0.75rem 0; }
 .viz-block {
-  background: #202020;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 0.75rem 0.9rem;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
 }
-.viz-caption { color: #9a9a9a; font-size: 0.78rem; margin: 0 0 0.6rem; line-height: 1.4; }
+.viz-caption { color: var(--text-dim); font-size: 0.78rem; margin: 0 0 0.65rem; line-height: 1.5; }
 .viz-warning {
-  color: #f0c060;
-  background: #332a12;
-  border: 1px solid #5b4b0e;
-  border-radius: 6px;
-  padding: 0.4rem 0.6rem;
+  color: var(--caution);
+  background: var(--caution-soft);
+  border: 1px solid rgba(226, 146, 74, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.65rem;
   font-size: 0.8rem;
   margin: 0.5rem 0 0;
 }
-.viz-type-tag { font-size: 0.65rem; color: #777; border: 1px solid #444; border-radius: 4px; padding: 0 0.3rem; margin-left: 0.3rem; }
+.viz-type-tag { font-size: 0.65rem; color: var(--text-faint); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 0.3rem; margin-left: 0.3rem; font-family: var(--font-mono); }
 
 .pointer-chip {
   display: inline-block;
   font-size: 0.62rem;
   font-weight: 700;
-  color: #111;
+  color: #0a0c10;
   border-radius: 4px;
-  padding: 0.05rem 0.3rem;
+  padding: 0.05rem 0.32rem;
   margin: 0 0.1rem 0.15rem 0;
   white-space: nowrap;
+  font-family: var(--font-mono);
 }
 
 /* ---- 1. array / string / pointer / sliding window ------------------- */
 
 .seq-row + .seq-row { margin-top: 0.9rem; }
-.seq-label { font-size: 0.78rem; color: #999; margin-bottom: 0.3rem; }
+.seq-label { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.3rem; }
 .seq-boxes { display: flex; gap: 2px; flex-wrap: wrap; align-items: flex-end; }
 .seq-box {
   min-width: 30px;
   text-align: center;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
-  background: #262626;
+  background: var(--s3);
   padding: 2px 4px;
   position: relative;
 }
-.seq-box-in-window { background: #1e3a4d; border-color: #2c5c78; }
+.seq-box-in-window { background: var(--teal-soft); border-color: var(--teal-dim); }
 .seq-box-pointer-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; min-height: 14px; }
-.seq-box-value { padding: 0.25rem 0; font-size: 0.78rem; font-family: monospace; white-space: pre; }
-.seq-box-index { font-size: 0.62rem; color: #777; border-top: 1px solid #333; }
+.seq-box-value { padding: 0.25rem 0; font-size: 0.78rem; font-family: var(--font-code); white-space: pre; }
+.seq-box-index { font-size: 0.62rem; color: var(--text-faint); border-top: 1px solid var(--border); }
 
 /* ---- 2. linked lists / 4. trees (shared node styling) ----------------- */
 
@@ -62,18 +69,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1.5px solid #4fa8f0;
-  border-radius: 6px;
-  background: #1e2a38;
-  font-family: monospace;
+  border: 1.5px solid var(--sky);
+  border-radius: var(--radius-sm);
+  background: var(--sky-soft);
+  font-family: var(--font-code);
   font-size: 0.85rem;
   padding: 0.2rem 0.5rem;
 }
-.ll-node-none { border-color: #555; background: #262626; color: #777; font-size: 0.72rem; }
-.ll-node-orphan { border-color: #f0c060; background: #332a12; }
-.ll-arrow { color: #777; margin: 0 0.35rem 0.4rem; font-size: 0.85rem; }
-.ll-arrow.ll-null { color: #666; font-size: 0.72rem; }
-.ll-arrow.ll-cycle { color: #ff8a8a; font-size: 0.72rem; }
+.ll-node-none { border-color: var(--border-strong); background: var(--s3); color: var(--text-faint); font-size: 0.72rem; }
+.ll-node-orphan { border-color: var(--caution); background: var(--caution-soft); }
+.ll-arrow { color: var(--text-faint); margin: 0 0.35rem 0.4rem; font-size: 0.85rem; }
+.ll-arrow.ll-null { color: var(--text-faint); font-size: 0.72rem; }
+.ll-arrow.ll-cycle { color: var(--err); font-size: 0.72rem; }
 
 .tree-scroll { overflow-x: auto; padding-bottom: 0.4rem; }
 .tree-canvas { position: relative; }
@@ -86,31 +93,33 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1.5px solid #4fa8f0;
+  border: 1.5px solid var(--sky);
   border-radius: 50%;
-  background: #1e2a38;
-  font-family: monospace;
+  background: var(--sky-soft);
+  font-family: var(--font-code);
   font-size: 0.8rem;
   z-index: 1;
 }
-.heap-node { border-radius: 6px; border-color: #b8a6ff; background: #241f3a; font-size: 0.72rem; padding: 0.1rem 0.3rem; }
+.heap-node { border-radius: var(--radius-sm); border-color: var(--violet); background: var(--violet-soft); font-size: 0.72rem; padding: 0.1rem 0.3rem; }
 
 /* ---- 3. call stack ------------------------------------------------- */
 
 .call-stack { display: flex; flex-direction: column; gap: 0.4rem; }
 .call-frame {
-  border: 1px solid #3a3a3a;
-  border-left: 3px solid #6bcb77;
-  border-radius: 6px;
-  background: #1c1c1c;
-  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--s3);
+  padding: 0.45rem 0.65rem;
 }
-.call-frame-top { border-left-color: #4fa8f0; background: #1a2530; }
+/* The topmost card is the currently-active call -- the frame whose line
+   is executing right now, so it earns the focus accent. */
+.call-frame-top { border-left-color: var(--amber); background: var(--amber-soft); }
 .call-frame-header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
-.call-frame-fn { font-family: monospace; font-weight: 700; font-size: 0.85rem; }
-.call-frame-locals { margin-top: 0.25rem; display: flex; flex-wrap: wrap; gap: 0.4rem 0.7rem; font-size: 0.75rem; }
-.call-frame-local { color: #aaa; }
-.call-frame-return { margin-top: 0.3rem; font-size: 0.8rem; color: #f0c060; }
+.call-frame-fn { font-family: var(--font-code); font-weight: 700; font-size: 0.85rem; }
+.call-frame-locals { margin-top: 0.3rem; display: flex; flex-wrap: wrap; gap: 0.4rem 0.7rem; font-size: 0.75rem; }
+.call-frame-local { color: var(--text-dim); font-family: var(--font-code); }
+.call-frame-return { margin-top: 0.35rem; font-size: 0.8rem; color: var(--amber); font-family: var(--font-code); }
 
 /* ---- 5. stacks / queues ---------------------------------------------- */
 
@@ -120,25 +129,28 @@
 .sq-cell {
   min-width: 44px;
   text-align: center;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
-  background: #262626;
+  background: var(--s3);
   padding: 0.3rem 0.5rem;
-  font-family: monospace;
+  font-family: var(--font-code);
   font-size: 0.82rem;
   position: relative;
 }
-.sq-cell-edge { border-color: #4fa8f0; background: #1e2a38; }
-.sq-cell-label { position: absolute; top: -1.1rem; left: 0; right: 0; font-size: 0.6rem; color: #4fa8f0; text-align: center; }
+.sq-cell-edge { border-color: var(--sky); background: var(--sky-soft); }
+.sq-cell-label { position: absolute; top: -1.1rem; left: 0; right: 0; font-size: 0.6rem; color: var(--sky); text-align: center; font-family: var(--font-mono); }
 
 /* ---- 6. sorting -------------------------------------------------------- */
 
 .sort-row + .sort-row { margin-top: 0.9rem; }
 .sort-bars { display: flex; align-items: flex-end; gap: 3px; height: 110px; }
 .sort-bar-wrap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-.sort-bar { width: 16px; background: #4fa8f0; border-radius: 2px 2px 0 0; transition: height 0.15s ease; }
-.sort-bar-changed .sort-bar { background: #f0c060; }
-.sort-bar-value { font-size: 0.6rem; color: #888; margin-top: 2px; }
+.sort-bar { width: 16px; background: var(--sky); border-radius: 2px 2px 0 0; }
+@media (prefers-reduced-motion: no-preference) { .sort-bar { transition: height 0.15s ease; } }
+/* The bar(s) that changed value at this exact step -- the direct result
+   of whatever swap/write your code just performed. */
+.sort-bar-changed .sort-bar { background: var(--amber); }
+.sort-bar-value { font-size: 0.6rem; color: var(--text-faint); margin-top: 2px; font-family: var(--font-mono); }
 
 /* ---- 7. graphs (grid + node) ------------------------------------------ */
 
@@ -151,13 +163,15 @@
   align-items: center;
   justify-content: center;
   font-size: 0.68rem;
-  font-family: monospace;
+  font-family: var(--font-code);
   border-radius: 3px;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
 }
-.grid-cell-off { background: #1a1a1a; color: #555; }
-.grid-cell-on { background: #1f4d2b; color: #6bcb77; }
-.grid-cell-cursor { outline: 2px solid #f0c060; outline-offset: -2px; }
+.grid-cell-off { background: var(--s3); color: var(--text-faint); }
+.grid-cell-on { background: var(--ok-soft); color: var(--ok); }
+/* The current (row, col) cursor your code is tracking -- another literal
+   "you are here" pointer, same treatment as the trace scrubber's thumb. */
+.grid-cell-cursor { outline: 2px solid var(--amber); outline-offset: -2px; }
 
 .graph-canvas { position: relative; width: 300px; height: 300px; }
 .graph-edges { position: absolute; top: 0; left: 0; pointer-events: none; }
@@ -167,12 +181,12 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 1.5px solid #d88aff;
-  background: #241a30;
+  border: 1.5px solid var(--orchid);
+  background: var(--orchid-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: monospace;
+  font-family: var(--font-code);
   font-size: 0.78rem;
   z-index: 1;
 }
@@ -186,103 +200,117 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   border-radius: 3px;
-  background: #262626;
-  font-family: monospace;
+  background: var(--s3);
+  font-family: var(--font-code);
   font-size: 0.72rem;
+  color: var(--text-dim);
 }
-.dp-cell-changed { background: #4d3d1f; border-color: #8a6a1f; color: #f0c060; font-weight: 700; }
+/* The subproblem your code just solved -- the cell(s) written at this
+   exact step. */
+.dp-cell-changed { background: var(--amber-soft); border-color: rgba(242, 177, 52, 0.5); color: var(--amber); font-weight: 700; }
 
 /* ---- Predict -> Run -> Compare -------------------------------------- */
 
 .predict-panel {
-  background: #201c2c;
-  border: 1px solid #3a3050;
-  border-radius: 8px;
-  padding: 0.6rem 0.8rem;
-  margin: 0.5rem 0;
+  background: var(--violet-soft);
+  border: 1px solid rgba(138, 123, 255, 0.3);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.85rem;
+  margin: 0.55rem 0;
 }
 .predict-input {
   width: 100%;
-  background: #171420;
-  border: 1px solid #3a3050;
-  border-radius: 6px;
-  color: #ddd;
-  padding: 0.4rem 0.5rem;
+  background: var(--s1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 0.45rem 0.55rem;
   font-family: inherit;
   font-size: 0.82rem;
   resize: vertical;
   margin-bottom: 0.5rem;
 }
 .predict-reveal { margin-top: 0.4rem; }
-.predict-diff { margin: 0.3rem 0 0.6rem; padding-left: 1.1rem; font-size: 0.8rem; color: #ccc; }
-.predict-diff li { margin-bottom: 0.2rem; font-family: monospace; }
+.predict-diff { margin: 0.3rem 0 0.6rem; padding-left: 1.1rem; font-size: 0.8rem; color: var(--text-dim); }
+.predict-diff li { margin-bottom: 0.2rem; font-family: var(--font-code); }
 
 /* ---- Pattern-recognition practice ------------------------------------ */
 
 .pattern-practice {
-  background: #1a2418;
-  border: 1px solid #2f4a2a;
-  border-radius: 8px;
-  padding: 0.6rem 0.8rem;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.85rem;
   margin-bottom: 0.9rem;
 }
 .pattern-practice-toggle {
   background: none;
   border: none;
-  color: #9adf9a;
+  color: var(--ok);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   padding: 0;
   text-align: left;
 }
-.pattern-choice-grid { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.6rem 0; }
+.pattern-choice-grid { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.6rem 0; }
 .pattern-choice {
-  padding: 0.3rem 0.7rem;
-  border-radius: 12px;
-  border: 1px solid #3a5a35;
-  background: #1f2e1c;
-  color: #cde;
+  padding: 0.32rem 0.75rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--s1);
+  color: var(--text-dim);
   font-size: 0.78rem;
   cursor: pointer;
 }
-.pattern-choice:hover { background: #28401f; }
-.pattern-choice-selected { background: #2f5c28; border-color: #4a8a3f; color: #d5ffd0; font-weight: 600; }
+.pattern-choice:hover { border-color: var(--ok); color: var(--text); }
+.pattern-choice-selected { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); font-weight: 600; }
 .pattern-reveal {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid #2f4a2a;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
   font-size: 0.82rem;
+  color: var(--text-dim);
 }
 
 /* ---- Failure analysis -------------------------------------------------- */
 
 .failure-analysis {
-  background: #2a1c1c;
-  border: 1px solid #4d1f1f;
-  border-radius: 8px;
-  padding: 0.7rem 0.9rem;
-  margin: 0.6rem 0;
+  background: var(--err-soft);
+  border: 1px solid rgba(255, 92, 114, 0.3);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.95rem;
+  margin: 0.65rem 0;
 }
-.failure-analysis h4 { margin: 0 0 0.4rem; color: #ff8a8a; font-size: 0.88rem; }
+.failure-analysis h4 { margin: 0 0 0.45rem; color: var(--err); font-size: 0.88rem; }
 .failure-analysis-row { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.8rem; margin: 0.25rem 0; }
-.failure-analysis-diff { font-size: 0.8rem; color: #f0c060; margin: 0.4rem 0; }
+.failure-analysis-diff { font-size: 0.8rem; color: var(--caution); margin: 0.4rem 0; }
+
+/* Reuses .failure-analysis's card shell for a neutral, non-error
+   comparison (attempt history's "compare complexity to current code") --
+   overrides the red failure framing with a neutral one. */
+.complexity-compare-card {
+  margin-top: 0.5rem;
+  background: var(--s2);
+  border-color: var(--border);
+}
+.complexity-compare-card h4 { color: var(--text); }
 
 /* ---- Explain-your-thinking (interview practice) ----------------------- */
 
 .explain-thinking {
-  background: #182028;
-  border: 1px solid #2a3a4a;
-  border-radius: 8px;
-  padding: 0.6rem 0.8rem;
-  margin: 0.6rem 0;
+  background: var(--sky-soft);
+  border: 1px solid rgba(95, 176, 230, 0.3);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.85rem;
+  margin: 0.65rem 0;
 }
 .explain-thinking-toggle {
   background: none;
   border: none;
-  color: #7ec8ff;
+  color: var(--sky);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -295,66 +323,67 @@
 .playground-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin: 0.4rem 0; }
 .playground-result {
   margin-top: 0.6rem;
-  padding: 0.5rem 0.7rem;
-  background: #1c1c1c;
-  border: 1px solid #333;
-  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   font-size: 0.85rem;
 }
 
 /* ---- Today's Session (adaptive practice recommender) -------------------- */
 
 .practice-session {
-  background: #1a1f2a;
-  border: 1px solid #2a3550;
-  border-radius: 8px;
-  padding: 0.8rem 1rem;
-  margin-bottom: 1.2rem;
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1.3rem;
 }
-.practice-session-header { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.5rem; }
+.practice-session-header { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.55rem; }
 .practice-session-header h3 { margin: 0; }
 
 /* ---- Mistake journal suggestion prompt ---------------------------------- */
 
 .mistake-suggestion {
-  background: #2a2418;
-  border: 1px solid #4d3d1f;
-  border-radius: 8px;
-  padding: 0.7rem 0.9rem;
-  margin: 0.6rem 0;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--caution);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.95rem;
+  margin: 0.65rem 0;
 }
-.mistake-suggestion h4 { margin: 0 0 0.4rem; color: #f0c060; font-size: 0.88rem; }
+.mistake-suggestion h4 { margin: 0 0 0.45rem; color: var(--caution); font-size: 0.88rem; }
 
 /* ---- Attempt history / solution journey -------------------------------- */
 
 .attempt-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
 .attempt-history li {
-  border: 1px solid #333;
-  border-left: 3px solid #666;
-  border-radius: 6px;
-  background: #1c1c1c;
-  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--s2);
+  padding: 0.55rem 0.75rem;
 }
-.attempt-history li.attempt-pass { border-left-color: #6bcb77; }
-.attempt-history li.attempt-fail { border-left-color: #e06666; }
+.attempt-history li.attempt-pass { border-left-color: var(--ok); }
+.attempt-history li.attempt-fail { border-left-color: var(--err); }
 .attempt-history-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.3rem 0.8rem; margin: 0.2rem 0; }
 
 /* ---- Approach comparison ------------------------------------------------ */
 
-.approach-progression { font-style: italic; }
+.approach-progression { font-style: italic; color: var(--text-dim); }
 .approach-columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.75rem;
-  margin-top: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.65rem;
   align-items: start;
 }
 .approach-card {
-  background: #182028;
-  border: 1px solid #2a3a4a;
-  border-radius: 8px;
-  padding: 0.7rem 0.9rem;
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.95rem;
 }
-.approach-card h4 { margin: 0 0 0.4rem; color: #7ec8ff; font-size: 0.88rem; }
-.approach-metric-label { margin: 0.5rem 0 0.15rem; }
-.approach-metric-list { margin: 0 0 0.3rem; padding-left: 1.1rem; font-size: 0.8rem; }
+.approach-card h4 { margin: 0 0 0.45rem; color: var(--teal); font-size: 0.88rem; }
+.approach-metric-label { margin: 0.5rem 0 0.15rem; color: var(--text-dim); }
+.approach-metric-list { margin: 0 0 0.3rem; padding-left: 1.1rem; font-size: 0.8rem; color: var(--text-dim); }

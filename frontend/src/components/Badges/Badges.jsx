@@ -26,10 +26,14 @@ export function DifficultyBadge({ difficulty }) {
   return <span className={`badge difficulty-${difficulty}`}>{difficulty}</span>;
 }
 
+// Tiers read as a rank (Core -> Extended -> Advanced), so they're
+// distinguished by color + a small dot rather than emoji -- keeps the
+// two-accent system (teal/amber) untouched by metadata and avoids emoji
+// as a section marker (see docs/decisions.md's design-system notes).
 const TIER_META = {
-  core: { emoji: "🔥", label: "Core 45-Day Path" },
-  extended: { emoji: "⭐", label: "Extended Practice" },
-  advanced: { emoji: "🏆", label: "Advanced Challenge" },
+  core: { label: "Core 45-Day Path" },
+  extended: { label: "Extended Practice" },
+  advanced: { label: "Advanced Challenge" },
 };
 
 export function TierBadge({ tier }) {
@@ -37,7 +41,8 @@ export function TierBadge({ tier }) {
   if (!meta) return null;
   return (
     <span className={`badge tier-${tier}`}>
-      {meta.emoji} {meta.label}
+      <span className="tier-dot" aria-hidden="true" />
+      {meta.label}
     </span>
   );
 }

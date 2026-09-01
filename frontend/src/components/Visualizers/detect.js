@@ -2,7 +2,12 @@
 // Kept separate from rendering so the "what should we show" decision is
 // easy to read and easy to test in isolation.
 
-const PALETTE = ["#6ec6f0", "#f0c060", "#ff8a8a", "#b8a6ff", "#6bcb77", "#ff9d5c", "#5cd6c0", "#e08ae0"];
+// Deliberately excludes teal and amber -- those two are reserved
+// site-wide for brand/action and current-inspection-focus respectively
+// (see App.css's token comment). A pointer variable landing on either by
+// hash-chance would wrongly read as "this is the thing to look at" or
+// "this is a button". Everything here is a qualitative, non-brand hue.
+const PALETTE = ["#5fb0e6", "#d688e8", "#8a7bff", "#4fd8a0", "#ff8a9e", "#e2924a", "#7ee08a", "#7ec8ff"];
 
 export function colorForName(name) {
   let hash = 0;
