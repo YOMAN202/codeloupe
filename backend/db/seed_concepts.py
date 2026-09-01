@@ -432,6 +432,110 @@ CONCEPT_LESSONS = [
             "instead of checking every `O(n^2)` subrange."
         ),
     ),
+    # ---- Batch 1 addition: item 4 of the curriculum-ordered expansion --
+    # "two pointers and sliding windows beyond the pilot material." Sliding
+    # window is its own topic in problems.topic (distinct from
+    # 'two-pointer'), matching Days 15-16, so this is a separate lesson
+    # rather than folded into the Two Pointers pilot -- prerequisite_slugs
+    # points back at it since a sliding window IS a same-direction
+    # two-pointer technique specialized to a contiguous range. See
+    # docs/decisions.md "Teaching system expansion: batch 2".
+    dict(
+        slug="sliding-window",
+        kind="topic",
+        topic="sliding-window",
+        pattern_family=None,
+        title="Sliding window",
+        display_order=1,
+        estimated_minutes=18,
+        summary="A contiguous window that grows (and sometimes shrinks) as you scan once -- turns "
+                "\"check every contiguous subarray/substring\" brute force into a single O(n) pass.",
+        prerequisite_slugs="two-pointers",
+        what_markdown=(
+            "A sliding window is a contiguous range `[left, right]` of an array or string that moves forward as "
+            "you scan once, instead of re-examining elements you've already looked at. Two shapes: "
+            "**fixed-size** -- the window size `k` is given directly, so `right - left + 1 == k` always, and you "
+            "slide one step at a time (add the new `right`, drop the old `left`). **Variable-size** -- `right` "
+            "always advances, but `left` only advances when the window becomes invalid, so the window's size "
+            "changes as you scan."
+        ),
+        why_markdown=(
+            "The brute-force instinct for \"find the best/longest/shortest contiguous subarray or substring "
+            "meeting some condition\" is to check every one directly -- `O(n^2)` windows, and recomputing each "
+            "window's sum/count from scratch is itself `O(n)`, so `O(n^3)` isn't unusual. A sliding window "
+            "exploits that adjacent windows only differ by one element (the one that just entered, the one "
+            "that just left), so you update state incrementally instead of recomputing it -- the same "
+            "\"don't redo work you already did\" idea as prefix sums and two pointers, specialized to "
+            "contiguous ranges."
+        ),
+        recognize_markdown=(
+            "Reach for a sliding window when: the problem asks about a **contiguous** subarray or substring "
+            "(not any subset -- contiguous is the key word). You're optimizing something -- longest, shortest, "
+            "max sum, count of windows meeting a condition. And the condition is well-behaved as the window "
+            "grows or shrinks: adding an element to the window and removing one from it are both cheap, "
+            "incremental updates (a running sum, a character-frequency count, a count of distinct values), not "
+            "something that forces a full recheck. If the window size is stated directly (\"every k consecutive "
+            "elements\"), it's fixed-size; if it depends on a condition (\"longest substring with at most k "
+            "distinct characters\"), it's variable-size."
+        ),
+        intuition_markdown=(
+            "A sliding window is a same-direction two-pointer technique where both pointers only ever move "
+            "forward and `left <= right` always holds, carving out a moving contiguous range instead of "
+            "converging from both ends. **Fixed-size**: first fill a window of exactly `k` elements, then each "
+            "step adds one new element on the right and removes exactly one old element on the left -- the size "
+            "never changes. **Variable-size**: `right` drives the scan forward (usually the loop variable "
+            "itself); `left` only moves when the window has become invalid, and critically, it moves in a "
+            "`while` loop, not an `if` -- restoring validity can take more than one step, since removing a "
+            "single element from the left doesn't always fix things in one shot."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `longest_unique_substring(\"abba\")` -- a variable-size window that grows to include new "
+            "characters and shrinks (by more than one step, in this case) whenever a duplicate shows up. Watch "
+            "`right=2` closely: one shrink isn't enough there, which is exactly the case a common bug (using "
+            "`if` instead of `while`) gets wrong."
+        ),
+        walkthrough_code=(
+            "def longest_unique_substring(s):\n"
+            "    seen = set()\n"
+            "    left = 0\n"
+            "    best = 0\n"
+            "    for right in range(len(s)):\n"
+            "        while s[right] in seen:\n"
+            "            seen.remove(s[left])\n"
+            "            left += 1\n"
+            "        seen.add(s[right])\n"
+            "        best = max(best, right - left + 1)\n"
+            "    return best"
+        ),
+        walkthrough_frames=[
+            dict(caption="right=0, char='a'. seen is empty -- no duplicate. Add 'a' to seen. Window is s[0:1]='a', best=1.",
+                 locals={"s": "abba", "left": 0, "right": 0}),
+            dict(caption="right=1, char='b'. Not in seen -- grow. seen={'a','b'}. Window is s[0:2]='ab', best=2.",
+                 locals={"s": "abba", "left": 0, "right": 1}),
+            dict(caption="right=2, char='b' is ALREADY in seen -- duplicate. Shrink: remove s[0]='a', left becomes 1. seen={'b'} still contains 'b', so the while loop keeps shrinking.",
+                 locals={"s": "abba", "left": 1, "right": 2}),
+            dict(caption="Shrink again: remove s[1]='b', left becomes 2. seen is now empty -- duplicate cleared, while loop stops. Add s[2]='b'. Window is s[2:3]='b' (size 1); best stays 2.",
+                 locals={"s": "abba", "left": 2, "right": 2}),
+            dict(caption="right=3, char='a'. Not in seen -- grow. seen={'a','b'}. Window is s[2:4]='ba' (size 2); best stays 2. Loop ends -- return best=2.",
+                 locals={"s": "abba", "left": 2, "right": 3}),
+        ],
+        common_mistakes_markdown=(
+            "Using `if s[right] in seen` instead of `while` -- one shrink step isn't always enough (see "
+            "`right=2` in the walkthrough above, which needs two). Recomputing the window's sum/count/frequency "
+            "map from scratch on every step instead of updating it incrementally (add what just entered, remove "
+            "what just left) -- this quietly turns an intended `O(n)` scan back into `O(n^2)`. Off-by-one on the "
+            "window size: it's `right - left + 1`, not `right - left`. And for fixed-size windows, forgetting to "
+            "fill the initial window of size `k` before starting to slide -- the first `k - 1` steps are setup, "
+            "not sliding."
+        ),
+        complexity_markdown=(
+            "`O(n)` time despite the `while` nested inside the `for`: `left` only ever increases and `right` "
+            "only ever increases, so between them they take at most `2n` steps total across the ENTIRE scan, "
+            "not `n` steps each nested inside another `n` -- the same amortized argument as two pointers. Space "
+            "is `O(1)` for a running sum/count, or `O(k)`/`O(alphabet size)` for a frequency map, versus the "
+            "`O(n^2)` or worse time of checking every contiguous window directly."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -643,6 +747,57 @@ CONCEPT_CHECKPOINTS = {
              explanation_markdown="One pass, O(1) average-case dict lookup per element -- O(n) total, versus "
                                    "O(n^2) for the nested-loop brute force checking every pair directly."),
     ],
+    "sliding-window": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need the length of the longest contiguous substring that contains at most 2 "
+                              "distinct characters. Which approach fits best?",
+             code=None,
+             choices_json=[
+                 "Variable-size sliding window, O(n)",
+                 "Check every substring directly, O(n^2) or worse",
+                 "Opposite-direction two pointers from both ends",
+                 "Sort the string first",
+             ],
+             correct_answer="Variable-size sliding window, O(n)",
+             explanation_markdown="'Contiguous substring' plus 'longest... meeting a condition' is the sliding-"
+                                   "window shape. It's variable-size, not fixed-size, because the window's "
+                                   "length isn't given -- it depends on when the distinct-character count "
+                                   "exceeds 2. Opposite-direction two pointers doesn't apply here: this isn't a "
+                                   "sorted-array pair search, it's a single forward scan."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to find the longest substring with no repeated characters, but it "
+                              "sometimes returns a window that still contains a duplicate. What's the bug?",
+             code="def longest_unique_substring(s):\n"
+                  "    seen = set()\n"
+                  "    left = 0\n"
+                  "    best = 0\n"
+                  "    for right in range(len(s)):\n"
+                  "        if s[right] in seen:\n"
+                  "            seen.remove(s[left])\n"
+                  "            left += 1\n"
+                  "        seen.add(s[right])\n"
+                  "        best = max(best, right - left + 1)\n"
+                  "    return best",
+             choices_json=None,
+             correct_answer="It uses `if` instead of `while` to shrink the window. Removing just one character "
+                             "from the left isn't always enough to clear the duplicate -- sometimes the window "
+                             "needs to shrink by more than one step before s[right] is no longer in seen.",
+             explanation_markdown="Trace s='abba' at right=2: seen={'a','b'} and s[2]='b' is a duplicate. `if` "
+                                   "removes s[0]='a' once and immediately adds 'b' back in -- but 'b' is STILL "
+                                   "in seen (it was never removed), so the window still has a duplicate. `while` "
+                                   "keeps shrinking until the duplicate is actually gone -- exactly the double-"
+                                   "shrink shown in this lesson's own walkthrough."),
+        dict(kind="complexity",
+             prompt_markdown="A variable-size sliding window has a `while` loop nested inside a `for` loop. "
+                              "What's the overall time complexity, and why isn't it O(n^2)?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n)",
+             explanation_markdown="left only ever increases and right only ever increases -- combined, they "
+                                   "take at most 2n steps total across the WHOLE scan, not n steps each nested "
+                                   "inside another n. The same amortized argument that makes two pointers O(n) "
+                                   "applies here."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -737,5 +892,30 @@ CONCEPT_PRACTICE_EXERCISES = {
              hint_markdown="This needs two passes: one to count every character's total frequency, a second to "
                             "find the first character whose count is exactly 1 -- the first pass has to finish "
                             "before the second one can trust any count."),
+    ],
+    "sliding-window": [
+        dict(prompt_markdown="Write `max_ones_after_flip(bits, k)` where `bits` is a list of 0s and 1s. You may "
+                              "flip at most `k` zeros to ones. Return the length of the longest contiguous run "
+                              "of 1s you can get. Use a variable-size window -- track how many zeros are "
+                              "currently inside it.",
+             starter_code="def max_ones_after_flip(bits, k):\n    # grow right every step; shrink left only when\n"
+                          "    # the window's zero count exceeds k\n    pass",
+             solution_code=(
+                 "def max_ones_after_flip(bits, k):\n"
+                 "    left = 0\n"
+                 "    zeros = 0\n"
+                 "    best = 0\n"
+                 "    for right in range(len(bits)):\n"
+                 "        if bits[right] == 0:\n"
+                 "            zeros += 1\n"
+                 "        while zeros > k:\n"
+                 "            if bits[left] == 0:\n"
+                 "                zeros -= 1\n"
+                 "            left += 1\n"
+                 "        best = max(best, right - left + 1)\n"
+                 "    return best"
+             ),
+             hint_markdown="The window is always valid as long as zeros <= k. Grow right unconditionally each "
+                            "step; only shrink left (in a while, not an if) when zeros exceeds k."),
     ],
 }

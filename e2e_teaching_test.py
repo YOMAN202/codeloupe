@@ -2,8 +2,8 @@
 Playwright E2E check for the teaching system (Learn hub + concept lessons,
 see backend/db/seed_concepts.py and docs/decisions.md "Teaching system
 content architecture"). Covers the original Arrays + Two Pointers pilot
-plus batch 1 of the curriculum expansion (Prefix Sums, Strings, Hashing --
-Days 9-12).
+plus batch 1 (Prefix Sums, Strings, Hashing -- Days 9-12) and batch 2
+(Sliding Window -- Days 15-16) of the curriculum expansion.
 
 Covers: the Learn hub lists all five lessons grouped by topic in the
 correct topic-before-pattern order; a concept lesson page renders every
@@ -45,12 +45,13 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all five concept lessons (pilot + batch 1)", cards.count() == 5)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing)",
+        check("Learn hub lists all six concept lessons (pilot + batch 1 + batch 2)", cards.count() == 6)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
-              and page.locator("h3", has_text="hashing").count() > 0)
+              and page.locator("h3", has_text="hashing").count() > 0
+              and page.locator("h3", has_text="sliding window").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -194,6 +195,44 @@ def main():
         page.wait_for_timeout(150)
         check("later hashing walkthrough caption shows seen's accumulated key/value pairs",
               "seen = {" in page.locator(".concept-walkthrough").inner_text())
+
+        # ---- batch 2: sliding-window lesson ------------------------------------
+        page.goto(f"{BASE}/#/learn/sliding-window", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Sliding window')", timeout=10000)
+        check("sliding-window prerequisite links to Two pointers",
+              page.get_by_role("link", name="Two pointers").count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("sliding-window walkthrough renders (longest_unique_substring)", walkthrough.count() > 0)
+        check("sliding-window walkthrough starts at step 1", "step 1 / 5" in walkthrough.inner_text())
+        # step through to the double-shrink frame (step 4) that specifically
+        # demonstrates why the shrink has to be a while loop, not an if
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        check("stepping to the double-shrink frame shows both shrink steps happened",
+              "shrink again" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        # final frame: left=2, right=3 -- a genuine two-box window, so the
+        # shaded "current window" band (windowEligible for topic=sliding-window)
+        # should highlight both boxes, not just one
+        page.get_by_role("button", name=re.compile("Next")).click()
+        page.wait_for_timeout(120)
+        check("sliding-window's shaded window band highlights both boxes of a real 2-wide window",
+              page.locator(".concept-walkthrough .seq-box-in-window").count() >= 2)
+
+        # the spot_bug checkpoint calls out the classic if-vs-while shrink bug
+        page.locator(".checkpoint-card").first.scroll_into_view_if_needed()
+        reveal_btns = page.get_by_role("button", name="Reveal answer")
+        check("sliding-window has reveal-style checkpoints (spot_bug/complexity)", reveal_btns.count() > 0)
+        reveal_btns.first.click()
+        page.wait_for_timeout(150)
+        check("revealed checkpoint explanation mentions the if-vs-while shrink bug",
+              "while" in page.locator(".checkpoint-explanation").first.inner_text().lower())
+
+        # ---- integration: day-15 (fixed-size window) links to the lesson ------
+        page.goto(f"{BASE}/#/lessons/15", wait_until="networkidle")
+        page.wait_for_selector("text=Day 15", timeout=10000)
+        check("day-15 lesson page shows a 'Learn: Sliding window' callout",
+              page.locator("a.callout", has_text="Learn: Sliding window").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 
