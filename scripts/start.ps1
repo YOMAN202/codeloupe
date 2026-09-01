@@ -232,8 +232,46 @@ Full logs are in: $RunDir
 # ---------------------------------------------------------------------
 # 5. Open the app
 # ---------------------------------------------------------------------
+#
+# Open exactly what was asked for (localhost, not the 127.0.0.1 used
+# above for polling). PowerShell's own "Start-Process <url>" relies on
+# .NET's ShellExecute path, which -- from a hidden, console-less
+# background process like this one -- can silently no-op on some
+# Windows setups instead of throwing, so nothing shows up and nothing
+# is left to catch. cmd.exe's built-in "start" is the same mechanism
+# the original, simpler version of this launcher used successfully, so
+# it's tried first; Start-Process is kept as a fallback in case cmd.exe
+# itself is ever unavailable. If neither manages it, that's reported
+# instead of just doing nothing.
 
-Start-Process $FrontendUrl
+$FrontendOpenUrl = "http://localhost:$FrontendPort/"
+$opened = $false
+
+try {
+    # The empty "" is deliberate -- it's the window title "start"
+    # expects as its first argument so it doesn't mistake the quoted
+    # URL that follows for one.
+    $openArgs = "/c start `"`" `"$FrontendOpenUrl`""
+    $openProc = Start-Process -FilePath 'cmd.exe' -ArgumentList $openArgs -WindowStyle Hidden -PassThru
+    $openProc.WaitForExit(5000) | Out-Null
+    if ($openProc.HasExited -and $openProc.ExitCode -eq 0) { $opened = $true }
+} catch { }
+
+if (-not $opened) {
+    try {
+        Start-Process $FrontendOpenUrl | Out-Null
+        $opened = $true
+    } catch { }
+}
+
+if (-not $opened) {
+    Show-Error 'Codeloupe is ready' @"
+Codeloupe is up and running at $FrontendOpenUrl, but this launcher
+wasn't able to open it in your browser automatically this time.
+
+Open that address yourself -- the app is ready and waiting.
+"@
+}
 
 } catch {
     Show-Error 'Unexpected error' @"
