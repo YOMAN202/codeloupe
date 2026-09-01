@@ -9,3 +9,14 @@ frontend/dist/
 .env.local
 .DS_Store
 *.log
+
+# editor/OS cruft
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# python tool caches
+.pytest_cache/
+.ruff_cache/
+*.egg-info/

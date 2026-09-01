@@ -26,7 +26,7 @@ from logic.revision import compute_next_schedule
 from logic.analysis import estimate_complexity, generate_hint_from_code
 from logic.curriculum_graph import all_prerequisite_blocks
 from logic.mistakes import classify_mistake, MISTAKE_CATEGORIES, CONFIDENCE_LEVELS
-from logic.pattern_families import pattern_family_for
+from logic.pattern_families import pattern_family_for, concept_lesson_for_family
 from logic.practice_session import build_practice_session
 from logic.approach_comparison import compare_candidate
 
@@ -660,7 +660,6 @@ def mistake_journal():
            JOIN attempts a ON m.attempt_id = a.id
            ORDER BY m.created_at DESC"""
     ).fetchall()
-    conn.close()
 
     entries = []
     category_counts = {}
@@ -668,11 +667,18 @@ def mistake_journal():
     for r in rows:
         d = dict(r)
         d["pattern_family"] = pattern_family_for(r["topic"], r["pattern"])
+        # Recurring-mistake -> lesson: an honest, explainable link back
+        # into the teaching system (never a guess -- see
+        # concept_lesson_for_family's own docstring), so the journal's
+        # "revise" step has somewhere concrete to go instead of leaving
+        # the learner to self-navigate the Learn hub.
+        d["related_lesson"] = concept_lesson_for_family(conn, r["topic"], d["pattern_family"])
         entries.append(d)
         if r["category"]:
             category_counts[r["category"]] = category_counts.get(r["category"], 0) + 1
         else:
             unclassified_count += 1
+    conn.close()
 
     recurring = sorted(
         ({"category": c, "count": n} for c, n in category_counts.items()),
@@ -739,10 +745,11 @@ def progress():
         """SELECT p.topic, p.pattern, m.category
            FROM mistakes m JOIN problems p ON m.problem_id = p.id"""
     ).fetchall()
-    family_counts, family_categories, category_counts = {}, {}, {}
+    family_counts, family_categories, category_counts, family_topics = {}, {}, {}, {}
     for r in mistake_join_rows:
         family = pattern_family_for(r["topic"], r["pattern"])
         family_counts[family] = family_counts.get(family, 0) + 1
+        family_topics.setdefault(family, r["topic"])
         if r["category"]:
             family_categories.setdefault(family, {})
             family_categories[family][r["category"]] = family_categories[family].get(r["category"], 0) + 1
@@ -752,6 +759,10 @@ def progress():
             "pattern_family": family,
             "mistake_count": count,
             "top_category": max(family_categories[family], key=family_categories[family].get) if family_categories.get(family) else None,
+            # Same honest, explainable link as the mistake journal's
+            # entries -- omitted (None) rather than guessed when no
+            # lesson covers this family yet.
+            "related_lesson": concept_lesson_for_family(conn, family_topics.get(family), family),
         }
         for family, count in sorted(family_counts.items(), key=lambda kv: -kv[1])[:5]
     ]
@@ -818,6 +829,22 @@ def progress():
     if in_progress_rows:
         resume = dict(max(in_progress_rows, key=lambda r: r["updated_at"] or ""))
 
+    # ---- Learn-hub concept lesson status, alongside (never merged into)
+    # the 45-day curriculum counts above. These are two genuinely
+    # separate tracks -- 45 day-by-day lessons vs. 28 concept lessons
+    # covering the same material from a different angle -- so folding one
+    # count into the other would misrepresent both. Surfaced as its own
+    # field so the dashboard's "lesson progress" isn't blind to Learn-hub
+    # activity, without pretending the two are one number.
+    concept_lesson_rows = conn.execute(
+        """SELECT COALESCE(clp.status, 'not_started') AS status
+           FROM concept_lessons cl
+           LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id"""
+    ).fetchall()
+    concept_status_counts = {"not_started": 0, "in_progress": 0, "completed": 0, "skipped": 0, "known": 0}
+    for r in concept_lesson_rows:
+        concept_status_counts[r["status"]] = concept_status_counts.get(r["status"], 0) + 1
+
     conn.close()
     return jsonify({
         "total_problems_attempted": total_attempted,
@@ -835,6 +862,7 @@ def progress():
         "hint_usage_rate": hint_usage_rate,
         "path_tier_progress": path_tier_progress,
         "lesson_status_counts": status_counts,
+        "concept_lesson_status_counts": concept_status_counts,
         "recommended_next_lesson": recommended_next,
         "resume_lesson": resume,
         "lessons_overview": [

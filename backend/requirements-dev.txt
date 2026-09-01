@@ -1,0 +1,10 @@
+# Dev/test-only dependencies -- NOT required to run the app itself (see
+# requirements.txt for that). Needed only to run this repo's own test and
+# verification scripts: backend/test_endpoints.py, backend/verify_all_live.py,
+# backend/verify_approach_baselines.py (all use `requests` against a running
+# backend), and the root-level e2e_*.py Playwright suites invoked by
+# run_all_tests.sh (use `playwright`, which also needs its browser binaries --
+# see README.md's setup steps for the one-time `playwright install chromium`).
+-r requirements.txt
+requests>=2.31,<3.0
+playwright>=1.40,<2.0

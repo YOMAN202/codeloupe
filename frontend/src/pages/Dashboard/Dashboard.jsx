@@ -5,6 +5,7 @@ import { fetchProgress, fetchPracticeSession } from "../../api/client";
 const SESSION_KIND_LABEL = {
   revision: "Revision",
   recurring_mistake: "Recurring mistake",
+  revisit_lesson: "Revisit lesson",
   weak_pattern: "Weak pattern",
   weak_topic: "Weak topic",
   new: "New problem",
@@ -90,7 +91,9 @@ export default function Dashboard() {
           <ul className="problem-list">
             {session.items.map((item) => (
               <li key={item.slug}>
-                <Link to={`/problems/${item.slug}`}>{item.title}</Link>{" "}
+                <Link to={item.kind === "revisit_lesson" ? `/learn/${item.slug}` : `/problems/${item.slug}`}>
+                  {item.title}
+                </Link>{" "}
                 <span className="viz-type-tag">{SESSION_KIND_LABEL[item.kind] || item.kind}</span>
                 <br />
                 <span className="muted small">{item.reason}</span>
@@ -164,7 +167,8 @@ export default function Dashboard() {
 
       <div className="dashboard-columns">
         <section className="lesson-section">
-          <h3>Lesson progress</h3>
+          <h3>Curriculum progress</h3>
+          <p className="muted small">The 45-day, day-by-day sequence.</p>
           <div className="lesson-status-bar">
             {["completed", "known", "in_progress", "skipped", "not_started"].map((s) => {
               const count = progress.lesson_status_counts[s] || 0;
@@ -189,6 +193,40 @@ export default function Dashboard() {
             ))}
           </ul>
         </section>
+
+        {progress.concept_lesson_status_counts && (
+          <section className="lesson-section">
+            <h3>Concept lessons</h3>
+            <p className="muted small">
+              The <Link to="/learn">Learn hub</Link>'s topic and pattern lessons -- a separate track
+              from the curriculum above, not merged into it.
+            </p>
+            <div className="lesson-status-bar">
+              {["completed", "known", "in_progress", "skipped", "not_started"].map((s) => {
+                const count = progress.concept_lesson_status_counts[s] || 0;
+                const total = Object.values(progress.concept_lesson_status_counts).reduce((a, b) => a + b, 0);
+                const width = pct(count, total);
+                return (
+                  width > 0 && (
+                    <div
+                      key={s}
+                      className={`lesson-status-segment status-${s}`}
+                      style={{ width: `${width}%` }}
+                      title={`${s}: ${count}`}
+                    />
+                  )
+                );
+              })}
+            </div>
+            <ul className="status-legend">
+              {Object.entries(progress.concept_lesson_status_counts).map(([s, c]) => (
+                <li key={s}>
+                  <span className={`status-dot status-${s}`} /> {s.replace("_", " ")}: {c}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="lesson-section" id="due-for-revision">
           <h3>Due for revision</h3>
@@ -238,6 +276,14 @@ export default function Dashboard() {
                 <li key={p.pattern_family}>
                   {p.pattern_family}: {p.mistake_count} mistake{p.mistake_count === 1 ? "" : "s"}
                   {p.top_category && <span className="muted small"> (most often: {p.top_category})</span>}
+                  {p.related_lesson && (
+                    <>
+                      {" "}
+                      <span className="muted small">
+                        &middot; <Link to={`/learn/${p.related_lesson.slug}`}>revisit lesson</Link>
+                      </span>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>

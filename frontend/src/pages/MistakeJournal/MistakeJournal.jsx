@@ -90,6 +90,11 @@ export default function MistakeJournal() {
                   <span className="viz-type-tag">{CONFIDENCE_LABEL[e.confidence] || e.confidence}</span>
                 </p>
                 {e.evidence && <p className="muted small">{e.evidence}</p>}
+                {e.related_lesson && (
+                  <p className="muted small">
+                    Revise: <Link to={`/learn/${e.related_lesson.slug}`}>{e.related_lesson.title}</Link>
+                  </p>
+                )}
               </li>
             ))}
           </ol>

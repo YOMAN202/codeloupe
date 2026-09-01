@@ -68,3 +68,35 @@ def pattern_family_for(topic: str, pattern: str) -> str:
             return family
     readable_topic = t.replace("-", " ") or "general"
     return f"General {readable_topic}"
+
+
+# The one DB-touching function in an otherwise pure module -- kept here
+# rather than duplicated in app.py and logic/practice_session.py (both
+# need it, and practice_session.py can't import from app.py without a
+# cycle) because it's really the same normalization job as
+# pattern_family_for: turning a (topic, pattern) signal into one settled
+# name, just resolved one step further into an actual concept_lessons row.
+#
+# This is the EXACT reverse of app.py's _related_problems_for_concept, so
+# it reuses that function's own matching rule rather than inventing a
+# second one: a lesson "covers" a (topic, pattern_family) pair when
+# lesson.topic matches AND (lesson.pattern_family IS NULL, meaning the
+# lesson covers the whole topic -- kind is 'topic' vs 'pattern' as
+# content categorization, it is NOT part of this match -- OR
+# lesson.pattern_family equals the family exactly, never fuzzily). When
+# more than one lesson covers a topic, the one with a matching specific
+# pattern_family wins over a whole-topic one, same preference order
+# _related_problems_for_concept's narrowing implies. Returns None --
+# never a guess -- when nothing covers it, so every caller can simply
+# omit the suggestion rather than link somewhere that doesn't fit.
+def concept_lesson_for_family(conn, topic, pattern_family):
+    if not topic:
+        return None
+    row = conn.execute(
+        """SELECT slug, title FROM concept_lessons
+           WHERE topic = ? AND (pattern_family IS NULL OR pattern_family = ?)
+           ORDER BY CASE WHEN pattern_family = ? THEN 0 ELSE 1 END
+           LIMIT 1""",
+        (topic, pattern_family, pattern_family),
+    ).fetchone()
+    return dict(row) if row else None

@@ -11,9 +11,9 @@ into a path or hides any other problem/lesson from normal navigation.
 """
 import datetime
 
-from .pattern_families import pattern_family_for
+from .pattern_families import pattern_family_for, concept_lesson_for_family
 
-MAX_ITEMS = 4
+MAX_ITEMS = 5
 
 
 def _first_unsolved_in_family(conn, family):
@@ -38,6 +38,14 @@ def build_practice_session(conn):
         seen.add(slug)
         items.append({"slug": slug, "title": title, "kind": kind, "reason": reason})
 
+    lesson_seen = set()
+
+    def add_lesson(slug, title, kind, reason):
+        if slug in lesson_seen:
+            return
+        lesson_seen.add(slug)
+        items.append({"slug": slug, "title": title, "kind": kind, "reason": reason})
+
     # 1. Revision: earliest problem due today or overdue -- reuses the same
     # revision_schedule data /api/progress's "problems_due_for_revision" does.
     due = conn.execute(
@@ -58,10 +66,11 @@ def build_practice_session(conn):
            FROM mistakes m JOIN problems p ON m.problem_id = p.id
            WHERE m.category IS NOT NULL"""
     ).fetchall()
-    pair_counts, family_counts = {}, {}
+    pair_counts, family_counts, family_topics = {}, {}, {}
     for r in mistake_rows:
         family = pattern_family_for(r["topic"], r["pattern"])
         family_counts[family] = family_counts.get(family, 0) + 1
+        family_topics.setdefault(family, r["topic"])
         key = (family, r["category"])
         pair_counts[key] = pair_counts.get(key, 0) + 1
 
@@ -74,6 +83,29 @@ def build_practice_session(conn):
         if candidate:
             add(candidate["slug"], candidate["title"], "recurring_mistake",
                 f"Recommended because '{category}' has come up {count} times in {family}.")
+
+    # 2b. Alongside the recurring-mistake PROBLEM above, occasionally
+    # suggest revisiting the concept LESSON itself, when the recurring
+    # family maps to one the learner hasn't already completed/known. Uses
+    # the exact same lookup the Mistake Journal's "related_lesson" field
+    # does (concept_lesson_for_family) -- so this is never a separate,
+    # fuzzier inference, just the same honest match surfaced in one more
+    # place. Skipped outright (no fallback guess) when there's no
+    # matching lesson, or the learner has already marked it done.
+    if recurring:
+        (family, category), count = max(recurring, key=lambda kv: kv[1])
+        lesson = concept_lesson_for_family(conn, family_topics.get(family), family)
+        if lesson:
+            status_row = conn.execute(
+                """SELECT COALESCE(clp.status, 'not_started') AS status
+                   FROM concept_lessons cl
+                   LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
+                   WHERE cl.slug = ?""",
+                (lesson["slug"],),
+            ).fetchone()
+            if status_row and status_row["status"] not in ("completed", "known"):
+                add_lesson(lesson["slug"], lesson["title"], "revisit_lesson",
+                           f"'{category}' has come up {count} times in {family} -- this lesson covers it.")
 
     # 3. A problem targeting a weak topic or pattern. Pattern-level (more
     # specific) is preferred when there's mistake-journal data to support
