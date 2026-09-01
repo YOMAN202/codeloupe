@@ -184,4 +184,10 @@ REM this window (and the console session that issued it) closes, rather
 REM than closing on the same instant the request was made.
 timeout /t 2 /nobreak >nul
 
-exit /b 0
+REM Plain "exit" (not "exit /b"): /b only returns from this script to
+REM whatever invoked it -- closing a freshly-spawned window if that's
+REM double-click, but leaving an existing terminal window open on its
+REM prompt if start.bat was run from one. Plain "exit" ends the current
+REM command-processor session outright either way, which is what
+REM actually guarantees the window itself closes here.
+exit 0
