@@ -159,6 +159,20 @@ exit /b 1
 :frontendready
 echo [Codeloupe] Frontend is up.
 echo [Codeloupe] Opening http://localhost:5173/ ...
-start "" http://localhost:5173/
+
+REM explorer.exe (not cmd's own "start URL") is deliberate: explorer.exe
+REM is a real, directly-executable program, so launching it is a normal,
+REM independent process start -- unlike "start <bare URL>", which asks
+REM cmd.exe itself to hand the URL off to the shell's URL association,
+REM a path that depends on the calling console session in a way that's
+REM known to occasionally get dropped on some Windows setups, especially
+REM when the calling script exits immediately after. explorer.exe is the
+REM standard, well-documented fix for exactly that failure pattern.
+start "" explorer.exe "http://localhost:5173/"
+
+REM Also deliberate: give the handoff a moment to actually happen before
+REM this window (and the console session that issued it) closes, rather
+REM than closing on the same instant the request was made.
+timeout /t 2 /nobreak >nul
 
 exit /b 0
