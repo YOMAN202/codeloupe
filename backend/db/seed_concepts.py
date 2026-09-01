@@ -741,6 +741,196 @@ CONCEPT_LESSONS = [
             "that stores every node to check for a repeat."
         ),
     ),
+    # ---- Batch 4: item 6 of the curriculum-ordered expansion -- stacks
+    # and queues (Days 28-29). Only 4 curated problems each, so unlike
+    # linked-lists/fast-slow this stays ONE lesson per topic rather than
+    # splitting off a separate pattern lesson for monotonic stack/deque --
+    # not enough curated backing to justify a second lesson, so that
+    # technique is taught within the topic lesson's own recognize/
+    # intuition sections instead. See docs/decisions.md "Teaching system
+    # expansion: batch 4."
+    dict(
+        slug="stacks",
+        kind="topic",
+        topic="stacks",
+        pattern_family=None,
+        title="Stacks",
+        display_order=1,
+        estimated_minutes=16,
+        summary="LIFO -- push and pop from one end only. Simple to implement, but the engine behind matching, "
+                "nesting, and the monotonic-stack trick for 'nearest bigger/smaller element' problems.",
+        prerequisite_slugs="arrays",
+        what_markdown=(
+            "A stack is a LIFO (last-in, first-out) sequence: you only ever add to (`push`) or remove from "
+            "(`pop`) ONE end, called the top. Python's plain list already IS a stack -- `.append()` pushes, "
+            "`.pop()` pops from the end -- no special class needed."
+        ),
+        why_markdown=(
+            "A stack is the natural fit whenever \"what matters right now\" is whatever happened most recently "
+            "and isn't resolved yet -- an open bracket waiting for its close, an operand waiting to be combined "
+            "in an expression, an element waiting to find the next bigger value after it. Trying to answer "
+            "those questions by re-scanning from the start every time is `O(n)` per question; a stack "
+            "remembers exactly the unresolved things, in exactly the order that matters, for free."
+        ),
+        recognize_markdown=(
+            "**Matching/nesting**: brackets, tags, or any \"every opener needs a corresponding closer, and they "
+            "have to close in the reverse order they opened\" structure. **Expression evaluation**: postfix/RPN "
+            "notation, or anything where you combine the two most-recently-seen operands. **Monotonic stack** "
+            "-- the tell is \"for each element, find the nearest element to its right (or left) that's bigger "
+            "(or smaller)\" -- e.g. daily temperatures until it gets warmer. The naive approach is a nested "
+            "loop checking every pair after it, `O(n^2)`; a stack that stays sorted (monotonic) as you scan "
+            "resolves every element in one pass, `O(n)` total."
+        ),
+        intuition_markdown=(
+            "**Matching**: push every opener; when you see a closer, pop and check it matches -- an empty "
+            "stack when you expect something to pop, or a leftover non-empty stack at the end, both mean "
+            "unmatched. **Monotonic stack**: walk once, keeping the stack's values in increasing (or "
+            "decreasing) order at all times. When the current value would break that order, pop entries off "
+            "-- each pop is a \"found its answer\" event, since the current value IS that popped value's "
+            "nearest bigger element -- before pushing the current value on. Multiple pops can happen for one "
+            "new value, so this is a `while`, not an `if`. **Auxiliary stack** (e.g. min-stack): track a "
+            "running minimum alongside each push, either a parallel min-stack or `(value, min_so_far)` tuples, "
+            "so the current minimum is available in `O(1)` without rescanning."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `next_greater(nums)` on `[3, 1, 4, 2]` -- for each value, find the nearest value to its "
+            "right that's bigger (or `-1` if none exists). Only the stack itself is shown below; `i` and the "
+            "current value are narrated in each caption, since the stack's push/pop behavior -- not array "
+            "position -- is the whole point here."
+        ),
+        walkthrough_code=(
+            "def next_greater(nums):\n"
+            "    stack = []  # values still waiting to find something bigger\n"
+            "    result = {}\n"
+            "    for i, n in enumerate(nums):\n"
+            "        while stack and stack[-1] < n:\n"
+            "            result[stack.pop()] = n\n"
+            "        stack.append(n)\n"
+            "    for n in stack:\n"
+            "        result[n] = -1  # nothing bigger ever showed up\n"
+            "    return [result[n] for n in nums]"
+        ),
+        walkthrough_frames=[
+            dict(caption="i=0, n=3. Stack is empty -- nothing to compare against yet. Push 3.",
+                 locals={"stack": [3]}),
+            dict(caption="i=1, n=1. Top of stack is 3; 3 is NOT less than 1, so 3 isn't resolved yet. Push 1.",
+                 locals={"stack": [3, 1]}),
+            dict(caption="i=2, n=4. Top of stack is 1; 1 < 4, so 1's next-greater element is 4 -- pop it. Top is now 3; 3 < 4 too, so the while loop keeps popping.",
+                 locals={"stack": [3]}),
+            dict(caption="3 < 4 as well -- pop it too (3's next-greater is also 4). Stack is now empty, so the while loop stops. Push 4.",
+                 locals={"stack": [4]}),
+            dict(caption="i=3, n=2. Top of stack is 4; 4 is NOT less than 2, so 4 isn't resolved. Push 2. Loop ends -- everything still on the stack (4 and 2) never found a bigger element to their right.",
+                 locals={"stack": [4, 2]}),
+        ],
+        common_mistakes_markdown=(
+            "Using `if` instead of `while` when popping in a monotonic stack -- one pop isn't always enough "
+            "(see `i=2` in the walkthrough above, which needs two). Checking `stack[-1]` without first "
+            "confirming the stack isn't empty -- `IndexError` on an empty stack; always guard with `if stack:` "
+            "or `while stack and ...`. For matching/nesting problems: checking that pops never fail but "
+            "forgetting a non-empty stack at the very end ALSO means something was never closed -- the correct "
+            "check is `len(stack) == 0` after the whole scan, not just \"no error happened along the way\". "
+            "And for min-stack: recomputing the minimum by scanning the whole stack on every query defeats the "
+            "entire point -- track a running minimum alongside each push instead."
+        ),
+        complexity_markdown=(
+            "Push/pop/peek: `O(1)` each -- Python's list `.append()`/`.pop()` from the end are both `O(1)`. A "
+            "monotonic stack walk is still `O(n)` total despite the `while` nested inside the `for`: each "
+            "element is pushed once and popped at most once across the ENTIRE scan -- the same amortized "
+            "argument as two pointers and sliding windows. `O(n)` space in the worst case (nothing ever gets "
+            "popped, e.g. a strictly decreasing sequence for `next_greater`)."
+        ),
+    ),
+    dict(
+        slug="queues",
+        kind="topic",
+        topic="queues",
+        pattern_family=None,
+        title="Queues",
+        display_order=1,
+        estimated_minutes=16,
+        summary="FIFO -- add at the back, remove from the front. The backbone of BFS, and home to the "
+                "monotonic deque for tracking a sliding window's max/min in O(1) amortized.",
+        prerequisite_slugs="stacks",
+        what_markdown=(
+            "A queue is FIFO (first-in, first-out): add at the back (`enqueue`), remove from the front "
+            "(`dequeue`) -- the opposite discipline from a stack's LIFO. A plain Python list CAN act as a "
+            "queue but shouldn't for anything performance-sensitive: `list.pop(0)` is `O(n)` because every "
+            "remaining element has to shift down one slot. `collections.deque` gives `O(1)` operations at "
+            "BOTH ends instead."
+        ),
+        why_markdown=(
+            "Anywhere \"process things in the order they arrived, layer by layer\" matters, a queue is the "
+            "natural fit -- most visibly, BFS (visit everything one step away before anything two steps away). "
+            "The less obvious use is the monotonic deque: tracking the max (or min) of a sliding window in one "
+            "pass without rescanning the window every time it moves, the queue's own version of the monotonic "
+            "stack's trick."
+        ),
+        recognize_markdown=(
+            "**Process in arrival order**: BFS/level-order traversal, rate limiting over a rolling time window. "
+            "**Monotonic deque**: the tell is \"track the max (or min) of every sliding window of size k as it "
+            "moves across an array,\" in one pass. Recomputing each window's max directly is `O(n*k)`; a heap "
+            "works but is `O(n log n)` and awkward to evict expired entries from. A deque that stays monotonic "
+            "does it in `O(n)` total."
+        ),
+        intuition_markdown=(
+            "**Basic FIFO**: `deque.append(x)` to enqueue, `deque.popleft()` to dequeue. **Monotonic deque "
+            "(sliding-window maximum)**: the deque holds INDICES, not values -- a bare value can't tell you "
+            "when it's aged out of the window, but an index can be compared against the current position. At "
+            "each step: pop smaller values off the BACK before appending the current index (like a monotonic "
+            "stack -- they can never be the max again once a bigger value has arrived), then check whether the "
+            "FRONT has fallen outside the window and evict it if so. The front always holds the current "
+            "window's max candidate, so reading it is `O(1)` -- no rescanning."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace the sliding-window-maximum technique on `nums = [4, 2, 5, 1]`, `k = 2` -- the max of every "
+            "2-element window, in one pass. Only the deque is shown below (as the indices it actually holds, "
+            "not the values); `i` and the current value are narrated in each caption."
+        ),
+        walkthrough_code=(
+            "from collections import deque\n\n"
+            "def max_sliding_window(nums, k):\n"
+            "    dq = deque()  # indices; front always holds the current window's max candidate\n"
+            "    result = []\n"
+            "    for i, n in enumerate(nums):\n"
+            "        while dq and nums[dq[-1]] < n:\n"
+            "            dq.pop()\n"
+            "        dq.append(i)\n"
+            "        if dq[0] <= i - k:\n"
+            "            dq.popleft()\n"
+            "        if i >= k - 1:\n"
+            "            result.append(nums[dq[0]])\n"
+            "    return result"
+        ),
+        walkthrough_frames=[
+            dict(caption="i=0, n=4. Deque is empty -- push index 0. deque(indices)=[0]. Window not complete yet (need k=2 values).",
+                 locals={"deque": [0]}),
+            dict(caption="i=1, n=2. Back-of-deque value (index 0 -> 4) is NOT less than 2, so no pop. Push index 1. deque(indices)=[0, 1]. Window [0,1] is now complete: max = nums[front] = nums[0] = 4.",
+                 locals={"deque": [0, 1]}),
+            dict(caption="i=2, n=5. Back of deque is index 1 (value 2); 2 < 5, so it can never be the max again once 5 is around -- pop it. deque(indices)=[0]. Still 5 > nums[0]=4, so the while loop keeps popping.",
+                 locals={"deque": [0]}),
+            dict(caption="Back is now index 0 (value 4); 4 < 5 too, so pop it as well. Deque is now empty. Push index 2. deque(indices)=[2]. Window [1,2]: max = nums[2] = 5.",
+                 locals={"deque": [2]}),
+            dict(caption="i=3, n=1. Back-of-deque value (index 2 -> 5) is NOT less than 1, so no pop. Push index 3. deque(indices)=[2, 3]. Window [2,3]: max = nums[2] = 5. Loop ends -- the front held each window's max the whole time, with no rescanning.",
+                 locals={"deque": [2, 3]}),
+        ],
+        common_mistakes_markdown=(
+            "Using a plain list with `.pop(0)` to dequeue -- `O(n)` per operation since everything shifts, "
+            "silently turning an intended `O(n)` algorithm into `O(n^2)`. Use `collections.deque` instead. For "
+            "a monotonic deque: forgetting it needs to hold INDICES, not raw values -- a value alone can't "
+            "tell you whether it's aged out of the current window, but comparing an index against `i - k` can. "
+            "Using `if` instead of `while` when popping smaller values off the back -- the same class of bug "
+            "as monotonic stacks. And getting the three steps out of order: pop smaller values from the back, "
+            "THEN push the current index, THEN evict an expired front -- doing them in a different order can "
+            "let an already-expired index leak into the answer."
+        ),
+        complexity_markdown=(
+            "`collections.deque` gives `O(1)` enqueue/dequeue at both ends. A monotonic deque walk is `O(n)` "
+            "total for the whole array despite the `while` nested inside the `for`: each index is pushed once "
+            "and popped (from either end) at most once across the entire scan -- the same amortized argument "
+            "as monotonic stacks and sliding windows. Compare to `O(n*k)` for recomputing each window's max "
+            "directly, or `O(n log n)` for a heap-based approach to the same problem."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -1093,6 +1283,103 @@ CONCEPT_CHECKPOINTS = {
                                    "cycle. Either way, O(n) time -- and O(1) space, versus O(n) space for a "
                                    "visited-set approach that stores every node to check for a repeat."),
     ],
+    "stacks": [
+        dict(kind="choose_pattern",
+             prompt_markdown="For each element in an array, you need to find the nearest element to its right "
+                              "that's strictly greater. What's the best approach?",
+             code=None,
+             choices_json=[
+                 "Monotonic stack, O(n) total",
+                 "Nested loop checking every pair to the right, O(n^2)",
+                 "Sort the array first",
+                 "Two pointers from opposite ends",
+             ],
+             correct_answer="Monotonic stack, O(n) total",
+             explanation_markdown="'Nearest bigger/smaller element to the right' is the monotonic-stack tell. "
+                                   "Keep a stack of values still waiting to be resolved; each new value pops "
+                                   "and resolves everything smaller than it before being pushed itself -- one "
+                                   "pass, O(n) total work."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to find each value's next-greater element, but it sometimes "
+                              "leaves a value unresolved when it should have found one. What's the bug?",
+             code="def next_greater(nums):\n"
+                  "    stack = []\n"
+                  "    result = {}\n"
+                  "    for n in nums:\n"
+                  "        if stack and stack[-1] < n:\n"
+                  "            result[stack.pop()] = n\n"
+                  "        stack.append(n)\n"
+                  "    for n in stack:\n"
+                  "        result[n] = -1\n"
+                  "    return [result[n] for n in nums]",
+             choices_json=None,
+             correct_answer="It uses if instead of while, so it only pops ONE element even when several "
+                             "stacked values are all smaller than the new value and should all be resolved "
+                             "by it at once.",
+             explanation_markdown="Trace nums=[3, 1, 4, 2]: at n=4, both 1 and 3 are smaller and should both "
+                                   "resolve to 4. `if` pops only 1 and stops -- 3 never gets popped here, so "
+                                   "it incorrectly waits for a LATER value instead of being resolved by 4. "
+                                   "`while` keeps popping until the top is no longer smaller -- exactly the "
+                                   "double-pop shown in this lesson's own walkthrough."),
+        dict(kind="complexity",
+             prompt_markdown="A monotonic stack walk has a while loop nested inside a for loop. What's the "
+                              "overall time complexity for n elements, and why isn't it O(n^2)?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n)",
+             explanation_markdown="Each element is pushed exactly once and popped at most once across the "
+                                   "ENTIRE scan -- at most 2n operations total, not n operations each nested "
+                                   "inside another n. The same amortized argument as sliding windows and "
+                                   "monotonic deques."),
+    ],
+    "queues": [
+        dict(kind="choose_pattern",
+             prompt_markdown="You need the maximum value in every sliding window of size k as it moves across "
+                              "an array, computed in one pass. What's the right approach?",
+             code=None,
+             choices_json=[
+                 "Monotonic deque, O(n) total",
+                 "Recompute the max of each window directly, O(n*k)",
+                 "A hash map of value counts",
+                 "Sort each window before reading its max",
+             ],
+             correct_answer="Monotonic deque, O(n) total",
+             explanation_markdown="A monotonic deque's front always holds the current window's max candidate "
+                                   "-- no rescanning needed. Recomputing each window's max directly is O(n*k); "
+                                   "a heap works but costs O(n log n) and can't cleanly evict expired entries."),
+        dict(kind="spot_bug",
+             prompt_markdown="This sliding-window-maximum can never correctly evict values that have aged out "
+                              "of the window. What's the bug?",
+             code="def max_sliding_window(nums, k):\n"
+                  "    dq = deque()\n"
+                  "    result = []\n"
+                  "    for i, n in enumerate(nums):\n"
+                  "        while dq and dq[-1] < n:\n"
+                  "            dq.pop()\n"
+                  "        dq.append(n)\n"
+                  "        if i >= k - 1:\n"
+                  "            result.append(dq[0])\n"
+                  "    return result",
+             choices_json=None,
+             correct_answer="The deque stores raw VALUES (dq.append(n)) instead of indices, so there's no way "
+                             "to tell whether the value at the front is still inside the current window or "
+                             "fell out of it several steps ago -- a value alone carries no position "
+                             "information.",
+             explanation_markdown="Store indices instead (dq.append(i)), look up nums[dq[0]] for the value "
+                                   "when needed, and compare dq[0] against i - k to know when the front has "
+                                   "aged out and needs to be evicted -- exactly what this lesson's own "
+                                   "walkthrough code does."),
+        dict(kind="complexity",
+             prompt_markdown="A monotonic deque used for sliding-window-maximum has a while loop nested "
+                              "inside a for loop, just like a monotonic stack. What's the overall time "
+                              "complexity for n elements?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n)",
+             explanation_markdown="Each index is pushed once and popped (from either end) at most once "
+                                   "across the entire scan -- at most a constant multiple of n operations "
+                                   "total, not n operations nested inside another n."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -1259,5 +1546,51 @@ CONCEPT_PRACTICE_EXERCISES = {
              hint_markdown="Both start at head. Each iteration: slow advances one node, fast advances two. "
                             "Stop as soon as fast can't take a full 2-step move (fast is None or fast.next is "
                             "None) -- slow is sitting on the middle at that point."),
+    ],
+    "stacks": [
+        dict(prompt_markdown="Write `remove_adjacent_duplicates(s)` that repeatedly removes pairs of adjacent "
+                              "equal characters until none remain (e.g. `'abbaca'` -> `'ca'`: removing `bb` "
+                              "makes the `a`s on either side newly adjacent, so they remove too, leaving "
+                              "`'ca'`). Use a stack -- don't rebuild the string from scratch on every removal.",
+             starter_code="def remove_adjacent_duplicates(s):\n    # push each character; if it matches the\n"
+                          "    # top of the stack, pop instead of pushing\n    pass",
+             solution_code=(
+                 "def remove_adjacent_duplicates(s):\n"
+                 "    stack = []\n"
+                 "    for c in s:\n"
+                 "        if stack and stack[-1] == c:\n"
+                 "            stack.pop()\n"
+                 "        else:\n"
+                 "            stack.append(c)\n"
+                 "    return ''.join(stack)"
+             ),
+             hint_markdown="For each character: if it equals the top of the stack, that's a fresh adjacent "
+                            "pair -- pop instead of pushing (the pop can expose a NEW adjacent pair with "
+                            "what's now on top, which the next character will catch). Otherwise push it."),
+    ],
+    "queues": [
+        dict(prompt_markdown="Write `first_negative_in_each_window(nums, k)` that returns the first negative "
+                              "number in every window of size k (0 if the window has none). Use a deque of "
+                              "indices -- don't rescan each window from scratch.",
+             starter_code="from collections import deque\n\ndef first_negative_in_each_window(nums, k):\n"
+                          "    # track indices of negative numbers currently inside the window,\n"
+                          "    # oldest first; evict from the front once an index ages out\n    pass",
+             solution_code=(
+                 "from collections import deque\n\n"
+                 "def first_negative_in_each_window(nums, k):\n"
+                 "    dq = deque()\n"
+                 "    result = []\n"
+                 "    for i, n in enumerate(nums):\n"
+                 "        if n < 0:\n"
+                 "            dq.append(i)\n"
+                 "        if dq and dq[0] <= i - k:\n"
+                 "            dq.popleft()\n"
+                 "        if i >= k - 1:\n"
+                 "            result.append(nums[dq[0]] if dq else 0)\n"
+                 "    return result"
+             ),
+             hint_markdown="Only negative indices ever go in the deque, and they're always added in "
+                            "increasing order -- so the front is always the FIRST negative number still "
+                            "inside the window. Evict the front when its index is k or more behind i."),
     ],
 }

@@ -3,8 +3,9 @@ Playwright E2E check for the teaching system (Learn hub + concept lessons,
 see backend/db/seed_concepts.py and docs/decisions.md "Teaching system
 content architecture"). Covers the original Arrays + Two Pointers pilot
 plus batch 1 (Prefix Sums, Strings, Hashing -- Days 9-12), batch 2
-(Sliding Window -- Days 15-16), and batch 3 (Linked Lists, Fast/Slow
-Pointers -- Days 25-27) of the curriculum expansion.
+(Sliding Window -- Days 15-16), batch 3 (Linked Lists, Fast/Slow
+Pointers -- Days 25-27), and batch 4 (Stacks, Queues -- Days 28-29) of
+the curriculum expansion.
 
 Covers: the Learn hub lists all lessons grouped by topic in the correct
 topic-before-pattern order; a concept lesson page renders every section
@@ -50,14 +51,16 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all eight concept lessons (pilot + batches 1-3)", cards.count() == 8)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists)",
+        check("Learn hub lists all ten concept lessons (pilot + batches 1-4)", cards.count() == 10)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
               and page.locator("h3", has_text="hashing").count() > 0
               and page.locator("h3", has_text="sliding window").count() > 0
-              and page.locator("h3", has_text="linked lists").count() > 0)
+              and page.locator("h3", has_text="linked lists").count() > 0
+              and page.locator("h3", has_text="stacks").count() > 0
+              and page.locator("h3", has_text="queues").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -287,6 +290,51 @@ def main():
         check("day-27 lesson page shows callouts for both Linked lists and Fast/slow pointers",
               page.locator("a.callout", has_text="Learn: Linked lists").count() > 0
               and page.locator("a.callout", has_text="Learn: Fast/slow pointers").count() > 0)
+
+        # ---- batch 4: stacks lesson (monotonic-stack double-pop walkthrough) --
+        page.goto(f"{BASE}/#/learn/stacks", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Stacks')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("stacks walkthrough renders via the plain array/pointer view (a stack IS just a list)",
+              walkthrough.locator(".seq-boxes").count() > 0)
+        check("stacks walkthrough shows only the stack itself, no stray pointer chip on it",
+              walkthrough.locator(".pointer-chip").count() == 0)
+        for _ in range(2):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        check("double-pop frame's caption shows both stacked values got resolved by the same new value",
+              "keeps popping" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        reveal_btns = page.get_by_role("button", name="Reveal answer")
+        check("stacks has reveal-style checkpoints", reveal_btns.count() > 0)
+        reveal_btns.first.click()
+        page.wait_for_timeout(150)
+        check("revealed checkpoint explanation mentions the if-vs-while pop bug",
+              "while" in page.locator(".checkpoint-explanation").first.inner_text().lower())
+
+        # ---- batch 4: queues lesson (monotonic-deque, indices not values) -----
+        page.goto(f"{BASE}/#/learn/queues", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Queues')", timeout=10000)
+        check("queues prerequisite links to Stacks",
+              page.get_by_role("link", name="Stacks").count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("queues walkthrough renders (monotonic deque of indices)", walkthrough.count() > 0)
+        check("queues lesson explicitly flags the deque holds indices, not raw values",
+              "indices" in page.locator("body").inner_text().lower())
+        for _ in range(4):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(120)
+        check("final queues frame's deque holds two indices after a full scan",
+              page.locator(".concept-walkthrough .seq-box").count() == 2)
+
+        # ---- integration: day-28/29 link to their respective lessons ----------
+        page.goto(f"{BASE}/#/lessons/28", wait_until="networkidle")
+        page.wait_for_selector("text=Day 28", timeout=10000)
+        check("day-28 lesson page shows a 'Learn: Stacks' callout",
+              page.locator("a.callout", has_text="Learn: Stacks").count() > 0)
+        page.goto(f"{BASE}/#/lessons/29", wait_until="networkidle")
+        page.wait_for_selector("text=Day 29", timeout=10000)
+        check("day-29 lesson page shows a 'Learn: Queues' callout",
+              page.locator("a.callout", has_text="Learn: Queues").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 
