@@ -1535,6 +1535,393 @@ CONCEPT_LESSONS = [
             "n)` extra space for the recursion stack."
         ),
     ),
+    # ---- Batch 8: item 10 of the curriculum-ordered expansion -- trees
+    # (Days 30-32). Three lessons, matching the curriculum's own three-day
+    # split (structure/traversals, BSTs, height/level-order) rather than
+    # pattern_families.py's coarser two-family split for topic="trees"
+    # ("Tree DFS recursion" vs "Tree BFS / level order") -- BSTs have 3
+    # dedicated curated problems (the same backing count that justified
+    # Fast/Slow Pointers as its own lesson in batch 3) and a whole
+    # dedicated curriculum day, but no clean pattern_family of their own
+    # (their pattern strings -- "DFS with bounds", "in-order traversal for
+    # rank" -- don't share a keyword pattern_families.py's rules match
+    # distinctly from the general DFS bucket). Rather than invent a new
+    # family rule just to serve lesson-narrowing (which would touch the
+    # shared taxonomy every other feature reads too), all three lessons
+    # below leave pattern_family unset for BSTs specifically and rely on
+    # lesson content/walkthroughs to make clear which of the topic's
+    # related problems are BST-specific -- see docs/decisions.md "Teaching
+    # system expansion: batch 8" for the full reasoning.
+    #
+    # First topic needing TreeView (see ConceptWalkthrough.jsx's
+    # buildTreeGraph adapter, added this batch, parallel to
+    # buildLinkedListGraph from batch 3) -- trees, like linked lists,
+    # aren't array-shaped, and TreeView shares LinkedListView's same
+    # Map/roots graph shape and the same ordered-pointers-list requirement
+    # (the tree's actual root must be authored FIRST in `pointers`).
+    dict(
+        slug="trees",
+        kind="topic",
+        topic="trees",
+        pattern_family=None,
+        title="Trees: structure and traversal",
+        display_order=1,
+        estimated_minutes=18,
+        summary="A node holding a value plus references to its children -- the recursive base-case-is-null "
+                "pattern this lesson builds, and the three DFS visiting orders (preorder/inorder/postorder).",
+        prerequisite_slugs="recursion",
+        what_markdown=(
+            "A binary tree is a node structure: each node holds a value and up to two child references "
+            "(`.left`, `.right`), each of which is either another node or `None`. There's no single \"first\" "
+            "or \"last\" element the way an array has -- just a `root` node you reach every other node FROM, by "
+            "following `.left`/`.right` references. **Traversal** means visiting every node in some order; the "
+            "three DFS orders differ only in WHEN a node is visited relative to its children: **preorder** "
+            "(node, then left subtree, then right subtree), **inorder** (left, then node, then right), "
+            "**postorder** (left, then right, then node)."
+        ),
+        why_markdown=(
+            "Trees are where recursion and node/reference structures combine -- almost every tree function has "
+            "the exact same skeleton: `if node is None: return <base case>`, then recurse into `node.left` and "
+            "`node.right`, then combine their results. Once that skeleton is second nature, the actual "
+            "per-problem logic (what to do at each node, how to combine children's results) is usually the "
+            "only real work left."
+        ),
+        recognize_markdown=(
+            "Any problem operating on a binary tree (given as `root`) is reaching for this skeleton by "
+            "default. The traversal ORDER matters for the specific problem: preorder is natural when you need "
+            "the node's own value before its children's (e.g. copying/serializing a tree top-down); inorder "
+            "is the one to reach for on a BST specifically (see the next lesson -- it visits nodes in sorted "
+            "order); postorder is natural whenever a node needs its CHILDREN's answers before it can compute "
+            "its own (height, diameter, \"is this subtree balanced\")."
+        ),
+        intuition_markdown=(
+            "Every recursive tree function answers two questions: what's the base case (almost always `node "
+            "is None` -- an empty subtree), and how do I combine this node's own value with whatever my "
+            "recursive calls into `node.left` and `node.right` returned? Get comfortable with that shape and "
+            "most tree problems become \"what do I compute at each node, and how do I combine\" instead of "
+            "\"how do I even traverse this.\""
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `preorder(node, result)` on a small tree, collecting values into `result` as it visits each "
+            "node BEFORE recursing into its children. `result`'s growing contents are narrated in each "
+            "caption rather than rendered as a second view here, so the walkthrough can focus on how `node` "
+            "moves around the tree structure itself."
+        ),
+        walkthrough_code=(
+            "def preorder(node, result):\n"
+            "    if node is None:\n"
+            "        return\n"
+            "    result.append(node.val)\n"
+            "    preorder(node.left, result)\n"
+            "    preorder(node.right, result)"
+        ),
+        walkthrough_frames=[
+            dict(caption="Start at the root, node=1. Visit it FIRST (preorder visits before recursing): result=[1]. Then recurse left into node 2.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 1, "left": 1, "right": 2},
+                     {"id": 1, "val": 2, "left": 3, "right": 4},
+                     {"id": 2, "val": 3, "left": None, "right": None},
+                     {"id": 3, "val": 4, "left": None, "right": None},
+                     {"id": 4, "val": 5, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 0]]}),
+            dict(caption="node=2. Visit it: result=[1, 2]. Recurse left into node 4.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 1, "left": 1, "right": 2},
+                     {"id": 1, "val": 2, "left": 3, "right": 4},
+                     {"id": 2, "val": 3, "left": None, "right": None},
+                     {"id": 3, "val": 4, "left": None, "right": None},
+                     {"id": 4, "val": 5, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 1]]}),
+            dict(caption="node=4. Visit it: result=[1, 2, 4]. Both children are None -- base case, return immediately with nothing further added.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 1, "left": 1, "right": 2},
+                     {"id": 1, "val": 2, "left": 3, "right": 4},
+                     {"id": 2, "val": 3, "left": None, "right": None},
+                     {"id": 3, "val": 4, "left": None, "right": None},
+                     {"id": 4, "val": 5, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 3]]}),
+            dict(caption="Back at node 2 -- its left subtree (just node 4) is fully done. Recurse right into node 5.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 1, "left": 1, "right": 2},
+                     {"id": 1, "val": 2, "left": 3, "right": 4},
+                     {"id": 2, "val": 3, "left": None, "right": None},
+                     {"id": 3, "val": 4, "left": None, "right": None},
+                     {"id": 4, "val": 5, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 1]]}),
+            dict(caption="node=5. Visit it: result=[1, 2, 4, 5]. Both children are None -- return.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 1, "left": 1, "right": 2},
+                     {"id": 1, "val": 2, "left": 3, "right": 4},
+                     {"id": 2, "val": 3, "left": None, "right": None},
+                     {"id": 3, "val": 4, "left": None, "right": None},
+                     {"id": 4, "val": 5, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 4]]}),
+            dict(caption="Back at the root -- its entire left subtree (2, 4, 5) is fully done. Recurse right into node 3.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 1, "left": 1, "right": 2},
+                     {"id": 1, "val": 2, "left": 3, "right": 4},
+                     {"id": 2, "val": 3, "left": None, "right": None},
+                     {"id": 3, "val": 4, "left": None, "right": None},
+                     {"id": 4, "val": 5, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 0]]}),
+            dict(caption="node=3. Visit it: result=[1, 2, 4, 5, 3]. Both children are None -- return. Every node visited -- final preorder result: [1, 2, 4, 5, 3].",
+                 locals={"nodes": [
+                     {"id": 0, "val": 1, "left": 1, "right": 2},
+                     {"id": 1, "val": 2, "left": 3, "right": 4},
+                     {"id": 2, "val": 3, "left": None, "right": None},
+                     {"id": 3, "val": 4, "left": None, "right": None},
+                     {"id": 4, "val": 5, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 2]]}),
+        ],
+        common_mistakes_markdown=(
+            "Forgetting the `if node is None: return` base case entirely -- the very next line almost always "
+            "touches `node.val` or `node.left`, so a missing base case crashes with an `AttributeError` on "
+            "`None` rather than silently doing nothing. Mixing up the three traversal orders -- inorder is "
+            "specifically `left, node, right` (not `node, left, right`), and using the wrong one on a BST "
+            "problem (see the next lesson) silently returns values in the wrong order rather than erroring. "
+            "And building a NEW list at every recursive call instead of passing one accumulator down (or "
+            "returning and concatenating, which is correct but easy to do inefficiently) -- concatenating "
+            "lists at every level turns an `O(n)` traversal into `O(n^2)`."
+        ),
+        complexity_markdown=(
+            "`O(n)` time -- every node is visited exactly once, regardless of traversal order. `O(h)` space "
+            "for the recursion stack, where `h` is the tree's height: `O(log n)` for a balanced tree, but "
+            "`O(n)` worst case for a completely skewed tree (every node has only one child, so it's really "
+            "just a linked list in disguise)."
+        ),
+    ),
+    dict(
+        slug="binary-search-trees",
+        kind="pattern",
+        topic="trees",
+        pattern_family=None,
+        title="Binary search trees",
+        display_order=2,
+        estimated_minutes=18,
+        summary="Every node's left subtree is smaller, right subtree is larger -- and validating that "
+                "property correctly means tracking a (low, high) RANGE, not just comparing a node to its "
+                "immediate parent.",
+        prerequisite_slugs="trees,binary-search",
+        what_markdown=(
+            "A binary search tree (BST) is a binary tree with one extra invariant: for every node, EVERY "
+            "value in its left subtree is less than the node's value, and EVERY value in its right subtree is "
+            "greater -- not just the node's immediate children, the WHOLE subtree. That property is what "
+            "connects BSTs back to binary search: at any node, comparing your target to `node.val` tells you "
+            "which entire subtree to search next, discarding the other half in one comparison, the same "
+            "`O(log n)` idea as searching a sorted array (on a balanced tree; a degenerate/skewed BST loses "
+            "that guarantee)."
+        ),
+        why_markdown=(
+            "The BST invariant makes three operations cheap on a balanced tree: search, insert, and delete "
+            "are all `O(log n)`, versus `O(n)` for an unordered tree or a plain list. It also gives you a free "
+            "side effect worth remembering: an INORDER traversal of a BST visits every node in sorted order, "
+            "since inorder is `left, node, right` -- exactly \"everything smaller, then me, then everything "
+            "bigger\", recursively."
+        ),
+        recognize_markdown=(
+            "The tell is a tree that's explicitly described as (or built to be) a binary search tree, or a "
+            "problem asking you to validate, search, insert into, or find the kth smallest/largest value in "
+            "one. \"Kth smallest in a BST\" is really \"the kth value visited during an inorder traversal\" -- "
+            "recognizing that connection turns a seemingly search-heavy problem into a straightforward "
+            "traversal-with-a-counter."
+        ),
+        intuition_markdown=(
+            "Validating a BST is the classic place a beginner's first instinct (compare each node to its "
+            "immediate parent) goes wrong: it misses violations from an ANCESTOR further up the tree, not "
+            "just the direct parent. The fix is to carry a `(low, high)` range down through the recursion -- "
+            "every node must fall strictly inside its inherited range, and each recursive call narrows that "
+            "range further (the left child's new upper bound becomes the current node's value; the right "
+            "child's new lower bound does too). A node can satisfy its immediate parent while still violating "
+            "a bound inherited from higher up -- the range is what catches that."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `is_valid_bst(node, low, high)` on the same tree shape from the previous lesson. Watch how "
+            "`low`/`high` (narrated in captions -- they're values, not tree positions) tighten as the walk "
+            "goes deeper, and specifically why node 4's check needs BOTH its inherited bounds, not just a "
+            "comparison to its parent."
+        ),
+        walkthrough_code=(
+            "def is_valid_bst(node, low=float('-inf'), high=float('inf')):\n"
+            "    if node is None:\n"
+            "        return True\n"
+            "    if not (low < node.val < high):\n"
+            "        return False\n"
+            "    return (is_valid_bst(node.left, low, node.val) and\n"
+            "            is_valid_bst(node.right, node.val, high))"
+        ),
+        walkthrough_frames=[
+            dict(caption="Start at the root, node=5, bounds (-inf, inf) -- no constraint yet. Is -inf < 5 < inf? Yes. Recurse left with an updated upper bound: everything in the left subtree must stay below 5.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 5, "left": 1, "right": 2},
+                     {"id": 1, "val": 3, "left": 3, "right": 4},
+                     {"id": 2, "val": 8, "left": None, "right": None},
+                     {"id": 3, "val": 1, "left": None, "right": None},
+                     {"id": 4, "val": 4, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 0]]}),
+            dict(caption="node=3, bounds (-inf, 5). Is -inf < 3 < 5? Yes. Recurse left with bounds (-inf, 3) -- 3's left subtree must stay below 3 too.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 5, "left": 1, "right": 2},
+                     {"id": 1, "val": 3, "left": 3, "right": 4},
+                     {"id": 2, "val": 8, "left": None, "right": None},
+                     {"id": 3, "val": 1, "left": None, "right": None},
+                     {"id": 4, "val": 4, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 1]]}),
+            dict(caption="node=1, bounds (-inf, 3). Is -inf < 1 < 3? Yes. Both children are None -- base case, return True immediately.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 5, "left": 1, "right": 2},
+                     {"id": 1, "val": 3, "left": 3, "right": 4},
+                     {"id": 2, "val": 8, "left": None, "right": None},
+                     {"id": 3, "val": 1, "left": None, "right": None},
+                     {"id": 4, "val": 4, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 3]]}),
+            dict(caption="Back at node 3 -- its left side checked out. Recurse right with bounds (3, 5): must stay ABOVE 3 (its own left-subtree floor) AND BELOW 5 (inherited from 5's own left-subtree ceiling).",
+                 locals={"nodes": [
+                     {"id": 0, "val": 5, "left": 1, "right": 2},
+                     {"id": 1, "val": 3, "left": 3, "right": 4},
+                     {"id": 2, "val": 8, "left": None, "right": None},
+                     {"id": 3, "val": 1, "left": None, "right": None},
+                     {"id": 4, "val": 4, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 1]]}),
+            dict(caption="node=4, bounds (3, 5). Is 3 < 4 < 5? Yes -- this is exactly the check a PARENT-ONLY comparison would get right by luck here, but the bound (3, 5) is what actually GUARANTEES it, since it also remembers the constraint inherited from higher up. Both children are None -- return True.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 5, "left": 1, "right": 2},
+                     {"id": 1, "val": 3, "left": 3, "right": 4},
+                     {"id": 2, "val": 8, "left": None, "right": None},
+                     {"id": 3, "val": 1, "left": None, "right": None},
+                     {"id": 4, "val": 4, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 4]]}),
+            dict(caption="Back at the root -- its entire left subtree (3, 1, 4) checked out. Recurse right with bounds (5, inf): everything in the right subtree must be greater than 5.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 5, "left": 1, "right": 2},
+                     {"id": 1, "val": 3, "left": 3, "right": 4},
+                     {"id": 2, "val": 8, "left": None, "right": None},
+                     {"id": 3, "val": 1, "left": None, "right": None},
+                     {"id": 4, "val": 4, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 0]]}),
+            dict(caption="node=8, bounds (5, inf). Is 5 < 8 < inf? Yes. Both children are None -- return True. Every node satisfied its bounds -- the whole tree is a valid BST.",
+                 locals={"nodes": [
+                     {"id": 0, "val": 5, "left": 1, "right": 2},
+                     {"id": 1, "val": 3, "left": 3, "right": 4},
+                     {"id": 2, "val": 8, "left": None, "right": None},
+                     {"id": 3, "val": 1, "left": None, "right": None},
+                     {"id": 4, "val": 4, "left": None, "right": None},
+                 ], "pointers": [["root", 0], ["node", 2]]}),
+        ],
+        common_mistakes_markdown=(
+            "Comparing each node only to its immediate parent (`node.left.val < node.val < node.right.val`) "
+            "instead of carrying bounds down -- this misses violations from an ancestor further up the tree: "
+            "a node can be perfectly valid relative to its direct parent while still breaking the invariant "
+            "relative to a grandparent or higher. Forgetting that BOTH bounds narrow as you descend, not just "
+            "one -- a left child inherits a new upper bound (its parent's value) but keeps the SAME lower "
+            "bound its parent had; a right child is the mirror image. And using `<=`/`>=` instead of strict "
+            "`<`/`>` when the problem specifies no duplicate values are allowed -- an equal value should fail "
+            "validation, not pass it."
+        ),
+        complexity_markdown=(
+            "`O(n)` time -- still visits every node once. `O(h)` space for the recursion stack, same as any "
+            "tree DFS (`O(log n)` balanced, `O(n)` worst case skewed). Search/insert/delete on an actual BST "
+            "(not full validation) are `O(h)` each -- `O(log n)` on a balanced tree, but `O(n)` worst case if "
+            "the tree has degenerated into a linked-list shape (e.g. built by inserting already-sorted data "
+            "with no rebalancing)."
+        ),
+    ),
+    dict(
+        slug="tree-bfs",
+        kind="pattern",
+        topic="trees",
+        pattern_family="Tree BFS / level order",
+        title="Tree BFS: level order",
+        display_order=3,
+        estimated_minutes=16,
+        summary="Process a tree level by level using a queue -- FIFO order naturally groups nodes by "
+                "distance from the root, and this is the direct conceptual predecessor to graph BFS.",
+        prerequisite_slugs="trees,queues",
+        what_markdown=(
+            "Level-order traversal visits every node breadth-first: the root first, then all of its "
+            "children, then all of ITS children's children, and so on -- one full level at a time, left to "
+            "right. Unlike the DFS traversals from the topic lesson (which dive all the way down one branch "
+            "before backtracking), level order needs a QUEUE, not the recursion call stack: enqueue the root, "
+            "then repeatedly dequeue a node, record it, and enqueue its children."
+        ),
+        why_markdown=(
+            "A queue is FIFO -- first in, first out -- which is exactly what \"process in order of distance "
+            "from the root\" needs: everything enqueued during level `k` (the children discovered while "
+            "processing level `k`'s nodes) naturally comes out AFTER everything already in the queue from "
+            "level `k` itself, since it was enqueued later. This is also the direct conceptual predecessor to "
+            "graph BFS -- the exact same queue-based idea, generalized with a visited set once the structure "
+            "being explored can have cycles."
+        ),
+        recognize_markdown=(
+            "The tell is needing to group nodes by DEPTH/distance from the root -- \"return each level as its "
+            "own list\", \"find the value at the last node of each level\" (right-side view), \"find the "
+            "minimum depth\" (the FIRST leaf a level-order scan reaches). Any DFS traversal visits nodes in "
+            "the wrong order for these -- depth-grouping is a breadth-first question, not a depth-first one."
+        ),
+        intuition_markdown=(
+            "The one trick that makes level-by-level grouping possible with a plain queue (no per-node "
+            "\"depth\" field needed): snapshot the queue's CURRENT length before the inner loop starts, then "
+            "process exactly that many nodes. Everything already in the queue at that snapshot moment IS the "
+            "current level, in full; anything enqueued DURING this pass (the current level's children) can't "
+            "be processed until the next pass, because the snapshot count runs out first -- that's what keeps "
+            "one level's nodes from bleeding into the next."
+        ),
+        walkthrough_intro_markdown=(
+            "Trace `level_order(root)` on the same tree shape from the topic lesson. This walkthrough shows "
+            "the QUEUE's contents (reusing the same array/pointer view every non-tree lesson uses, not the "
+            "tree structure itself, since the topic lesson already covered that) -- watch it drain and refill "
+            "as each level is processed."
+        ),
+        walkthrough_code=(
+            "def level_order(root):\n"
+            "    result = []\n"
+            "    q = deque([root])\n"
+            "    while q:\n"
+            "        level_size = len(q)\n"
+            "        level_vals = []\n"
+            "        for _ in range(level_size):\n"
+            "            node = q.popleft()\n"
+            "            level_vals.append(node.val)\n"
+            "            if node.left:\n"
+            "                q.append(node.left)\n"
+            "            if node.right:\n"
+            "                q.append(node.right)\n"
+            "        result.append(level_vals)\n"
+            "    return result"
+        ),
+        walkthrough_frames=[
+            dict(caption="Start: queue holds just the root, [1]. This is level 0 -- level_size will snapshot to 1.",
+                 locals={"queue": [1]}),
+            dict(caption="Dequeue 1, record it (level 0 = [1]). Enqueue its children left to right: 2, then 3.",
+                 locals={"queue": [2, 3]}),
+            dict(caption="Level 0's snapshot (1 node) is used up -- everything now in the queue is level 1. Dequeue 2, record it. Enqueue its children: 4, then 5.",
+                 locals={"queue": [3, 4, 5]}),
+            dict(caption="Dequeue 3, record it (level 1 = [2, 3] complete). 3 has no children -- nothing enqueued.",
+                 locals={"queue": [4, 5]}),
+            dict(caption="Level 1's snapshot (2 nodes) is used up -- everything now in the queue is level 2. Dequeue 4, record it. No children.",
+                 locals={"queue": [5]}),
+            dict(caption="Dequeue 5, record it (level 2 = [4, 5] complete). No children. Queue is now empty -- BFS is done.",
+                 locals={"queue": []}),
+            dict(caption="Final result, grouped level by level: [[1], [2, 3], [4, 5]]. The snapshot-then-drain trick is what separated each level without ever storing a depth on the nodes themselves.",
+                 locals={"queue": []}),
+        ],
+        common_mistakes_markdown=(
+            "Skipping the level-size snapshot entirely and just draining the queue node by node into one flat "
+            "list -- this still visits every node in breadth-first ORDER, but loses the level GROUPING "
+            "entirely, which is usually the actual point of the problem. Enqueueing `None` children -- "
+            "checking `if node.left:` before appending (not appending unconditionally) keeps the queue from "
+            "filling up with values that would crash the next `node.val` access. And confusing this with DFS "
+            "level tracking (passing a `depth` parameter down a recursive call) -- that approach also works "
+            "and is sometimes simpler for depth-only questions, but doesn't naturally give you \"stop after "
+            "the first level satisfying some condition\" the way an explicitly queue-driven scan does, since "
+            "it doesn't process strictly nearest-nodes-first."
+        ),
+        complexity_markdown=(
+            "`O(n)` time -- every node is enqueued and dequeued exactly once. `O(n)` space worst case for the "
+            "queue -- a tree's widest level can hold up to roughly `n/2` nodes (a complete binary tree's last "
+            "level), so the queue's peak size scales with the tree's WIDTH, not its height, unlike DFS's "
+            "stack which scales with height."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -2283,6 +2670,148 @@ CONCEPT_CHECKPOINTS = {
                                    "across every piece AT one level is still O(n) total, no matter how many "
                                    "pieces that level has been split into."),
     ],
+    "trees": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Which traversal order visits a node BEFORE recursing into either of its "
+                              "children?",
+             code=None,
+             choices_json=["Preorder", "Inorder", "Postorder", "Level-order"],
+             correct_answer="Preorder",
+             explanation_markdown="Preorder is node, then left subtree, then right subtree -- the node's own "
+                                   "value is recorded before either recursive call runs. Inorder is left, "
+                                   "node, right; postorder is left, right, node; level-order isn't a DFS "
+                                   "order at all (it's the next lesson's technique)."),
+        dict(kind="spot_bug",
+             prompt_markdown="This preorder traversal crashes with an AttributeError partway through, "
+                              "instead of completing. What's the bug?",
+             code="def preorder(node, result):\n"
+                  "    if node is None:\n"
+                  "        pass\n"
+                  "    result.append(node.val)\n"
+                  "    preorder(node.left, result)\n"
+                  "    preorder(node.right, result)",
+             choices_json=None,
+             correct_answer="The base case body is `pass` instead of `return`. When node IS None, execution "
+                             "falls straight through to `result.append(node.val)` anyway, and None has no "
+                             ".val attribute -- crashing instead of stopping the recursion.",
+             explanation_markdown="A base case has to actually STOP the function, not just be checked -- "
+                                   "`if node is None: pass` checks the condition but does nothing about it, "
+                                   "which is functionally the same as having no base case at all."),
+        dict(kind="complexity",
+             prompt_markdown="Visiting every node of an n-node tree via DFS takes how much time, and how "
+                              "much space (worst case) for the recursion stack?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n) time, O(n) worst-case space",
+             explanation_markdown="Every node is visited exactly once regardless of traversal order -- O(n) "
+                                   "time. The recursion stack's depth equals the tree's height, which is "
+                                   "O(log n) for a balanced tree but O(n) worst case for a completely skewed "
+                                   "one (effectively a linked list)."),
+    ],
+    "binary-search-trees": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Which of these correctly validates whether a binary tree is a valid BST?",
+             code=None,
+             choices_json=[
+                 "Track a (low, high) range for each node, narrowing it as you recurse into children",
+                 "Just compare each node to its immediate parent",
+                 "Sort all the values with an inorder traversal and check they're already sorted",
+                 "Check that node.left.val < node.right.val at every node",
+             ],
+             correct_answer="Track a (low, high) range for each node, narrowing it as you recurse into "
+                             "children",
+             explanation_markdown="Comparing only to the immediate parent misses violations from an "
+                                   "ancestor further up the tree -- exactly what this lesson's own "
+                                   "walkthrough demonstrates at node 4. An inorder-then-check-sorted approach "
+                                   "actually does work correctly, but it's a different, less direct "
+                                   "technique than the range-tracking one this lesson teaches."),
+        dict(kind="spot_bug",
+             prompt_markdown="This validator returns True (valid) for a tree that should actually be "
+                              "INVALID: 10 with left child 5 and right child 15, where 15 has a left child "
+                              "6 (6 is less than the root 10, which should make the tree invalid). What's "
+                              "the bug?",
+             code="def is_valid_bst(node):\n"
+                  "    if node is None:\n"
+                  "        return True\n"
+                  "    if node.left and node.left.val >= node.val:\n"
+                  "        return False\n"
+                  "    if node.right and node.right.val <= node.val:\n"
+                  "        return False\n"
+                  "    return is_valid_bst(node.left) and is_valid_bst(node.right)",
+             choices_json=None,
+             correct_answer="It only compares each node to its DIRECT children, never checking against "
+                             "ancestors further up. 6 is checked only against its immediate parent 15 (6 < "
+                             "15, passes), but 6 is in node 10's RIGHT subtree, so it also needs to be "
+                             "greater than 10 -- a check this code never makes.",
+             explanation_markdown="This is precisely the bug the (low, high) bounds technique fixes: passing "
+                                   "down an inherited range means every node is checked against every "
+                                   "relevant ancestor, not just its parent."),
+        dict(kind="complexity",
+             prompt_markdown="On a BALANCED binary search tree with n nodes, what's the time complexity of "
+                              "searching for a value?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(log n)",
+             explanation_markdown="Each comparison against the current node eliminates one entire subtree "
+                                   "from consideration -- the same halving idea as binary search on a sorted "
+                                   "array, giving O(log n) comparisons on a balanced tree (O(n) worst case if "
+                                   "the tree has degenerated into a skewed, linked-list-like shape)."),
+    ],
+    "tree-bfs": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Level-order traversal processes nodes in FIFO order using a queue -- what's the "
+                              "key trick that lets you tell WHERE one level ends and the next begins, without "
+                              "storing a depth field on each node?",
+             code=None,
+             choices_json=[
+                 "Snapshot the queue's current length before the inner loop starts, and process exactly that "
+                 "many nodes",
+                 "Add a sentinel None value between levels",
+                 "Track a running maximum depth as a separate variable",
+                 "Compare each node's value to the previous node dequeued",
+             ],
+             correct_answer="Snapshot the queue's current length before the inner loop starts, and process "
+                             "exactly that many nodes",
+             explanation_markdown="Everything already in the queue at that snapshot moment IS the current "
+                                   "level in full; anything enqueued during this pass belongs to the next "
+                                   "level, since the snapshot count runs out before those new entries get "
+                                   "processed."),
+        dict(kind="spot_bug",
+             prompt_markdown="This level-order traversal visits every node in the correct breadth-first "
+                              "ORDER, but its result isn't grouped by level the way the problem asks for. "
+                              "What's missing?",
+             code="def level_order(root):\n"
+                  "    if root is None:\n"
+                  "        return []\n"
+                  "    result = []\n"
+                  "    q = deque([root])\n"
+                  "    while q:\n"
+                  "        node = q.popleft()\n"
+                  "        result.append(node.val)\n"
+                  "        if node.left:\n"
+                  "            q.append(node.left)\n"
+                  "        if node.right:\n"
+                  "            q.append(node.right)\n"
+                  "    return result",
+             choices_json=None,
+             correct_answer="There's no level-size snapshot at all -- every node's value gets appended "
+                             "directly to one flat list, so the result is a single list of all values in "
+                             "breadth-first order (e.g. [1, 2, 3, 4, 5]) instead of grouped per level (e.g. "
+                             "[[1], [2, 3], [4, 5]]).",
+             explanation_markdown="The traversal ORDER is actually correct here -- what's missing is "
+                                   "wrapping an inner loop around exactly level_size dequeues per pass, which "
+                                   "is what turns a flat scan into level-grouped output."),
+        dict(kind="complexity",
+             prompt_markdown="Level-order traversal of an n-node tree takes O(n) time. What's the worst-case "
+                              "space for the queue, and what determines it?",
+             code=None,
+             choices_json=None,
+             correct_answer="O(n), determined by the tree's WIDTH (not its height)",
+             explanation_markdown="A complete binary tree's last level can hold roughly n/2 nodes, all in "
+                                   "the queue at once at that level's peak -- so the queue's peak size scales "
+                                   "with how WIDE the tree gets, unlike DFS's recursion stack, which scales "
+                                   "with how tall/deep it is."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -2654,5 +3183,193 @@ CONCEPT_PRACTICE_EXERCISES = {
                             "compare p to k directly: if p == k you're done, if p < k the answer is "
                             "somewhere in the right side (lo = p + 1), otherwise it's in the left side "
                             "(hi = p - 1). Never recurse into both sides like quicksort does."),
+    ],
+    "trees": [
+        dict(prompt_markdown="Write `count_leaves(values)` that returns the number of LEAF nodes (nodes "
+                              "with no children) in the tree -- e.g. `count_leaves([1,2,3,4,5])` returns `3` "
+                              "(nodes 4, 5, and 3 are the leaves; `values` is a level-order list, `None` for "
+                              "a missing child, same as the curated tree problems use).",
+             starter_code="class TreeNode:\n    def __init__(self, val):\n        self.val = val\n"
+                          "        self.left = None\n        self.right = None\n\n"
+                          "def build_tree(values):\n    if not values or values[0] is None:\n"
+                          "        return None\n    root = TreeNode(values[0])\n    queue = [root]\n"
+                          "    i = 1\n    while queue and i < len(values):\n        node = queue.pop(0)\n"
+                          "        if i < len(values):\n            lv = values[i]; i += 1\n"
+                          "            if lv is not None:\n                node.left = TreeNode(lv)\n"
+                          "                queue.append(node.left)\n        if i < len(values):\n"
+                          "            rv = values[i]; i += 1\n            if rv is not None:\n"
+                          "                node.right = TreeNode(rv)\n                queue.append(node.right)\n"
+                          "    return root\n\n"
+                          "def count_leaves(values):\n    root = build_tree(values)\n"
+                          "    # a leaf has BOTH node.left and node.right equal to None\n    pass",
+             solution_code=(
+                 "class TreeNode:\n"
+                 "    def __init__(self, val):\n"
+                 "        self.val = val\n"
+                 "        self.left = None\n"
+                 "        self.right = None\n"
+                 "\n"
+                 "def build_tree(values):\n"
+                 "    if not values or values[0] is None:\n"
+                 "        return None\n"
+                 "    root = TreeNode(values[0])\n"
+                 "    queue = [root]\n"
+                 "    i = 1\n"
+                 "    while queue and i < len(values):\n"
+                 "        node = queue.pop(0)\n"
+                 "        if i < len(values):\n"
+                 "            lv = values[i]; i += 1\n"
+                 "            if lv is not None:\n"
+                 "                node.left = TreeNode(lv)\n"
+                 "                queue.append(node.left)\n"
+                 "        if i < len(values):\n"
+                 "            rv = values[i]; i += 1\n"
+                 "            if rv is not None:\n"
+                 "                node.right = TreeNode(rv)\n"
+                 "                queue.append(node.right)\n"
+                 "    return root\n"
+                 "\n"
+                 "def count_leaves(values):\n"
+                 "    root = build_tree(values)\n"
+                 "    def helper(node):\n"
+                 "        if node is None:\n"
+                 "            return 0\n"
+                 "        if node.left is None and node.right is None:\n"
+                 "            return 1\n"
+                 "        return helper(node.left) + helper(node.right)\n"
+                 "    return helper(root)"
+             ),
+             hint_markdown="Base case: an empty subtree (None) contributes 0 leaves. Second case worth "
+                            "checking BEFORE recursing: a node with no children IS a leaf, contributing 1 "
+                            "on its own, with no need to recurse further. Otherwise, combine both children's "
+                            "leaf counts."),
+    ],
+    "binary-search-trees": [
+        dict(prompt_markdown="Write `search_bst(values, target)` that returns True if target exists in the "
+                              "BST, False otherwise -- using the BST property to skip an entire subtree at "
+                              "each step, not a full O(n) scan.",
+             starter_code="class TreeNode:\n    def __init__(self, val):\n        self.val = val\n"
+                          "        self.left = None\n        self.right = None\n\n"
+                          "def build_tree(values):\n    if not values or values[0] is None:\n"
+                          "        return None\n    root = TreeNode(values[0])\n    queue = [root]\n"
+                          "    i = 1\n    while queue and i < len(values):\n        node = queue.pop(0)\n"
+                          "        if i < len(values):\n            lv = values[i]; i += 1\n"
+                          "            if lv is not None:\n                node.left = TreeNode(lv)\n"
+                          "                queue.append(node.left)\n        if i < len(values):\n"
+                          "            rv = values[i]; i += 1\n            if rv is not None:\n"
+                          "                node.right = TreeNode(rv)\n                queue.append(node.right)\n"
+                          "    return root\n\n"
+                          "def search_bst(values, target):\n    root = build_tree(values)\n"
+                          "    # compare target to node.val to decide whether to go left, right, or stop\n"
+                          "    pass",
+             solution_code=(
+                 "class TreeNode:\n"
+                 "    def __init__(self, val):\n"
+                 "        self.val = val\n"
+                 "        self.left = None\n"
+                 "        self.right = None\n"
+                 "\n"
+                 "def build_tree(values):\n"
+                 "    if not values or values[0] is None:\n"
+                 "        return None\n"
+                 "    root = TreeNode(values[0])\n"
+                 "    queue = [root]\n"
+                 "    i = 1\n"
+                 "    while queue and i < len(values):\n"
+                 "        node = queue.pop(0)\n"
+                 "        if i < len(values):\n"
+                 "            lv = values[i]; i += 1\n"
+                 "            if lv is not None:\n"
+                 "                node.left = TreeNode(lv)\n"
+                 "                queue.append(node.left)\n"
+                 "        if i < len(values):\n"
+                 "            rv = values[i]; i += 1\n"
+                 "            if rv is not None:\n"
+                 "                node.right = TreeNode(rv)\n"
+                 "                queue.append(node.right)\n"
+                 "    return root\n"
+                 "\n"
+                 "def search_bst(values, target):\n"
+                 "    node = build_tree(values)\n"
+                 "    while node is not None:\n"
+                 "        if node.val == target:\n"
+                 "            return True\n"
+                 "        elif target < node.val:\n"
+                 "            node = node.left\n"
+                 "        else:\n"
+                 "            node = node.right\n"
+                 "    return False"
+             ),
+             hint_markdown="No recursion needed -- this can be a plain while loop, since at each node there's "
+                            "only ONE subtree worth continuing into (the BST property already tells you "
+                            "which), not two. That's the whole reason it's O(log n) on a balanced tree "
+                            "instead of O(n)."),
+    ],
+    "tree-bfs": [
+        dict(prompt_markdown="Write `right_side_view(values)` that returns the value of the LAST node at "
+                              "each level -- what you'd see looking at the tree from the right side -- e.g. "
+                              "`right_side_view([1,2,3,None,5,None,4])` returns `[1, 3, 4]`.",
+             starter_code="class TreeNode:\n    def __init__(self, val):\n        self.val = val\n"
+                          "        self.left = None\n        self.right = None\n\n"
+                          "def build_tree(values):\n    if not values or values[0] is None:\n"
+                          "        return None\n    root = TreeNode(values[0])\n    queue = [root]\n"
+                          "    i = 1\n    while queue and i < len(values):\n        node = queue.pop(0)\n"
+                          "        if i < len(values):\n            lv = values[i]; i += 1\n"
+                          "            if lv is not None:\n                node.left = TreeNode(lv)\n"
+                          "                queue.append(node.left)\n        if i < len(values):\n"
+                          "            rv = values[i]; i += 1\n            if rv is not None:\n"
+                          "                node.right = TreeNode(rv)\n                queue.append(node.right)\n"
+                          "    return root\n\n"
+                          "def right_side_view(values):\n    root = build_tree(values)\n"
+                          "    # level-order scan; within each level's snapshot, only the LAST node dequeued matters\n"
+                          "    pass",
+             solution_code=(
+                 "class TreeNode:\n"
+                 "    def __init__(self, val):\n"
+                 "        self.val = val\n"
+                 "        self.left = None\n"
+                 "        self.right = None\n"
+                 "\n"
+                 "def build_tree(values):\n"
+                 "    if not values or values[0] is None:\n"
+                 "        return None\n"
+                 "    root = TreeNode(values[0])\n"
+                 "    queue = [root]\n"
+                 "    i = 1\n"
+                 "    while queue and i < len(values):\n"
+                 "        node = queue.pop(0)\n"
+                 "        if i < len(values):\n"
+                 "            lv = values[i]; i += 1\n"
+                 "            if lv is not None:\n"
+                 "                node.left = TreeNode(lv)\n"
+                 "                queue.append(node.left)\n"
+                 "        if i < len(values):\n"
+                 "            rv = values[i]; i += 1\n"
+                 "            if rv is not None:\n"
+                 "                node.right = TreeNode(rv)\n"
+                 "                queue.append(node.right)\n"
+                 "    return root\n"
+                 "\n"
+                 "def right_side_view(values):\n"
+                 "    root = build_tree(values)\n"
+                 "    if root is None:\n"
+                 "        return []\n"
+                 "    result = []\n"
+                 "    q = [root]\n"
+                 "    while q:\n"
+                 "        level_size = len(q)\n"
+                 "        for i in range(level_size):\n"
+                 "            node = q.pop(0)\n"
+                 "            if i == level_size - 1:\n"
+                 "                result.append(node.val)\n"
+                 "            if node.left:\n"
+                 "                q.append(node.left)\n"
+                 "            if node.right:\n"
+                 "                q.append(node.right)\n"
+                 "    return result"
+             ),
+             hint_markdown="This is the exact same level_size-snapshot technique from the lesson's own "
+                            "walkthrough -- the only new part is checking `i == level_size - 1` inside the "
+                            "inner loop to know when you've reached the LAST node of the current level."),
     ],
 }

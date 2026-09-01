@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrayPointerView, LinkedListView } from "../Visualizers/Visualizers";
+import { ArrayPointerView, LinkedListView, TreeView } from "../Visualizers/Visualizers";
 
 // A teaching walkthrough steps through a hand-authored, VERIFIED-BY-HAND
 // sequence of {caption, locals} frames (see backend/db/seed_concepts.py) --
@@ -41,11 +41,40 @@ function buildLinkedListGraph(locals) {
   return { nodes, roots };
 }
 
+// TreeView expects the same { nodes: Map(id -> {fields, fieldRefs}), roots:
+// [{name, id}] } shape as LinkedListView, just with fieldRefs.left/.right
+// instead of .next -- so tree lessons author frames.locals in the parallel
+// { nodes: [{id, val, left, right}], pointers: [[name, id], ...] } shape,
+// and this adapter converts it the same way buildLinkedListGraph does.
+//
+// The SAME ordered-list-of-pairs reasoning applies here (see that
+// function's comment): TreeView's assign() walk starts from
+// `roots.find(r => r.id != null)`, i.e. the FIRST pointer in the list with
+// a non-null id, and recursively lays out the WHOLE tree from there via
+// left/right. So the tree's actual root must always be authored first in
+// `pointers` -- any other pointer (e.g. a "node" chip tracking the current
+// position during a traversal) is purely additive after that: TreeView
+// renders it as a colored tag whenever its id lands on an already-placed
+// node, without affecting which node anchors the layout.
+function buildTreeGraph(locals) {
+  const nodes = new Map();
+  (locals.nodes || []).forEach((n) => {
+    nodes.set(n.id, {
+      id: n.id,
+      fields: { val: n.val },
+      fieldRefs: { left: n.left ?? null, right: n.right ?? null },
+    });
+  });
+  const roots = (locals.pointers || []).map(([name, id]) => ({ name, id: id ?? null }));
+  return { nodes, roots };
+}
+
 export default function ConceptWalkthrough({ frames, topic, pattern }) {
   const [index, setIndex] = useState(0);
   if (!frames || frames.length === 0) return null;
   const frame = frames[index];
   const isLinkedList = topic === "linked-lists" && frame.locals && Array.isArray(frame.locals.nodes);
+  const isTree = topic === "trees" && frame.locals && Array.isArray(frame.locals.nodes);
 
   return (
     <div className="concept-walkthrough">
@@ -79,6 +108,8 @@ export default function ConceptWalkthrough({ frames, topic, pattern }) {
       <p className="concept-walkthrough-caption">{frame.caption}</p>
       {isLinkedList ? (
         <LinkedListView graph={buildLinkedListGraph(frame.locals)} />
+      ) : isTree ? (
+        <TreeView graph={buildTreeGraph(frame.locals)} />
       ) : (
         <ArrayPointerView locals={frame.locals} topic={topic} pattern={pattern} />
       )}

@@ -6,8 +6,9 @@ plus batch 1 (Prefix Sums, Strings, Hashing -- Days 9-12), batch 2
 (Sliding Window -- Days 15-16), batch 3 (Linked Lists, Fast/Slow
 Pointers -- Days 25-27), batch 4 (Stacks, Queues -- Days 28-29), batch 5
 (Recursion, Backtracking -- Days 23-24), batch 6 (Binary Search, Binary
-Search Variants -- Days 21-22), and batch 7 (Sorting, Divide-and-conquer
-sorting -- Days 17-20) of the curriculum expansion.
+Search Variants -- Days 21-22), batch 7 (Sorting, Divide-and-conquer
+sorting -- Days 17-20), and batch 8 (Trees, Binary Search Trees, Tree
+BFS -- Days 30-32) of the curriculum expansion.
 
 Covers: the Learn hub lists all lessons grouped by topic in the correct
 topic-before-pattern order; a concept lesson page renders every section
@@ -53,8 +54,8 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all sixteen concept lessons (pilot + batches 1-7)", cards.count() == 16)
-        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting)",
+        check("Learn hub lists all nineteen concept lessons (pilot + batches 1-8)", cards.count() == 19)
+        check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting, trees)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
               and page.locator("h3", has_text="strings").count() > 0
@@ -65,7 +66,8 @@ def main():
               and page.locator("h3", has_text="queues").count() > 0
               and page.locator("h3", has_text="recursion").count() > 0
               and page.locator("h3", has_text="binary search").count() > 0
-              and page.locator("h3", has_text="sorting").count() > 0)
+              and page.locator("h3", has_text="sorting").count() > 0
+              and page.locator("h3", has_text="trees").count() > 0)
         # topic-before-pattern ordering within a group: "Arrays: the
         # foundation" (kind=topic) must appear before "Prefix sums"
         # (kind=pattern, same topic='arrays') -- see app.py's CASE-ordered
@@ -509,6 +511,82 @@ def main():
         check("day-20 lesson page shows callouts for both Sorting and Divide-and-conquer sorting",
               page.locator("a.callout", has_text="Learn: Sorting").count() > 0
               and page.locator("a.callout", has_text="Learn: Divide-and-conquer sorting").count() > 0)
+
+        # ---- batch 8: trees lesson (preorder DFS via the new TreeView adapter) --
+        page.goto(f"{BASE}/#/learn/trees", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Trees')", timeout=10000)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("trees walkthrough renders via TreeView's node-and-edge shape, not the array/pointer view",
+              walkthrough.locator(".tree-node").count() > 0 and walkthrough.locator(".seq-boxes").count() == 0)
+        check("trees walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("fourth frame's caption confirms returning to node 2 to recurse right",
+              "back at node 2" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        for _ in range(3):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("final frame's caption states the complete preorder result",
+              "[1, 2, 4, 5, 3]" in page.locator(".concept-walkthrough-caption").inner_text())
+        reveal_btns = page.get_by_role("button", name="Reveal answer")
+        check("trees has reveal-style checkpoints", reveal_btns.count() > 0)
+        reveal_btns.first.click()
+        page.wait_for_timeout(150)
+        check("revealed checkpoint explanation renders",
+              page.locator(".checkpoint-explanation").first.inner_text().strip() != "")
+
+        # ---- batch 8: binary-search-trees lesson (bounds, not parent-only) -----
+        page.goto(f"{BASE}/#/learn/binary-search-trees", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Binary search trees')", timeout=10000)
+        check("binary-search-trees prerequisites link to both Trees and Binary search",
+              page.get_by_role("link", name="Trees: structure and traversal").count() > 0
+              and page.get_by_role("link", name="Binary search").count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("binary-search-trees walkthrough renders via TreeView", walkthrough.locator(".tree-node").count() > 0)
+        check("binary-search-trees walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(4):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("node-4 frame's caption explains bounds guarantee beyond a parent-only check",
+              "guarantees" in page.locator(".concept-walkthrough-caption").inner_text().lower())
+        checkpoint_choice = page.get_by_role("button", name=re.compile("Track a \\(low, high\\) range"))
+        check("binary-search-trees has a choose_pattern checkpoint about bounds tracking",
+              checkpoint_choice.count() > 0)
+        checkpoint_choice.click()
+        page.wait_for_timeout(150)
+        check("correct choice gets positive feedback styling",
+              "checkpoint-correct" in (checkpoint_choice.get_attribute("class") or ""))
+
+        # ---- batch 8: tree-bfs lesson (queue draining, reusing the array view) --
+        page.goto(f"{BASE}/#/learn/tree-bfs", wait_until="networkidle")
+        page.wait_for_selector("h2:has-text('Tree BFS')", timeout=10000)
+        check("tree-bfs prerequisites link to both Trees and Queues",
+              page.get_by_role("link", name="Trees: structure and traversal").count() > 0
+              and page.get_by_role("link", name="Queues").count() > 0)
+        walkthrough = page.locator(".concept-walkthrough")
+        check("tree-bfs walkthrough renders via the plain array view (the queue's contents), not TreeView",
+              walkthrough.locator(".seq-boxes").count() > 0 and walkthrough.locator(".tree-node").count() == 0)
+        check("tree-bfs walkthrough starts at step 1 of 7", "step 1 / 7" in walkthrough.inner_text())
+        for _ in range(5):
+            page.get_by_role("button", name=re.compile("Next")).click()
+            page.wait_for_timeout(150)
+        check("sixth frame shows the queue fully drained (empty)",
+              page.locator(".concept-walkthrough .seq-box").count() == 0)
+
+        # ---- integration: days 30-32 all link to all three tree lessons --------
+        page.goto(f"{BASE}/#/lessons/30", wait_until="networkidle")
+        page.wait_for_selector("text=Day 30", timeout=10000)
+        check("day-30 lesson page shows callouts for all three tree lessons",
+              page.locator("a.callout", has_text="Learn: Trees").count() > 0
+              and page.locator("a.callout", has_text="Learn: Binary search trees").count() > 0
+              and page.locator("a.callout", has_text="Learn: Tree BFS").count() > 0)
+        page.goto(f"{BASE}/#/lessons/32", wait_until="networkidle")
+        page.wait_for_selector("text=Day 32", timeout=10000)
+        check("day-32 lesson page shows callouts for all three tree lessons",
+              page.locator("a.callout", has_text="Learn: Trees").count() > 0
+              and page.locator("a.callout", has_text="Learn: Binary search trees").count() > 0
+              and page.locator("a.callout", has_text="Learn: Tree BFS").count() > 0)
 
         check("no console errors across the whole teaching-system flow", len(console_errors) == 0)
 
