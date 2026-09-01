@@ -346,7 +346,7 @@ export default function ProblemWorkspace() {
                     {trace.traced_test_case_args.map((a) => JSON.stringify(a)).join(", ")})</code>
                   </p>
                 )}
-                <TraceViewer trace={trace} />
+                <TraceViewer trace={trace} problem={problem} />
               </div>
             )}
 

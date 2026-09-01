@@ -1,53 +1,17 @@
 import { useEffect, useRef, useState } from "react";
+import SpecializedVisualization from "../Visualizers/Visualizers";
 
 // Renders a captured execution trace (see backend/execution/tracer.py) as a
 // step-through debugger: current line, locals, call depth, play/pause/
-// step/scrub. Also auto-derives a generic "array view" -- any list-typed
-// local rendered as a row of boxes, with any int-typed local whose value
-// is a valid index into it shown as a pointer underneath. This isn't a
-// bespoke per-pattern visualizer (see docs/decisions.md on Phase 3 scope)
-// but it gives arrays/two-pointer/sliding-window a genuinely useful
-// picture for free, since the underlying data is already captured.
-
-function ArrayView(locals) {
-  const arrays = Object.entries(locals).filter(
-    ([, v]) => Array.isArray(v) && v.length > 0 && v.length <= 60 &&
-      v.every((x) => typeof x === "number" || typeof x === "string" || typeof x === "boolean")
-  );
-  if (arrays.length === 0) return null;
-
-  const intVars = Object.entries(locals).filter(([, v]) => Number.isInteger(v));
-
-  return (
-    <div className="array-view">
-      {arrays.map(([name, arr]) => {
-        const pointers = intVars.filter(([, v]) => v >= 0 && v < arr.length);
-        return (
-          <div key={name} className="array-view-row">
-            <div className="array-view-label">{name}</div>
-            <div className="array-view-boxes">
-              {arr.map((val, i) => (
-                <div key={i} className="array-box">
-                  <div className="array-box-value">{String(val)}</div>
-                  <div className="array-box-index">{i}</div>
-                </div>
-              ))}
-            </div>
-            {pointers.length > 0 && (
-              <div className="array-view-pointers">
-                {pointers.map(([pname, pval]) => (
-                  <span key={pname} className="pointer-tag" style={{ "--idx": pval }}>
-                    {pname}={pval}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// step/scrub, PLUS a data-structure-aware visualization of the actual
+// execution state (see ../Visualizers/Visualizers.jsx) -- an array/string
+// view with pointer and sliding-window highlighting, a real linked-list
+// node-and-arrow diagram, a live recursive call stack, a tree diagram, a
+// stack/queue view, sorting bars, a grid/graph view, a heap tree, or a DP
+// table -- whichever the current step's actual locals and the problem's
+// topic best match. The generic locals table below always stays visible
+// too, as the guaranteed fallback for anything a specialized view doesn't
+// (or can't) cover -- see docs/decisions.md's "Phase 3" section.
 
 // Traceviz's core promise: this shows what YOUR code actually did, bugs
 // included -- not a canned animation of the correct algorithm. That means
@@ -98,7 +62,7 @@ function TraceStatusBanner({ trace, onJumpToFailure, atFailure }) {
   );
 }
 
-export default function TraceViewer({ trace }) {
+export default function TraceViewer({ trace, problem }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const intervalRef = useRef(null);
@@ -229,7 +193,7 @@ export default function TraceViewer({ trace }) {
         </div>
       )}
 
-      {ArrayView(step.locals || {})}
+      <SpecializedVisualization problem={problem} steps={steps} index={index} />
 
       <p className="muted small">{trace.limitations}</p>
     </div>

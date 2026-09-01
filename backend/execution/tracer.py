@@ -51,7 +51,7 @@ from execution.sandbox import run_code
 MAX_STEPS = 2000
 
 _TRACER_HARNESS = textwrap.dedent('''
-    import sys, json as __tv_json, types as __tv_types, traceback as __tv_traceback
+    import sys, json as __tv_json, types as __tv_types, traceback as __tv_traceback, collections as __tv_collections
 
     __tv_steps = []
     __tv_depth = [0]
@@ -67,7 +67,13 @@ _TRACER_HARNESS = textwrap.dedent('''
             seen = set()
         if v is None or isinstance(v, (bool, int, float, str)):
             return v
-        if isinstance(v, (list, tuple)):
+        if isinstance(v, (list, tuple, __tv_collections.deque)):
+            # deque specifically matters here: it's the standard type for a
+            # queue in this curriculum (BFS frontiers, sliding-window-
+            # maximum's monotonic deque, implement-queue-using-stacks-style
+            # problems) and, unlike list/tuple, has no __dict__ -- without
+            # this branch it would fall through to a bare repr() string
+            # below and be unusable to the queue/BFS visualizers.
             if depth > 4:
                 return f"<{{type(v).__name__}} len={{len(v)}}>"
             return [__tv_safe_value(x, depth + 1, seen) for x in list(v)[:200]]
@@ -86,9 +92,19 @@ _TRACER_HARNESS = textwrap.dedent('''
         if hasattr(v, "__dict__"):
             oid = id(v)
             if oid in seen:
-                return f"<{{type(v).__name__}} (circular ref)>"
+                return {{"__type__": type(v).__name__, "__id__": oid, "__circular__": True}}
+            if depth > 8:
+                return {{"__type__": type(v).__name__, "__id__": oid, "__truncated__": True}}
             try:
-                return {{"__type__": type(v).__name__,
+                # __id__ is a per-process object identity (Python's id()), not a
+                # value -- it lets the frontend recognize when two different
+                # local variables (e.g. "prev" and "curr") point at the SAME
+                # underlying node, so linked-list/tree/graph visualizers can
+                # merge them into one shared diagram instead of drawing
+                # duplicate disconnected copies. It's harmless noise to the
+                # generic locals table and specifically consumed by the
+                # specialized node-graph visualizers.
+                return {{"__type__": type(v).__name__, "__id__": oid,
                         **{{k: __tv_safe_value(val, depth + 1, seen | {{oid}})
                            for k, val in vars(v).items()}}}}
             except Exception:

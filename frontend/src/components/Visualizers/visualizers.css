@@ -1,0 +1,195 @@
+/* Specialized data-structure-aware trace visualizations. Dark theme,
+   matching the palette already established in App.css (bg #1e1e1e,
+   cards #262626, borders #333/#444, text #ccc/#888). */
+
+.viz-panels { display: flex; flex-direction: column; gap: 1rem; margin: 0.75rem 0; }
+.viz-block {
+  background: #202020;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+}
+.viz-caption { color: #9a9a9a; font-size: 0.78rem; margin: 0 0 0.6rem; line-height: 1.4; }
+.viz-warning {
+  color: #f0c060;
+  background: #332a12;
+  border: 1px solid #5b4b0e;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  margin: 0.5rem 0 0;
+}
+.viz-type-tag { font-size: 0.65rem; color: #777; border: 1px solid #444; border-radius: 4px; padding: 0 0.3rem; margin-left: 0.3rem; }
+
+.pointer-chip {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #111;
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  margin: 0 0.1rem 0.15rem 0;
+  white-space: nowrap;
+}
+
+/* ---- 1. array / string / pointer / sliding window ------------------- */
+
+.seq-row + .seq-row { margin-top: 0.9rem; }
+.seq-label { font-size: 0.78rem; color: #999; margin-bottom: 0.3rem; }
+.seq-boxes { display: flex; gap: 2px; flex-wrap: wrap; align-items: flex-end; }
+.seq-box {
+  min-width: 30px;
+  text-align: center;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  background: #262626;
+  padding: 2px 4px;
+  position: relative;
+}
+.seq-box-in-window { background: #1e3a4d; border-color: #2c5c78; }
+.seq-box-pointer-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; min-height: 14px; }
+.seq-box-value { padding: 0.25rem 0; font-size: 0.78rem; font-family: monospace; white-space: pre; }
+.seq-box-index { font-size: 0.62rem; color: #777; border-top: 1px solid #333; }
+
+/* ---- 2. linked lists / 4. trees (shared node styling) ----------------- */
+
+.ll-chain { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 0.1rem; }
+.ll-node-wrap { display: flex; flex-direction: column; align-items: center; }
+.ll-pointer-tags { display: flex; gap: 2px; min-height: 16px; }
+.ll-node {
+  min-width: 42px;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #4fa8f0;
+  border-radius: 6px;
+  background: #1e2a38;
+  font-family: monospace;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.5rem;
+}
+.ll-node-none { border-color: #555; background: #262626; color: #777; font-size: 0.72rem; }
+.ll-node-orphan { border-color: #f0c060; background: #332a12; }
+.ll-arrow { color: #777; margin: 0 0.35rem 0.4rem; font-size: 0.85rem; }
+.ll-arrow.ll-null { color: #666; font-size: 0.72rem; }
+.ll-arrow.ll-cycle { color: #ff8a8a; font-size: 0.72rem; }
+
+.tree-scroll { overflow-x: auto; padding-bottom: 0.4rem; }
+.tree-canvas { position: relative; }
+.tree-edges { position: absolute; top: 0; left: 0; pointer-events: none; }
+.tree-node-wrap { position: absolute; display: flex; flex-direction: column; align-items: center; width: 56px; }
+.tree-pointer-tags { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; min-height: 14px; }
+.tree-node {
+  min-width: 34px;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #4fa8f0;
+  border-radius: 50%;
+  background: #1e2a38;
+  font-family: monospace;
+  font-size: 0.8rem;
+  z-index: 1;
+}
+.heap-node { border-radius: 6px; border-color: #b8a6ff; background: #241f3a; font-size: 0.72rem; padding: 0.1rem 0.3rem; }
+
+/* ---- 3. call stack ------------------------------------------------- */
+
+.call-stack { display: flex; flex-direction: column; gap: 0.4rem; }
+.call-frame {
+  border: 1px solid #3a3a3a;
+  border-left: 3px solid #6bcb77;
+  border-radius: 6px;
+  background: #1c1c1c;
+  padding: 0.4rem 0.6rem;
+}
+.call-frame-top { border-left-color: #4fa8f0; background: #1a2530; }
+.call-frame-header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.call-frame-fn { font-family: monospace; font-weight: 700; font-size: 0.85rem; }
+.call-frame-locals { margin-top: 0.25rem; display: flex; flex-wrap: wrap; gap: 0.4rem 0.7rem; font-size: 0.75rem; }
+.call-frame-local { color: #aaa; }
+.call-frame-return { margin-top: 0.3rem; font-size: 0.8rem; color: #f0c060; }
+
+/* ---- 5. stacks / queues ---------------------------------------------- */
+
+.sq-view + .sq-view { margin-top: 0.9rem; }
+.sq-stack { display: flex; flex-direction: column-reverse; align-items: center; gap: 2px; width: fit-content; }
+.sq-queue { display: flex; flex-direction: row; align-items: center; gap: 2px; flex-wrap: wrap; }
+.sq-cell {
+  min-width: 44px;
+  text-align: center;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  background: #262626;
+  padding: 0.3rem 0.5rem;
+  font-family: monospace;
+  font-size: 0.82rem;
+  position: relative;
+}
+.sq-cell-edge { border-color: #4fa8f0; background: #1e2a38; }
+.sq-cell-label { position: absolute; top: -1.1rem; left: 0; right: 0; font-size: 0.6rem; color: #4fa8f0; text-align: center; }
+
+/* ---- 6. sorting -------------------------------------------------------- */
+
+.sort-row + .sort-row { margin-top: 0.9rem; }
+.sort-bars { display: flex; align-items: flex-end; gap: 3px; height: 110px; }
+.sort-bar-wrap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.sort-bar { width: 16px; background: #4fa8f0; border-radius: 2px 2px 0 0; transition: height 0.15s ease; }
+.sort-bar-changed .sort-bar { background: #f0c060; }
+.sort-bar-value { font-size: 0.6rem; color: #888; margin-top: 2px; }
+
+/* ---- 7. graphs (grid + node) ------------------------------------------ */
+
+.grid-rows { display: flex; flex-direction: column; gap: 2px; }
+.grid-row { display: flex; gap: 2px; }
+.grid-cell {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-family: monospace;
+  border-radius: 3px;
+  border: 1px solid #333;
+}
+.grid-cell-off { background: #1a1a1a; color: #555; }
+.grid-cell-on { background: #1f4d2b; color: #6bcb77; }
+.grid-cell-cursor { outline: 2px solid #f0c060; outline-offset: -2px; }
+
+.graph-canvas { position: relative; width: 300px; height: 300px; }
+.graph-edges { position: absolute; top: 0; left: 0; pointer-events: none; }
+.graph-node-wrap { position: absolute; display: flex; flex-direction: column; align-items: center; }
+.graph-pointer-tags { display: flex; gap: 2px; min-height: 14px; }
+.graph-node {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1.5px solid #d88aff;
+  background: #241a30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: monospace;
+  font-size: 0.78rem;
+  z-index: 1;
+}
+
+/* ---- 9. DP tables -------------------------------------------------- */
+
+.dp-view + .dp-view { margin-top: 0.9rem; }
+.dp-cell {
+  min-width: 30px;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #333;
+  border-radius: 3px;
+  background: #262626;
+  font-family: monospace;
+  font-size: 0.72rem;
+}
+.dp-cell-changed { background: #4d3d1f; border-color: #8a6a1f; color: #f0c060; font-weight: 700; }
