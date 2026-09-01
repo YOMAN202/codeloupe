@@ -193,3 +193,79 @@
   font-size: 0.72rem;
 }
 .dp-cell-changed { background: #4d3d1f; border-color: #8a6a1f; color: #f0c060; font-weight: 700; }
+
+/* ---- Predict -> Run -> Compare -------------------------------------- */
+
+.predict-panel {
+  background: #201c2c;
+  border: 1px solid #3a3050;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  margin: 0.5rem 0;
+}
+.predict-input {
+  width: 100%;
+  background: #171420;
+  border: 1px solid #3a3050;
+  border-radius: 6px;
+  color: #ddd;
+  padding: 0.4rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  resize: vertical;
+  margin-bottom: 0.5rem;
+}
+.predict-reveal { margin-top: 0.4rem; }
+.predict-diff { margin: 0.3rem 0 0.6rem; padding-left: 1.1rem; font-size: 0.8rem; color: #ccc; }
+.predict-diff li { margin-bottom: 0.2rem; font-family: monospace; }
+
+/* ---- Pattern-recognition practice ------------------------------------ */
+
+.pattern-practice {
+  background: #1a2418;
+  border: 1px solid #2f4a2a;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.9rem;
+}
+.pattern-practice-toggle {
+  background: none;
+  border: none;
+  color: #9adf9a;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+.pattern-choice-grid { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.6rem 0; }
+.pattern-choice {
+  padding: 0.3rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid #3a5a35;
+  background: #1f2e1c;
+  color: #cde;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.pattern-choice:hover { background: #28401f; }
+.pattern-choice-selected { background: #2f5c28; border-color: #4a8a3f; color: #d5ffd0; font-weight: 600; }
+.pattern-reveal {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #2f4a2a;
+  font-size: 0.82rem;
+}
+
+/* ---- Failure analysis -------------------------------------------------- */
+
+.failure-analysis {
+  background: #2a1c1c;
+  border: 1px solid #4d1f1f;
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  margin: 0.6rem 0;
+}
+.failure-analysis h4 { margin: 0 0 0.4rem; color: #ff8a8a; font-size: 0.88rem; }
+.failure-analysis-row { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.8rem; margin: 0.25rem 0; }
+.failure-analysis-diff { font-size: 0.8rem; color: #f0c060; margin: 0.4rem 0; }

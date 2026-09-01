@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import SpecializedVisualization from "../Visualizers/Visualizers";
+import { diffLocals } from "../../utils/compare";
 
 // Renders a captured execution trace (see backend/execution/tracer.py) as a
 // step-through debugger: current line, locals, call depth, play/pause/
@@ -62,16 +63,92 @@ function TraceStatusBanner({ trace, onJumpToFailure, atFailure }) {
   );
 }
 
-export default function TraceViewer({ trace, problem }) {
+// Predict -> Run -> Compare: an optional, off-by-default learning mode.
+// The learner writes a free-text prediction of what the NEXT step will
+// do (no attempt to auto-grade free text -- that would be an unreliable
+// claim), then reveals a plain structural diff of what actually changed
+// so they can judge for themselves. Fully self-contained: it only reads
+// the already-fetched steps array and never affects normal stepping.
+function PredictPanel({ steps, index }) {
+  const [guess, setGuess] = useState("");
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    setGuess("");
+    setRevealed(false);
+  }, [index]);
+
+  const nextStep = steps[index + 1];
+  if (!nextStep) {
+    return (
+      <div className="predict-panel">
+        <p className="viz-caption">This is the last captured step — nothing further to predict.</p>
+      </div>
+    );
+  }
+  const changes = diffLocals(steps[index].locals, nextStep.locals);
+
+  return (
+    <div className="predict-panel">
+      <p className="viz-caption">
+        Before stepping forward: what do you think happens next — which variable, pointer, or value
+        changes? Write a quick guess, then reveal to compare against what your code actually did.
+      </p>
+      <textarea
+        className="predict-input"
+        rows={2}
+        placeholder="e.g. left will move to index 3, or nothing changes yet..."
+        value={guess}
+        onChange={(e) => setGuess(e.target.value)}
+        disabled={revealed}
+      />
+      {!revealed ? (
+        <button className="chip" onClick={() => setRevealed(true)}>
+          Reveal what actually happens next
+        </button>
+      ) : (
+        <div className="predict-reveal">
+          <p className="muted small">
+            <strong>Your prediction:</strong> {guess.trim() || "(left blank)"}
+          </p>
+          <p className="muted small">
+            <strong>What actually happened</strong> — next is a <code>{nextStep.event}</code> at line{" "}
+            {nextStep.line}
+            {nextStep.function ? <> in <code>{nextStep.function}</code></> : null}:
+          </p>
+          {changes.length === 0 ? (
+            <p className="muted small">No local variables changed at that step.</p>
+          ) : (
+            <ul className="predict-diff">
+              {changes.map((c) => (
+                <li key={c.name}>
+                  <code>{c.name}</code>: {c.isNew ? <em>new</em> : JSON.stringify(c.before)} &rarr;{" "}
+                  {JSON.stringify(c.after)}
+                </li>
+              ))}
+            </ul>
+          )}
+          <button className="chip chip-small" onClick={() => setRevealed(false)}>
+            Predict again
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function TraceViewer({ trace, problem, focusEnd }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [predictMode, setPredictMode] = useState(false);
   const intervalRef = useRef(null);
 
   const steps = trace?.steps || [];
 
   useEffect(() => {
-    setIndex(0);
+    setIndex(focusEnd && steps.length > 0 ? steps.length - 1 : 0);
     setPlaying(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trace]);
 
   useEffect(() => {
@@ -143,7 +220,16 @@ export default function TraceViewer({ trace, problem }) {
         <span className="muted">
           step {index + 1} / {steps.length}
         </span>
+        <button
+          className={`chip ${predictMode ? "chip-active" : ""}`}
+          onClick={() => setPredictMode((p) => !p)}
+          title="Optional: guess what happens next before revealing it"
+        >
+          &#128302; Predict mode {predictMode ? "on" : "off"}
+        </button>
       </div>
+
+      {predictMode && <PredictPanel steps={steps} index={index} />}
 
       <input
         type="range"

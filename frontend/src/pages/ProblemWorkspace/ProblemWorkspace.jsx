@@ -4,6 +4,7 @@ import CodeEditor from "../../components/Editor/CodeEditor";
 import TraceViewer from "../../components/TraceViewer/TraceViewer";
 import { DifficultyBadge, PriorityBadge, TierBadge } from "../../components/Badges/Badges";
 import MultilineText from "../../components/MultilineText/MultilineText";
+import { describeMismatch } from "../../utils/compare";
 import {
   fetchProblem,
   fetchHint,
@@ -16,6 +17,119 @@ import {
 } from "../../api/client";
 
 const TABS = ["Tests", "Hints", "Trace", "Complexity"];
+
+// Optional pattern-recognition practice: the standard pattern categories a
+// learner should be building intuition for. Deliberately not tied 1:1 to
+// the problem bank's free-text `pattern` field (e.g. "opposite-direction
+// two-pointer") -- this is a coarse self-check, not an auto-graded quiz,
+// since trying to auto-match a guess against free text would either be
+// too strict (marking a reasonable guess "wrong") or too lenient (fake
+// precision). The learner compares their own guess to the revealed
+// answer and judges for themselves.
+const PATTERN_CATEGORIES = [
+  "Hash map / set", "Two pointers", "Sliding window", "Binary search",
+  "Stack", "Queue", "Linked list manipulation", "Recursion",
+  "Tree traversal", "BFS / DFS", "Heap / priority queue", "Dynamic programming",
+  "Sorting", "Greedy", "Not sure yet",
+];
+
+// Better failure analysis: identifies the FIRST failing test case (not
+// all of them at once -- one clear starting point beats a wall of red),
+// shows expected vs actual with a plain structural description of how
+// they differ (never a claimed diagnosis of WHY -- that's not something
+// this can reliably determine), and offers a one-click path into the
+// Trace tab against that exact case. Renders nothing when everything
+// passed or when there's nothing failing to analyze yet.
+function FailureAnalysis({ runResult, onInspect }) {
+  if (!runResult?.results?.length) return null;
+  const firstFailure = runResult.results.find((r) => !r.passed);
+  if (!firstFailure) return null;
+  return (
+    <div className="failure-analysis">
+      <h4>First failing case (test {firstFailure.index + 1})</h4>
+      <div className="failure-analysis-row">
+        <span>
+          <strong>Input:</strong> <code>{JSON.stringify(firstFailure.args)}</code>
+        </span>
+      </div>
+      <div className="failure-analysis-row">
+        <span>
+          <strong>Expected:</strong> <code>{JSON.stringify(firstFailure.expected)}</code>
+        </span>
+        <span>
+          <strong>Got:</strong>{" "}
+          <code>{firstFailure.error ? firstFailure.error : JSON.stringify(firstFailure.actual)}</code>
+        </span>
+      </div>
+      {!firstFailure.error && (
+        <p className="failure-analysis-diff">{describeMismatch(firstFailure.expected, firstFailure.actual)}</p>
+      )}
+      {firstFailure.error && (
+        <p className="failure-analysis-diff">
+          Your code raised an error on this input rather than returning a value — the trace below
+          will show exactly which line it happened on and the state leading up to it.
+        </p>
+      )}
+      <p className="muted small">
+        This points at where things diverge, not necessarily why — step through the actual execution
+        to see your own logic play out on this exact input.
+      </p>
+      <button className="chip chip-small" onClick={() => onInspect(firstFailure.index)}>
+        Inspect this case in the Trace tab &rarr;
+      </button>
+    </div>
+  );
+}
+
+// Optional pattern-recognition practice. Collapsed by default so it never
+// gets in the way of just solving the problem; picking a guess does NOT
+// reveal the answer -- that needs an explicit second action, and even
+// then the learner compares their own guess to the real pattern rather
+// than being told "correct" or "wrong" (auto-grading a coarse category
+// guess against a free-text pattern description would be either falsely
+// strict or falsely lenient).
+function PatternPractice({ problem, open, setOpen, guess, setGuess, revealed, setRevealed }) {
+  return (
+    <div className="pattern-practice">
+      <button className="pattern-practice-toggle" onClick={() => setOpen((o) => !o)}>
+        {open ? "▾" : "▸"} 🧩 Pattern practice (optional) — what approach do you think applies?
+      </button>
+      {open && (
+        <>
+          <div className="pattern-choice-grid">
+            {PATTERN_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                className={`pattern-choice ${guess === cat ? "pattern-choice-selected" : ""}`}
+                onClick={() => setGuess(cat)}
+                disabled={revealed}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+          {!revealed ? (
+            <button className="chip chip-small" onClick={() => setRevealed(true)} disabled={!guess}>
+              Reveal the actual pattern
+            </button>
+          ) : (
+            <div className="pattern-reveal">
+              <p>
+                <strong>Your guess:</strong> {guess}
+              </p>
+              <p>
+                <strong>Actual pattern:</strong> {problem.pattern}
+              </p>
+              {problem.optimal_approach && (
+                <p className="muted small">{problem.optimal_approach}</p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function ProblemWorkspace() {
   const { slug } = useParams();
@@ -41,6 +155,11 @@ export default function ProblemWorkspace() {
   const [trace, setTrace] = useState(null);
   const [tracing, setTracing] = useState(false);
   const [traceTestCaseIndex, setTraceTestCaseIndex] = useState(0);
+  const [traceFocusEnd, setTraceFocusEnd] = useState(false);
+
+  const [patternOpen, setPatternOpen] = useState(false);
+  const [patternGuess, setPatternGuess] = useState(null);
+  const [patternRevealed, setPatternRevealed] = useState(false);
 
   const [startedAt, setStartedAt] = useState(Date.now());
   const [attemptFeedback, setAttemptFeedback] = useState(null);
@@ -55,6 +174,10 @@ export default function ProblemWorkspace() {
     setComplexity(null);
     setTrace(null);
     setTraceTestCaseIndex(0);
+    setTraceFocusEnd(false);
+    setPatternOpen(false);
+    setPatternGuess(null);
+    setPatternRevealed(false);
     setAttemptFeedback(null);
     setStartedAt(Date.now());
     setTab("Tests");
@@ -137,7 +260,8 @@ export default function ProblemWorkspace() {
     }
   }
 
-  async function runTrace() {
+  async function runTrace(overrideTestCaseIndex) {
+    const idx = overrideTestCaseIndex ?? traceTestCaseIndex;
     setTracing(true);
     setTrace(null);
     try {
@@ -145,13 +269,25 @@ export default function ProblemWorkspace() {
       // starter code is just a function signature with no call to it, so
       // without this the trace would never actually enter the function
       // body. See client.js's traceProblem / app.py's /trace docstring.
-      const result = await traceProblem(slug, code, traceTestCaseIndex);
+      const result = await traceProblem(slug, code, idx);
       setTrace(result);
     } catch (e) {
       setError(e.message);
     } finally {
       setTracing(false);
     }
+  }
+
+  // Failure analysis's "inspect this in the trace" jump: switch to the
+  // Trace tab, point it at the SAME test case that failed (run's results
+  // and visible_test_cases share index ordering -- both queries are
+  // ORDER BY id server-side), trace it, and land on the final step so the
+  // actual return value is immediately visible next to what was expected.
+  function inspectFailureInTrace(testCaseIndex) {
+    setTab("Trace");
+    setTraceTestCaseIndex(testCaseIndex);
+    setTraceFocusEnd(true);
+    runTrace(testCaseIndex);
   }
 
   if (loading) return <p className="muted">Loading problem...</p>;
@@ -216,6 +352,17 @@ export default function ProblemWorkspace() {
         </div>
 
         <div className="workspace-right">
+          {problem.pattern && (
+            <PatternPractice
+              problem={problem}
+              open={patternOpen}
+              setOpen={setPatternOpen}
+              guess={patternGuess}
+              setGuess={setPatternGuess}
+              revealed={patternRevealed}
+              setRevealed={setPatternRevealed}
+            />
+          )}
           <CodeEditor value={code} onChange={setCode} />
           <button className="run-button" onClick={handleRun} disabled={running}>
             {running ? "Running..." : "Run tests"}
@@ -250,20 +397,23 @@ export default function ProblemWorkspace() {
                   </>
                 )}
                 {runResult?.results?.length > 0 && (
-                  <ul className="test-results">
-                    {runResult.results.map((r) => (
-                      <li key={r.index} className={r.passed ? "test-pass" : "test-fail"}>
-                        <span>{r.passed ? "PASS" : "FAIL"}</span>
-                        <code>input: {JSON.stringify(r.args)}</code>
-                        {!r.passed && (
-                          <>
-                            <code>expected: {JSON.stringify(r.expected)}</code>
-                            <code>got: {r.error ? r.error : JSON.stringify(r.actual)}</code>
-                          </>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <FailureAnalysis runResult={runResult} onInspect={inspectFailureInTrace} />
+                    <ul className="test-results">
+                      {runResult.results.map((r) => (
+                        <li key={r.index} className={r.passed ? "test-pass" : "test-fail"}>
+                          <span>{r.passed ? "PASS" : "FAIL"}</span>
+                          <code>input: {JSON.stringify(r.args)}</code>
+                          {!r.passed && (
+                            <>
+                              <code>expected: {JSON.stringify(r.expected)}</code>
+                              <code>got: {r.error ? r.error : JSON.stringify(r.actual)}</code>
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
               </div>
             )}
@@ -337,7 +487,14 @@ export default function ProblemWorkspace() {
                     </select>
                   </label>
                 )}
-                <button className="chip" onClick={runTrace} disabled={tracing}>
+                <button
+                  className="chip"
+                  onClick={() => {
+                    setTraceFocusEnd(false);
+                    runTrace();
+                  }}
+                  disabled={tracing}
+                >
                   {tracing ? "Tracing..." : "Trace my code"}
                 </button>
                 {trace?.traced_test_case_args && (
@@ -346,7 +503,7 @@ export default function ProblemWorkspace() {
                     {trace.traced_test_case_args.map((a) => JSON.stringify(a)).join(", ")})</code>
                   </p>
                 )}
-                <TraceViewer trace={trace} problem={problem} />
+                <TraceViewer trace={trace} problem={problem} focusEnd={traceFocusEnd} />
               </div>
             )}
 

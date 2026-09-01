@@ -188,7 +188,7 @@ def get_problem(slug):
     # the mechanism exists for future expansion per problem-roadmap.md)
     visible = conn.execute(
         "SELECT input_args_json, expected_output_json, label FROM test_cases "
-        "WHERE problem_id = ? AND is_hidden = 0", (problem["id"],)
+        "WHERE problem_id = ? AND is_hidden = 0 ORDER BY id", (problem["id"],)
     ).fetchall()
     conn.close()
     result["visible_test_cases"] = [
@@ -261,8 +261,17 @@ def run_problem(slug):
     if problem is None:
         conn.close()
         return jsonify({"error": f"No problem '{slug}'"}), 404
+    # ORDER BY id matters here beyond simple determinism: the failure-
+    # analysis UI (ProblemWorkspace's "inspect in trace" jump) relies on a
+    # failing result's index lining up with the SAME position in
+    # visible_test_cases (get_problem, same ORDER BY) so it can open the
+    # Trace tab against the exact case that failed. Since no test case in
+    # the current bank is marked hidden (see get_problem's comment), this
+    # index is presently 1:1 with the visible list; is_hidden is not
+    # filtered here because ungraded submissions must still be checked
+    # against every test case, visible or not.
     test_case_rows = conn.execute(
-        "SELECT input_args_json, expected_output_json FROM test_cases WHERE problem_id = ?",
+        "SELECT input_args_json, expected_output_json FROM test_cases WHERE problem_id = ? ORDER BY id",
         (problem["id"],),
     ).fetchall()
     conn.close()
