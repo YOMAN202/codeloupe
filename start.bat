@@ -107,7 +107,10 @@ REM Start the frontend, unless it's already up. --strictPort makes Vite
 REM fail loudly instead of silently moving to 5174+ if 5173 is taken by
 REM something else, so a real port conflict shows up as a clear error
 REM in the "Codeloupe Frontend" window rather than a confusing mismatch.
-curl -f -s -o nul -m 2 http://127.0.0.1:5173/
+REM Polling "localhost" here (not 127.0.0.1) is deliberate: Vite listens
+REM on [::1] (IPv6 localhost) by default, which "localhost" resolves to
+REM on Windows but the literal 127.0.0.1 never matches.
+curl -f -s -o nul -m 2 http://localhost:5173/
 if errorlevel 1 (
     echo [Codeloupe] Starting frontend...
     start "Codeloupe Frontend" /min cmd /k "cd /d "%ROOT%frontend" && npm run dev -- --port 5173 --strictPort"
@@ -140,7 +143,7 @@ echo [Codeloupe] Backend is up.
 echo [Codeloupe] Waiting for the frontend to respond...
 set tries=0
 :waitfrontend
-curl -f -s -o nul -m 2 http://127.0.0.1:5173/
+curl -f -s -o nul -m 2 http://localhost:5173/
 if not errorlevel 1 goto frontendready
 set /a tries=tries+1
 if %tries% GEQ 45 goto frontendfailed
