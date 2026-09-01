@@ -111,6 +111,8 @@ npm run dev                # starts on http://127.0.0.1:5173
 
 Open `http://127.0.0.1:5173` — you should land on the Dashboard.
 
+**Windows convenience script:** after the one-time setup above (steps 1 and 2, done once), `start.bat` in the repo root starts both servers in their own windows and opens the app in your browser — double-click it, or run it from a terminal. It checks that dependencies and the database are already in place and tells you plainly if something's missing, rather than failing silently.
+
 **3. Run the tests** (optional, needs both servers above already running):
 ```bash
 cd codeloupe/backend
@@ -143,3 +145,7 @@ The build is a static site with no server-side rendering; see `docs/architecture
 ## Known limitations
 
 The execution sandbox is appropriate for trusted, single-user code — it is not hardened against hostile input. The complexity estimator is a structural teaching aid (loop nesting, recursion shape), not a certified Big-O prover. The trace visualizer's topic-specific renderers cover the data shapes the curriculum actually uses (arrays, linked lists, trees, graphs, heaps, DP tables) rather than arbitrary Python objects. The problem bank is curated and intentionally not exhaustive. See `docs/decisions.md` for the full, unfiltered list of scope decisions and why each one was made.
+
+## License
+
+[MIT](LICENSE) — see the `LICENSE` file.
