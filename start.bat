@@ -15,13 +15,14 @@ REM one-time setup first; after that, this script (and stop.bat) is all
 REM you need for every subsequent start.
 REM
 REM Plain batch plus one small VBScript helper (scripts\run-hidden.vbs)
-REM for the invisible part -- Windows Script Host's WshShell.Exec is the
-REM standard, decades-old way to run a console command with no window,
-REM built into Windows already. No PowerShell involved: an earlier
-REM version of this launcher used PowerShell for the same job and failed
-REM silently on a real machine, which is why it isn't used here. Backend
-REM and frontend output goes to .codeloupe-run\*.log, since there's no
-REM window left to read it from directly if something goes wrong.
+REM for the invisible part -- Windows Script Host's WshShell.Run, told
+REM explicitly not to create a window, is a standard, decades-old way to
+REM run a console command with no window, built into Windows already. No
+REM PowerShell involved: an earlier version of this launcher used
+REM PowerShell for the same job and failed silently on a real machine,
+REM which is why it isn't used here. Backend and frontend output goes to
+REM .codeloupe-run\*.log, since there's no window left to read it from
+REM directly if something goes wrong.
 
 setlocal
 set "ROOT=%~dp0"
@@ -106,7 +107,7 @@ REM backend.log (since there's no window to read it from directly).
 curl -f -s -o nul -m 2 http://127.0.0.1:5001/api/health
 if errorlevel 1 (
     echo [Codeloupe] Starting backend...
-    wscript.exe //nologo "%ROOT%scripts\run-hidden.vbs" "%ROOT%backend" "python app.py" "%RUNDIR%\backend.log" "%RUNDIR%\backend.pid"
+    wscript.exe //nologo "%ROOT%scripts\run-hidden.vbs" "%ROOT%backend" "python app.py" "%RUNDIR%\backend.log" "%RUNDIR%\backend.pid" "backend.log"
 ) else (
     echo [Codeloupe] Backend already running.
 )
@@ -121,7 +122,7 @@ REM the literal 127.0.0.1 never matches.
 curl -f -s -o nul -m 2 http://localhost:5173/
 if errorlevel 1 (
     echo [Codeloupe] Starting frontend...
-    wscript.exe //nologo "%ROOT%scripts\run-hidden.vbs" "%ROOT%frontend" "npm run dev -- --port 5173 --strictPort" "%RUNDIR%\frontend.log" "%RUNDIR%\frontend.pid"
+    wscript.exe //nologo "%ROOT%scripts\run-hidden.vbs" "%ROOT%frontend" "npm run dev -- --port 5173 --strictPort" "%RUNDIR%\frontend.log" "%RUNDIR%\frontend.pid" "frontend.log"
 ) else (
     echo [Codeloupe] Frontend already running.
 )
