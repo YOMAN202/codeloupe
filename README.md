@@ -24,35 +24,40 @@ Most learning platforms fall into one of two camps: static content (videos, arti
 ## The full workflow
 
 <p align="center">
+  <img src="docs/screenshots/learn-hub.png" alt="Learn hub with 28 concept lessons grouped by topic" width="800">
+</p>
+
+**1. Learn** — Browse the Learn hub (28 concept lessons across every topic in the curriculum), then open one: read what it is, why it matters, how to recognize it, and a step-by-through worked example, answer inline checkpoints, try a practice exercise.
+
+<p align="center">
   <img src="docs/screenshots/concept-lesson.png" alt="Concept lesson with interactive walkthrough" width="800">
 </p>
 
-1. **Learn** — Read a concept lesson (what it is, why it matters, how to recognize it, a step-by-through worked example), answer inline checkpoints, try a practice exercise.
-2. **Practice → Solve** — Open a related problem, write your own solution in the Monaco editor, run it against real test cases.
+**2. Practice → Solve** — Open a related problem, write your own solution in the Monaco editor, run it against real test cases.
 
 <p align="center">
   <img src="docs/screenshots/problem-workspace.png" alt="Problem workspace with editor and tests" width="800">
 </p>
 
-3. **Understand failures** — A wrong answer shows exactly which test case failed, with expected vs. actual; a runtime exception is caught and explained, not just dumped as a stack trace.
+**3. Understand failures** — A wrong answer shows exactly which test case failed, with expected vs. actual; a runtime exception is caught and explained, not just dumped as a stack trace.
 
 <p align="center">
   <img src="docs/screenshots/failed-test.png" alt="Failed test with an IndexError caught and explained" width="800">
 </p>
 
-4. **Trace your actual code** — Step forward/back or scrub through every line your submission executed, with live local variables and a specialized visualization (array pointers, tree, graph, heap, or DP table) built from that exact execution state.
+**4. Trace your actual code** — Step forward/back or scrub through every line your submission executed, with live local variables and a specialized visualization (array pointers, tree, graph, heap, or DP table) built from that exact execution state.
 
 <p align="center">
   <img src="docs/screenshots/trace-view.png" alt="Trace view stepping through execution with a live array/pointer visualization" width="800">
 </p>
 
-5. **Compare approaches** — See your code's own structural/complexity estimate next to a curated baseline and an optimized reference, so you understand *why* one approach is better, not just that it is.
+**5. Compare approaches** — See your code's own structural/complexity estimate next to a curated baseline and an optimized reference, so you understand *why* one approach is better, not just that it is.
 
 <p align="center">
   <img src="docs/screenshots/approach-comparison.png" alt="Approach comparison between your code and a reference solution" width="800">
 </p>
 
-6. **Review mistakes → Revise** — The Mistake Journal shows what kinds of mistakes actually recur, with a direct link back to the lesson that covers each one, and a spaced revision schedule brings problems back when they're due.
+**6. Review mistakes → Revise** — The Mistake Journal shows what kinds of mistakes actually recur, with a direct link back to the lesson that covers each one, and a spaced revision schedule brings problems back when they're due.
 
 <p align="center">
   <img src="docs/screenshots/mistake-journal.png" alt="Mistake journal linking a recurring mistake back to its concept lesson" width="800">
