@@ -98,7 +98,7 @@ Requires **Python 3.11+** and **Node 18+**. No environment variables or API keys
 
 **1. Clone and set up the backend:**
 ```bash
-git clone <this-repo-url> codeloupe
+git clone https://github.com/YOMAN202/codeloupe.git
 cd codeloupe/backend
 pip install -r requirements.txt
 python3 db/init_db.py     # creates and seeds backend/db/traceviz.db
@@ -114,7 +114,11 @@ npm run dev                # starts on http://127.0.0.1:5173
 
 Open `http://127.0.0.1:5173` — you should land on the Dashboard.
 
-**Windows convenience scripts:** after the one-time setup above (steps 1 and 2, done once), `start.bat` in the repo root is all you need for every subsequent start — double-click it. It starts both servers completely invisibly (no window at all, not even minimized), waits until the frontend is actually responding before doing anything else, then opens `http://localhost:5173/` in your browser automatically and closes itself. It checks that dependencies and the database are already in place and prints a clear message — not a silent failure — if something's missing or a server doesn't start; if a server fails, `.codeloupe-run\backend.log` / `frontend.log` has the real error, since there's no window to read it from directly. Run `stop.bat` when you're done for the day — since neither server has a window, that's the only way to stop them. `start.bat` is plain batch; the invisible part is one small helper, `scripts\run-hidden.vbs`, using Windows Script Host (built into Windows, not something extra to install) rather than PowerShell — an earlier version used PowerShell for this and failed silently on a real machine, which is why it isn't used here.
+**Windows convenience scripts:** after the one-time setup above (steps 1 and 2), just double-click `start.bat` in the repo root for every future launch. It starts both servers and opens Codeloupe in your browser automatically. Run `stop.bat` when you're done to stop both servers. If startup fails, check the logs:
+```
+.codeloupe-run/backend.log
+.codeloupe-run/frontend.log
+```
 
 **3. Run the tests** (optional, needs both servers above already running):
 ```bash
