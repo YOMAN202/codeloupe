@@ -14,7 +14,7 @@ import os
 import subprocess
 import sys
 import tempfile
-
+PYTHON_EXECUTABLE = "/home/AkshatMishra/.virtualenvs/codeloupe-env/bin/python"
 if os.name == "posix":
     import signal
 
@@ -113,7 +113,7 @@ def run_code(code: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
         use_process_group = os.name == "posix"
 
         proc = subprocess.Popen(
-            [sys.executable, script_path],
+            [PYTHON_EXECUTABLE, script_path],
             cwd=tmpdir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
