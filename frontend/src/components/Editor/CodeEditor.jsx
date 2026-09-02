@@ -9,7 +9,22 @@ import "../../monacoSetup";
 // editor "significantly larger, ~65-70% of the coding area" sizing a pure
 // CSS change (see App.css's "editor + live preview" section) rather than
 // something touched here again later.
-export default function CodeEditor({ value, onChange }) {
+// `bubbleScroll`: Monaco's own default (`scrollbar.alwaysConsumeMouseWheel:
+// true`) calls preventDefault()/stopPropagation() on EVERY wheel event over
+// the editor, unconditionally -- even when the editor's own content is
+// already fully visible or the wheel would scroll past its top/bottom edge.
+// That's the right default for an editor that's the whole point of the
+// page (an IDE), but wrong for one embedded partway down a longer page:
+// hovering it makes the surrounding page feel stuck, since scroll input
+// never reaches it. Setting this to false is the one-line fix Monaco
+// documents for exactly this case: the editor still scrolls its own long
+// code internally, but once it hits its own top/bottom (or never needed to
+// scroll at all), further wheel input passes through to the page, same as
+// a normal `overflow:auto` div would. Defaults to false (Monaco's own
+// default behavior, unchanged) so existing call sites -- the Problem
+// Workspace's editor, embedded in a shorter per-column layout where this
+// isn't an issue -- are not affected; only Scratchpad opts in.
+export default function CodeEditor({ value, onChange, bubbleScroll = false }) {
   return (
     <div className="code-editor-wrap">
       <Editor
@@ -23,6 +38,7 @@ export default function CodeEditor({ value, onChange }) {
           fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
+          scrollbar: { alwaysConsumeMouseWheel: !bubbleScroll },
           // Monaco does NOT observe its own container by default -- without
           // this, toggling the Live Preview panel (or collapsing the
           // sidebar, or resizing the browser) leaves the editor's internal

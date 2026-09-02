@@ -950,6 +950,146 @@ code:not(pre code) {
   .live-preview-status-dot[data-status="tracing"] { animation: none; }
 }
 
+/* ---- scratchpad & trace ------------------------------------------------- */
+/* Own section, deliberately separate from the problem workspace rules
+   above even though the shapes rhyme (an editor column + a
+   trace/output column) -- Scratchpad has its own view-mode toggle and a
+   fixed bottom action ribbon that the problem workspace doesn't, so
+   reusing .workspace-columns/.editor-live-row directly would mean either
+   overloading those classes with scratchpad-only concerns or fighting
+   their existing rules with overrides. Separate classes keep the two
+   pages' CSS independently readable and change-safe. */
+
+.scratchpad-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+}
+.scratchpad-toolbar-label {
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 0.2rem;
+}
+
+/* Stacked (default): a plain vertical column, same shape the page always
+   had -- editor, then the Output/Trace tabs and their panel, one under
+   the other. Split: side by side, editor left / output-or-trace right,
+   same 2:1-ish emphasis the problem workspace's editor-live-row uses so
+   the two pages read as the same design language. min-width: 0 on both
+   columns is what lets Monaco (and long trace/output text) actually
+   shrink inside a flex child instead of forcing the row wider than the
+   viewport. */
+.scratchpad-columns-stacked { display: flex; flex-direction: column; gap: 0.6rem; }
+.scratchpad-columns-split { display: flex; gap: 1.25rem; align-items: stretch; }
+.scratchpad-columns-split .scratchpad-editor-column { flex: 1.6; min-width: 0; }
+.scratchpad-columns-split .scratchpad-trace-column { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.scratchpad-columns-split .scratchpad-trace-column .trace-viewer,
+.scratchpad-columns-split .scratchpad-trace-column .output-panel { flex: 1; }
+
+/* Narrow viewports: split mode would squeeze the editor and trace/output
+   into two columns too thin to be usable, so it's overridden back to a
+   single stacked column regardless of which mode is selected -- the
+   toggle itself stays visible and keeps working normally above this
+   width, it just has no visible effect below it. Same 860px breakpoint
+   every other responsive layout in this app already uses. */
+@media (max-width: 860px) {
+  .scratchpad-columns-split { flex-direction: column; }
+  .scratchpad-columns-split .scratchpad-editor-column,
+  .scratchpad-columns-split .scratchpad-trace-column { flex: 1; }
+}
+
+/* Bottom padding on the page itself (not on .main-content globally --
+   this stays scoped to Scratchpad) reserves room equal to the fixed
+   ribbon's own height plus a little breathing space, so scrolling all the
+   way down still clears the ribbon instead of the last bit of output/
+   trace content landing hidden underneath it. Kept in sync by hand with
+   the ribbon's own padding/content height below -- there's no live
+   measurement here, just a value comfortably larger than the ribbon ever
+   renders at any breakpoint. */
+.scratchpad-page { padding-bottom: 5.5rem; }
+
+.scratchpad-ribbon {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--s1);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
+}
+.scratchpad-ribbon-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0.7rem 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  /* Lines the ribbon's content up under the sidebar-aware main content
+     column above it, desktop only -- mirrors .sidebar's own width and
+     .sidebar-is-collapsed's override below exactly, rather than
+     introducing a new layout mechanism just for this one bar. */
+  padding-left: calc(228px + 2.2rem);
+}
+.sidebar-is-collapsed .scratchpad-ribbon-inner { padding-left: calc(64px + 2.2rem); }
+
+.scratchpad-ribbon-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+/* Ribbon sits below the buttons' own layout, so their normal margin-top
+   (meant for sitting under the editor) would just add uneven dead space
+   here -- the ribbon's own padding already provides consistent spacing. */
+.scratchpad-ribbon-actions .run-button { margin-top: 0; margin-right: 0; }
+
+.scratchpad-jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--s2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+.scratchpad-jump-btn:hover { border-color: var(--teal); color: var(--teal); }
+.scratchpad-jump-btn:hover .scratchpad-jump-arrow { transform: translateY(2px); }
+.scratchpad-jump-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.scratchpad-jump-arrow { display: inline-block; transition: transform 0.12s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scratchpad-jump-btn:hover .scratchpad-jump-arrow { transform: none; }
+}
+
+@media (max-width: 860px) {
+  /* The sidebar becomes a static top bar on mobile (see .sidebar's own
+     860px override), not a left rail -- so the ribbon's content no longer
+     needs to dodge one, and both padding-left overrides above collapse
+     back to the same plain horizontal padding every other stacked control
+     uses at this breakpoint. */
+  .scratchpad-ribbon-inner {
+    padding: 0.6rem 1.1rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
+  .sidebar-is-collapsed .scratchpad-ribbon-inner { padding: 0.6rem 1.1rem; }
+  .scratchpad-ribbon-actions { justify-content: center; }
+  .scratchpad-jump-btn { justify-content: center; }
+  /* Two rows instead of one on mobile (buttons row + jump-button row) --
+     a bit taller, so the page needs a little more reserved bottom space
+     to still fully clear it. */
+  .scratchpad-page { padding-bottom: 7.5rem; }
+}
+
 .run-button {
   margin-top: 0.8rem;
   margin-right: 0.5rem;
