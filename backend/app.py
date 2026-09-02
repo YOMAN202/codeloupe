@@ -40,11 +40,46 @@ app = Flask(__name__)
 # deployed on separate hosts -- see docs/architecture.md's "Deployment"
 # section. Unset/empty leaves today's behavior unchanged.
 _cors_origins = os.environ.get("CORS_ORIGINS", "").strip()
-CORS(app, origins=[o.strip() for o in _cors_origins.split(",") if o.strip()] or "*")
+CORS(
+    app,
+    origins=[o.strip() for o in _cors_origins.split(",") if o.strip()] or "*",
+    # X-Visitor-Id (see get_visitor_id below) needs to be explicitly
+    # allowlisted alongside the Content-Type the frontend already sent --
+    # a cross-origin PUT/POST/DELETE preflight only allows headers listed
+    # here, and a browser silently drops a disallowed request header
+    # rather than erroring, which would otherwise fail visitor scoping
+    # invisibly for anyone running frontend and backend on separate hosts.
+    allow_headers=["Content-Type", "X-Visitor-Id"],
+)
 
 
 def row_to_dict(row):
     return dict(row) if row else None
+
+
+# ---------------------------------------------------------- visitor scope --
+# Anonymous per-visitor data isolation: the frontend generates a random id
+# once per browser profile (localStorage, never a login/account -- see
+# frontend/src/api/visitorId.js) and sends it as X-Visitor-Id on every
+# request. get_visitor_id() reads that header and is threaded through every
+# route that touches lesson_progress, attempts, revision_schedule,
+# mistakes, or concept_lesson_progress, so two visitors' attempts/mistakes/
+# revision schedules/progress/dashboard data can never collide. Shared,
+# non-per-visitor content (lessons/problems/concept lesson text/hints/test
+# cases) is untouched by any of this.
+#
+# DEFAULT_VISITOR_ID is the fallback for any caller that doesn't send the
+# header at all -- a direct API/curl call, an older test script -- so
+# nothing breaks; it's the exact same sentinel db/init_db.py's migration
+# backfills pre-existing rows to (see that module's LEGACY_VISITOR_ID),
+# which is what lets a solo local user reclaim their pre-upgrade history by
+# setting that same value in localStorage (see the migration's docstring).
+DEFAULT_VISITOR_ID = "legacy-local-user"
+
+
+def get_visitor_id():
+    vid = (request.headers.get("X-Visitor-Id") or "").strip()
+    return vid if vid else DEFAULT_VISITOR_ID
 
 
 # ---------------------------------------------------------- concept links --
@@ -54,7 +89,7 @@ def row_to_dict(row):
 # topic-string match, not a join table, so it never goes stale as new
 # problems/days/concept lessons are added.
 
-def _related_concept_lessons(conn, topics):
+def _related_concept_lessons(conn, topics, visitor_id):
     topics = [t for t in dict.fromkeys(topics) if t]  # dedupe, preserve order, drop falsy
     if not topics:
         return []
@@ -62,10 +97,12 @@ def _related_concept_lessons(conn, topics):
     rows = conn.execute(
         f"""SELECT cl.slug, cl.kind, cl.title, cl.summary,
                    COALESCE(clp.status, 'not_started') AS status
-            FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
+            FROM concept_lessons cl
+            LEFT JOIN concept_lesson_progress clp
+                ON clp.concept_lesson_id = cl.id AND clp.visitor_id = ?
             WHERE cl.topic IN ({placeholders})
             ORDER BY cl.topic, CASE cl.kind WHEN 'topic' THEN 0 ELSE 1 END, cl.display_order""",
-        topics,
+        [visitor_id, *topics],
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -81,12 +118,15 @@ def health():
 
 @app.route("/api/lessons", methods=["GET"])
 def list_lessons():
+    visitor_id = get_visitor_id()
     conn = get_connection()
     rows = conn.execute(
         """SELECT l.day, l.title, l.block, l.estimated_minutes,
                   COALESCE(lp.status, 'not_started') AS status
-           FROM lessons l LEFT JOIN lesson_progress lp ON lp.day = l.day
-           ORDER BY l.day"""
+           FROM lessons l
+           LEFT JOIN lesson_progress lp ON lp.day = l.day AND lp.visitor_id = ?
+           ORDER BY l.day""",
+        (visitor_id,),
     ).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
@@ -94,12 +134,14 @@ def list_lessons():
 
 @app.route("/api/lessons/<int:day>", methods=["GET"])
 def get_lesson(day):
+    visitor_id = get_visitor_id()
     conn = get_connection()
     lesson = conn.execute(
         """SELECT l.*, COALESCE(lp.status, 'not_started') AS status,
                   lp.started_at, lp.completed_at
-           FROM lessons l LEFT JOIN lesson_progress lp ON lp.day = l.day
-           WHERE l.day = ?""", (day,)
+           FROM lessons l
+           LEFT JOIN lesson_progress lp ON lp.day = l.day AND lp.visitor_id = ?
+           WHERE l.day = ?""", (visitor_id, day)
     ).fetchone()
     if lesson is None:
         conn.close()
@@ -120,8 +162,9 @@ def get_lesson(day):
         block_days = conn.execute(
             """SELECT COUNT(*) total,
                       SUM(CASE WHEN lp.status IN ('completed','skipped','known') THEN 1 ELSE 0 END) done
-               FROM lessons l LEFT JOIN lesson_progress lp ON lp.day = l.day
-               WHERE l.block = ?""", (block,)
+               FROM lessons l
+               LEFT JOIN lesson_progress lp ON lp.day = l.day AND lp.visitor_id = ?
+               WHERE l.block = ?""", (visitor_id, block)
         ).fetchone()
         prerequisites.append({
             "block": block,
@@ -133,13 +176,14 @@ def get_lesson(day):
     # "concepts you should know" for this day, derived from its problems'
     # topics -- empty for most days until the teaching system's content
     # expands past the arrays/two-pointers pilot (see db/seed_concepts.py).
-    result["concept_lessons"] = _related_concept_lessons(conn, [p["topic"] for p in problems])
+    result["concept_lessons"] = _related_concept_lessons(conn, [p["topic"] for p in problems], visitor_id)
     conn.close()
     return jsonify(result)
 
 
 @app.route("/api/lessons/<int:day>/progress", methods=["PUT"])
 def set_lesson_progress(day):
+    visitor_id = get_visitor_id()
     payload = request.get_json(silent=True) or {}
     status = payload.get("status")
     if status not in _LESSON_STATUSES:
@@ -151,7 +195,9 @@ def set_lesson_progress(day):
         conn.close()
         return jsonify({"error": f"No lesson found for day {day}"}), 404
 
-    existing = conn.execute("SELECT * FROM lesson_progress WHERE day = ?", (day,)).fetchone()
+    existing = conn.execute(
+        "SELECT * FROM lesson_progress WHERE day = ? AND visitor_id = ?", (day, visitor_id)
+    ).fetchone()
     now = __import__("datetime").datetime.utcnow().isoformat()
     started_at = existing["started_at"] if existing else None
     completed_at = existing["completed_at"] if existing else None
@@ -164,13 +210,13 @@ def set_lesson_progress(day):
 
     if existing:
         conn.execute(
-            "UPDATE lesson_progress SET status=?, started_at=?, completed_at=?, updated_at=? WHERE day=?",
-            (status, started_at, completed_at, now, day),
+            "UPDATE lesson_progress SET status=?, started_at=?, completed_at=?, updated_at=? WHERE day=? AND visitor_id=?",
+            (status, started_at, completed_at, now, day, visitor_id),
         )
     else:
         conn.execute(
-            "INSERT INTO lesson_progress (day, status, started_at, completed_at, updated_at) VALUES (?,?,?,?,?)",
-            (day, status, started_at, completed_at, now),
+            "INSERT INTO lesson_progress (day, visitor_id, status, started_at, completed_at, updated_at) VALUES (?,?,?,?,?,?)",
+            (day, visitor_id, status, started_at, completed_at, now),
         )
     conn.commit()
     conn.close()
@@ -234,7 +280,7 @@ def get_problem(slug):
         "SELECT input_args_json, expected_output_json, label FROM test_cases "
         "WHERE problem_id = ? AND is_hidden = 0 ORDER BY id", (problem["id"],)
     ).fetchall()
-    result["concept_lessons"] = _related_concept_lessons(conn, [problem["topic"]])
+    result["concept_lessons"] = _related_concept_lessons(conn, [problem["topic"]], get_visitor_id())
     conn.close()
     result["visible_test_cases"] = [
         {"args": json.loads(t["input_args_json"]), "expected": json.loads(t["expected_output_json"]),
@@ -256,16 +302,18 @@ def get_problem(slug):
 _CONCEPT_LIST_FIELDS = "cl.slug, cl.kind, cl.topic, cl.pattern_family, cl.title, cl.display_order, cl.estimated_minutes, cl.summary"
 
 
-def _resolve_concept_prereqs(conn, prerequisite_slugs):
+def _resolve_concept_prereqs(conn, prerequisite_slugs, visitor_id):
     slugs = [s.strip() for s in (prerequisite_slugs or "").split(",") if s.strip()]
     if not slugs:
         return []
     placeholders = ",".join("?" * len(slugs))
     rows = conn.execute(
         f"""SELECT cl.slug, cl.title, COALESCE(clp.status, 'not_started') AS status
-            FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
+            FROM concept_lessons cl
+            LEFT JOIN concept_lesson_progress clp
+                ON clp.concept_lesson_id = cl.id AND clp.visitor_id = ?
             WHERE cl.slug IN ({placeholders})""",
-        slugs,
+        [visitor_id, *slugs],
     ).fetchall()
     order = {s: i for i, s in enumerate(slugs)}
     return sorted([dict(r) for r in rows], key=lambda r: order.get(r["slug"], len(slugs)))
@@ -293,11 +341,15 @@ def _related_problems_for_concept(conn, concept):
 
 @app.route("/api/concepts", methods=["GET"])
 def list_concepts():
+    visitor_id = get_visitor_id()
     conn = get_connection()
     rows = conn.execute(
         f"""SELECT {_CONCEPT_LIST_FIELDS}, COALESCE(clp.status, 'not_started') AS status
-            FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
-            ORDER BY cl.topic, CASE cl.kind WHEN 'topic' THEN 0 ELSE 1 END, cl.display_order"""
+            FROM concept_lessons cl
+            LEFT JOIN concept_lesson_progress clp
+                ON clp.concept_lesson_id = cl.id AND clp.visitor_id = ?
+            ORDER BY cl.topic, CASE cl.kind WHEN 'topic' THEN 0 ELSE 1 END, cl.display_order""",
+        (visitor_id,),
     ).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
@@ -305,11 +357,14 @@ def list_concepts():
 
 @app.route("/api/concepts/<slug>", methods=["GET"])
 def get_concept(slug):
+    visitor_id = get_visitor_id()
     conn = get_connection()
     concept = conn.execute(
         """SELECT cl.*, COALESCE(clp.status, 'not_started') AS status
-           FROM concept_lessons cl LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
-           WHERE cl.slug = ?""", (slug,)
+           FROM concept_lessons cl
+           LEFT JOIN concept_lesson_progress clp
+               ON clp.concept_lesson_id = cl.id AND clp.visitor_id = ?
+           WHERE cl.slug = ?""", (visitor_id, slug)
     ).fetchone()
     if concept is None:
         conn.close()
@@ -341,7 +396,7 @@ def get_concept(slug):
     ).fetchall()
     result["practice_exercises"] = [dict(e) for e in exercise_rows]
 
-    result["prerequisites"] = _resolve_concept_prereqs(conn, concept["prerequisite_slugs"])
+    result["prerequisites"] = _resolve_concept_prereqs(conn, concept["prerequisite_slugs"], visitor_id)
     result["related_problems"] = _related_problems_for_concept(conn, concept)
     conn.close()
     return jsonify(result)
@@ -349,6 +404,7 @@ def get_concept(slug):
 
 @app.route("/api/concepts/<slug>/progress", methods=["PUT"])
 def set_concept_progress(slug):
+    visitor_id = get_visitor_id()
     payload = request.get_json(silent=True) or {}
     status = payload.get("status")
     valid_statuses = {"not_started", "in_progress", "completed", "known"}
@@ -363,17 +419,18 @@ def set_concept_progress(slug):
 
     now = __import__("datetime").datetime.utcnow().isoformat()
     existing = conn.execute(
-        "SELECT concept_lesson_id FROM concept_lesson_progress WHERE concept_lesson_id = ?", (concept["id"],)
+        "SELECT concept_lesson_id FROM concept_lesson_progress WHERE concept_lesson_id = ? AND visitor_id = ?",
+        (concept["id"], visitor_id),
     ).fetchone()
     if existing:
         conn.execute(
-            "UPDATE concept_lesson_progress SET status=?, updated_at=? WHERE concept_lesson_id=?",
-            (status, now, concept["id"]),
+            "UPDATE concept_lesson_progress SET status=?, updated_at=? WHERE concept_lesson_id=? AND visitor_id=?",
+            (status, now, concept["id"], visitor_id),
         )
     else:
         conn.execute(
-            "INSERT INTO concept_lesson_progress (concept_lesson_id, status, updated_at) VALUES (?,?,?)",
-            (concept["id"], status, now),
+            "INSERT INTO concept_lesson_progress (concept_lesson_id, visitor_id, status, updated_at) VALUES (?,?,?,?)",
+            (concept["id"], visitor_id, status, now),
         )
     conn.commit()
     conn.close()
@@ -511,6 +568,7 @@ def get_attempts(slug):
     from first try to Accepted (or see they're stuck repeating the same
     mistake). Reuses the attempts table that log_attempt already writes to
     -- no new tracking, just a read view of data collected all along."""
+    visitor_id = get_visitor_id()
     conn = get_connection()
     problem = conn.execute("SELECT id FROM problems WHERE slug = ?", (slug,)).fetchone()
     if problem is None:
@@ -522,8 +580,8 @@ def get_attempts(slug):
                   m.id AS mistake_id, m.category AS mistake_category, m.confidence AS mistake_confidence,
                   m.evidence AS mistake_evidence
            FROM attempts a LEFT JOIN mistakes m ON m.attempt_id = a.id
-           WHERE a.problem_id = ? ORDER BY a.id""",
-        (problem["id"],),
+           WHERE a.problem_id = ? AND a.visitor_id = ? ORDER BY a.id""",
+        (problem["id"], visitor_id),
     ).fetchall()
     conn.close()
 
@@ -542,6 +600,7 @@ def get_attempts(slug):
 
 @app.route("/api/attempts", methods=["POST"])
 def log_attempt():
+    visitor_id = get_visitor_id()
     payload = request.get_json(silent=True) or {}
     slug = payload.get("slug")
     submitted_code = payload.get("submitted_code", "")
@@ -565,10 +624,10 @@ def log_attempt():
 
     cur = conn.execute(
         """INSERT INTO attempts
-           (problem_id, submitted_code, passed, hints_used, max_hint_rung_seen,
+           (problem_id, visitor_id, submitted_code, passed, hints_used, max_hint_rung_seen,
             solution_revealed, is_independent, time_taken_seconds)
-           VALUES (?,?,?,?,?,?,?,?)""",
-        (problem["id"], submitted_code, int(passed), hints_used, max_hint_rung_seen,
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        (problem["id"], visitor_id, submitted_code, int(passed), hints_used, max_hint_rung_seen,
          int(solution_revealed), int(is_independent), time_taken_seconds),
     )
     attempt_id = cur.lastrowid
@@ -585,14 +644,15 @@ def log_attempt():
         category, evidence = classify_mistake(failure_context, problem["topic"])
         confidence = "likely_issue" if category else "unclassified"
         mcur = conn.execute(
-            "INSERT INTO mistakes (attempt_id, problem_id, category, confidence, evidence) VALUES (?,?,?,?,?)",
-            (attempt_id, problem["id"], category, confidence, evidence),
+            "INSERT INTO mistakes (attempt_id, problem_id, visitor_id, category, confidence, evidence) VALUES (?,?,?,?,?,?)",
+            (attempt_id, problem["id"], visitor_id, category, confidence, evidence),
         )
         mistake_out = {"id": mcur.lastrowid, "category": category, "confidence": confidence, "evidence": evidence}
 
     # Revision scheduling
     existing = conn.execute(
-        "SELECT interval_index FROM revision_schedule WHERE problem_id = ?", (problem["id"],)
+        "SELECT interval_index FROM revision_schedule WHERE problem_id = ? AND visitor_id = ?",
+        (problem["id"], visitor_id),
     ).fetchone()
     current_index = existing["interval_index"] if existing else -1  # -1 so first pass -> index 0
     new_index, next_due, result_label = compute_next_schedule(passed, is_independent, max(current_index, 0))
@@ -606,13 +666,13 @@ def log_attempt():
         # not change the scheduling math at all, only who "owns" the row
         # going forward). A no-op for rows that were already 'auto'.
         conn.execute(
-            "UPDATE revision_schedule SET last_attempt_id=?, next_due_date=?, interval_index=?, last_result=?, source='auto' WHERE problem_id=?",
-            (attempt_id, next_due, new_index, result_label, problem["id"]),
+            "UPDATE revision_schedule SET last_attempt_id=?, next_due_date=?, interval_index=?, last_result=?, source='auto' WHERE problem_id=? AND visitor_id=?",
+            (attempt_id, next_due, new_index, result_label, problem["id"], visitor_id),
         )
     else:
         conn.execute(
-            "INSERT INTO revision_schedule (problem_id, last_attempt_id, next_due_date, interval_index, last_result) VALUES (?,?,?,?,?)",
-            (problem["id"], attempt_id, next_due, new_index, result_label),
+            "INSERT INTO revision_schedule (problem_id, visitor_id, last_attempt_id, next_due_date, interval_index, last_result) VALUES (?,?,?,?,?,?)",
+            (problem["id"], visitor_id, attempt_id, next_due, new_index, result_label),
         )
 
     conn.commit()
@@ -650,14 +710,15 @@ def get_revision_status(slug):
     scheduled (source='manual'), so the Problem Workspace header can
     render "Add to revision" vs. "Remove from revision" correctly as soon
     as the problem loads, without guessing from other state."""
+    visitor_id = get_visitor_id()
     conn = get_connection()
     problem = conn.execute("SELECT id FROM problems WHERE slug = ?", (slug,)).fetchone()
     if problem is None:
         conn.close()
         return jsonify({"error": f"No problem '{slug}'"}), 404
     row = conn.execute(
-        "SELECT next_due_date, interval_index, last_result, source FROM revision_schedule WHERE problem_id = ?",
-        (problem["id"],),
+        "SELECT next_due_date, interval_index, last_result, source FROM revision_schedule WHERE problem_id = ? AND visitor_id = ?",
+        (problem["id"], visitor_id),
     ).fetchone()
     conn.close()
     return jsonify(_revision_row_json(row))
@@ -665,6 +726,7 @@ def get_revision_status(slug):
 
 @app.route("/api/problems/<slug>/revision", methods=["POST"])
 def add_manual_revision(slug):
+    visitor_id = get_visitor_id()
     conn = get_connection()
     problem = conn.execute("SELECT id FROM problems WHERE slug = ?", (slug,)).fetchone()
     if problem is None:
@@ -673,15 +735,16 @@ def add_manual_revision(slug):
 
     today = __import__("datetime").date.today().isoformat()
     existing = conn.execute(
-        "SELECT id FROM revision_schedule WHERE problem_id = ?", (problem["id"],)
+        "SELECT id FROM revision_schedule WHERE problem_id = ? AND visitor_id = ?",
+        (problem["id"], visitor_id),
     ).fetchone()
     if existing:
         # Already has a schedule row (auto, from a past attempt, or already
         # manual) -- just bring it due today. interval_index/last_result/
         # last_attempt_id are untouched on purpose.
         conn.execute(
-            "UPDATE revision_schedule SET next_due_date = ?, source = 'manual' WHERE problem_id = ?",
-            (today, problem["id"]),
+            "UPDATE revision_schedule SET next_due_date = ?, source = 'manual' WHERE problem_id = ? AND visitor_id = ?",
+            (today, problem["id"], visitor_id),
         )
     else:
         # Never attempted: a fresh row with no ladder history yet.
@@ -689,14 +752,14 @@ def add_manual_revision(slug):
         # manually" rather than "last: None" (see Dashboard.jsx).
         conn.execute(
             """INSERT INTO revision_schedule
-               (problem_id, last_attempt_id, next_due_date, interval_index, last_result, source)
-               VALUES (?, NULL, ?, 0, NULL, 'manual')""",
-            (problem["id"], today),
+               (problem_id, visitor_id, last_attempt_id, next_due_date, interval_index, last_result, source)
+               VALUES (?, ?, NULL, ?, 0, NULL, 'manual')""",
+            (problem["id"], visitor_id, today),
         )
     conn.commit()
     row = conn.execute(
-        "SELECT next_due_date, interval_index, last_result, source FROM revision_schedule WHERE problem_id = ?",
-        (problem["id"],),
+        "SELECT next_due_date, interval_index, last_result, source FROM revision_schedule WHERE problem_id = ? AND visitor_id = ?",
+        (problem["id"], visitor_id),
     ).fetchone()
     conn.close()
     return jsonify(_revision_row_json(row))
@@ -709,12 +772,13 @@ def remove_manual_revision(slug):
     table) and any logged mistakes are untouched; solving the problem
     again afterward starts a brand new schedule the normal way, via
     log_attempt."""
+    visitor_id = get_visitor_id()
     conn = get_connection()
     problem = conn.execute("SELECT id FROM problems WHERE slug = ?", (slug,)).fetchone()
     if problem is None:
         conn.close()
         return jsonify({"error": f"No problem '{slug}'"}), 404
-    conn.execute("DELETE FROM revision_schedule WHERE problem_id = ?", (problem["id"],))
+    conn.execute("DELETE FROM revision_schedule WHERE problem_id = ? AND visitor_id = ?", (problem["id"], visitor_id))
     conn.commit()
     conn.close()
     return jsonify(_revision_row_json(None))
@@ -729,6 +793,7 @@ def update_mistake(mistake_id):
     also how an unclassified mistake gets a category at all), or leave it
     alone. Never re-runs the heuristic classifier -- once a human has
     looked at it, the human's answer wins."""
+    visitor_id = get_visitor_id()
     payload = request.get_json(silent=True) or {}
     category = payload.get("category")
     confirm = bool(payload.get("confirm", False))
@@ -737,7 +802,12 @@ def update_mistake(mistake_id):
         return jsonify({"error": f"category must be one of {MISTAKE_CATEGORIES}"}), 400
 
     conn = get_connection()
-    existing = conn.execute("SELECT * FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
+    # Scoped to visitor_id too, not just id -- a mistake's own primary key
+    # is a small sequential integer, so without this a visitor could edit
+    # another visitor's mistake just by guessing/incrementing an id.
+    existing = conn.execute(
+        "SELECT * FROM mistakes WHERE id = ? AND visitor_id = ?", (mistake_id, visitor_id)
+    ).fetchone()
     if existing is None:
         conn.close()
         return jsonify({"error": f"No mistake {mistake_id}"}), 404
@@ -752,8 +822,8 @@ def update_mistake(mistake_id):
         conn.close()
         return jsonify({"error": "Provide 'confirm': true or a 'category' to set."}), 400
 
-    conn.execute("UPDATE mistakes SET category = ?, confidence = ? WHERE id = ?",
-                 (new_category, new_confidence, mistake_id))
+    conn.execute("UPDATE mistakes SET category = ?, confidence = ? WHERE id = ? AND visitor_id = ?",
+                 (new_category, new_confidence, mistake_id, visitor_id))
     conn.commit()
     conn.close()
     return jsonify({"id": mistake_id, "category": new_category, "confidence": new_confidence})
@@ -775,15 +845,18 @@ def delete_mistake(mistake_id):
     is computed live with a fresh SQL query on every request, never
     cached/materialized -- so it reflects a deletion automatically on the
     very next fetch, with no other bookkeeping needed here."""
+    visitor_id = get_visitor_id()
     conn = get_connection()
+    # Scoped to visitor_id -- see update_mistake's comment above.
     existing = conn.execute(
-        "SELECT m.id, p.title FROM mistakes m JOIN problems p ON m.problem_id = p.id WHERE m.id = ?",
-        (mistake_id,),
+        "SELECT m.id, p.title FROM mistakes m JOIN problems p ON m.problem_id = p.id "
+        "WHERE m.id = ? AND m.visitor_id = ?",
+        (mistake_id, visitor_id),
     ).fetchone()
     if existing is None:
         conn.close()
         return jsonify({"error": f"No mistake {mistake_id}"}), 404
-    conn.execute("DELETE FROM mistakes WHERE id = ?", (mistake_id,))
+    conn.execute("DELETE FROM mistakes WHERE id = ? AND visitor_id = ?", (mistake_id, visitor_id))
     conn.commit()
     conn.close()
     return jsonify({"deleted": True, "id": mistake_id, "title": existing["title"]})
@@ -795,6 +868,7 @@ def mistake_journal():
     mistakes do I repeatedly make?' with real counts by category and
     confidence, plus the individual entries (each linking back to its
     problem and attempt) so the learner can revisit exactly what happened."""
+    visitor_id = get_visitor_id()
     conn = get_connection()
     rows = conn.execute(
         """SELECT m.id, m.category, m.confidence, m.evidence, m.created_at,
@@ -802,7 +876,9 @@ def mistake_journal():
            FROM mistakes m
            JOIN problems p ON m.problem_id = p.id
            JOIN attempts a ON m.attempt_id = a.id
-           ORDER BY m.created_at DESC"""
+           WHERE m.visitor_id = ?
+           ORDER BY m.created_at DESC""",
+        (visitor_id,),
     ).fetchall()
 
     entries = []
@@ -840,46 +916,55 @@ def mistake_journal():
 
 @app.route("/api/progress", methods=["GET"])
 def progress():
+    visitor_id = get_visitor_id()
     conn = get_connection()
 
     total_attempted = conn.execute(
-        "SELECT COUNT(DISTINCT problem_id) c FROM attempts"
+        "SELECT COUNT(DISTINCT problem_id) c FROM attempts WHERE visitor_id = ?", (visitor_id,)
     ).fetchone()["c"]
     total_solved = conn.execute(
-        "SELECT COUNT(DISTINCT problem_id) c FROM attempts WHERE passed = 1"
+        "SELECT COUNT(DISTINCT problem_id) c FROM attempts WHERE passed = 1 AND visitor_id = ?", (visitor_id,)
     ).fetchone()["c"]
     independent_solves = conn.execute(
-        "SELECT COUNT(*) c FROM attempts WHERE is_independent = 1"
+        "SELECT COUNT(*) c FROM attempts WHERE is_independent = 1 AND visitor_id = ?", (visitor_id,)
     ).fetchone()["c"]
     total_passed_attempts = conn.execute(
-        "SELECT COUNT(*) c FROM attempts WHERE passed = 1"
+        "SELECT COUNT(*) c FROM attempts WHERE passed = 1 AND visitor_id = ?", (visitor_id,)
     ).fetchone()["c"]
     independent_rate = (independent_solves / total_passed_attempts) if total_passed_attempts else None
 
     avg_time = conn.execute(
-        "SELECT AVG(time_taken_seconds) a FROM attempts WHERE passed = 1 AND time_taken_seconds IS NOT NULL"
+        "SELECT AVG(time_taken_seconds) a FROM attempts WHERE passed = 1 AND time_taken_seconds IS NOT NULL AND visitor_id = ?",
+        (visitor_id,),
     ).fetchone()["a"]
-    total_hints = conn.execute("SELECT SUM(hints_used) s FROM attempts").fetchone()["s"] or 0
-    total_attempts_count = conn.execute("SELECT COUNT(*) c FROM attempts").fetchone()["c"]
+    total_hints = conn.execute(
+        "SELECT SUM(hints_used) s FROM attempts WHERE visitor_id = ?", (visitor_id,)
+    ).fetchone()["s"] or 0
+    total_attempts_count = conn.execute(
+        "SELECT COUNT(*) c FROM attempts WHERE visitor_id = ?", (visitor_id,)
+    ).fetchone()["c"]
     hint_usage_rate = (total_hints / total_attempts_count) if total_attempts_count else None
 
     weak_topics = conn.execute(
         """SELECT p.topic, COUNT(*) mistake_count
            FROM attempts a JOIN problems p ON a.problem_id = p.id
-           WHERE a.passed = 0 OR a.hints_used > 0
-           GROUP BY p.topic ORDER BY mistake_count DESC LIMIT 5"""
+           WHERE (a.passed = 0 OR a.hints_used > 0) AND a.visitor_id = ?
+           GROUP BY p.topic ORDER BY mistake_count DESC LIMIT 5""",
+        (visitor_id,),
     ).fetchall()
     strong_topics = conn.execute(
         """SELECT p.topic, COUNT(*) independent_count
            FROM attempts a JOIN problems p ON a.problem_id = p.id
-           WHERE a.is_independent = 1
-           GROUP BY p.topic ORDER BY independent_count DESC LIMIT 5"""
+           WHERE a.is_independent = 1 AND a.visitor_id = ?
+           GROUP BY p.topic ORDER BY independent_count DESC LIMIT 5""",
+        (visitor_id,),
     ).fetchall()
     mastered_topics = conn.execute(
         """SELECT p.topic, COUNT(*) c
            FROM attempts a JOIN problems p ON a.problem_id = p.id
-           WHERE a.is_independent = 1
-           GROUP BY p.topic HAVING COUNT(*) >= 2"""
+           WHERE a.is_independent = 1 AND a.visitor_id = ?
+           GROUP BY p.topic HAVING COUNT(*) >= 2""",
+        (visitor_id,),
     ).fetchall()
 
     # ---- pattern-level weakness (enhances, never replaces, the topic-level
@@ -887,7 +972,9 @@ def progress():
     # mistakes summary from the mistake journal.
     mistake_join_rows = conn.execute(
         """SELECT p.topic, p.pattern, m.category
-           FROM mistakes m JOIN problems p ON m.problem_id = p.id"""
+           FROM mistakes m JOIN problems p ON m.problem_id = p.id
+           WHERE m.visitor_id = ?""",
+        (visitor_id,),
     ).fetchall()
     family_counts, family_categories, category_counts, family_topics = {}, {}, {}, {}
     for r in mistake_join_rows:
@@ -919,14 +1006,15 @@ def progress():
     revision_due = conn.execute(
         """SELECT p.slug, p.title, p.topic, rs.next_due_date, rs.last_result
            FROM revision_schedule rs JOIN problems p ON rs.problem_id = p.id
-           WHERE rs.next_due_date <= ? ORDER BY rs.next_due_date""",
-        (today,),
+           WHERE rs.next_due_date <= ? AND rs.visitor_id = ? ORDER BY rs.next_due_date""",
+        (today, visitor_id),
     ).fetchall()
 
     # simple daily streak: count consecutive days (from today backward)
     # with at least one attempt logged
     streak_rows = conn.execute(
-        "SELECT DISTINCT date(created_at) d FROM attempts ORDER BY d DESC"
+        "SELECT DISTINCT date(created_at) d FROM attempts WHERE visitor_id = ? ORDER BY d DESC",
+        (visitor_id,),
     ).fetchall()
     streak = 0
     if streak_rows:
@@ -945,9 +1033,10 @@ def progress():
     tier_counts = conn.execute(
         """SELECT p.path_tier, COUNT(*) total,
                   SUM(CASE WHEN EXISTS (
-                      SELECT 1 FROM attempts a WHERE a.problem_id = p.id AND a.passed = 1
+                      SELECT 1 FROM attempts a WHERE a.problem_id = p.id AND a.passed = 1 AND a.visitor_id = ?
                   ) THEN 1 ELSE 0 END) solved
-           FROM problems p GROUP BY p.path_tier"""
+           FROM problems p GROUP BY p.path_tier""",
+        (visitor_id,),
     ).fetchall()
     path_tier_progress = {
         row["path_tier"]: {"total": row["total"], "solved": row["solved"] or 0}
@@ -959,8 +1048,10 @@ def progress():
     # ---- lesson navigation: recommended next / resume / status counts ----
     lesson_rows = conn.execute(
         """SELECT l.day, l.title, l.block, COALESCE(lp.status, 'not_started') AS status, lp.updated_at
-           FROM lessons l LEFT JOIN lesson_progress lp ON lp.day = l.day
-           ORDER BY l.day"""
+           FROM lessons l
+           LEFT JOIN lesson_progress lp ON lp.day = l.day AND lp.visitor_id = ?
+           ORDER BY l.day""",
+        (visitor_id,),
     ).fetchall()
 
     status_counts = {"not_started": 0, "in_progress": 0, "completed": 0, "skipped": 0, "known": 0}
@@ -983,7 +1074,9 @@ def progress():
     concept_lesson_rows = conn.execute(
         """SELECT COALESCE(clp.status, 'not_started') AS status
            FROM concept_lessons cl
-           LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id"""
+           LEFT JOIN concept_lesson_progress clp
+               ON clp.concept_lesson_id = cl.id AND clp.visitor_id = ?""",
+        (visitor_id,),
     ).fetchall()
     concept_status_counts = {"not_started": 0, "in_progress": 0, "completed": 0, "skipped": 0, "known": 0}
     for r in concept_lesson_rows:
@@ -1024,7 +1117,7 @@ def practice_session():
     progress) -- never a required path, the learner can ignore it and
     open any problem directly."""
     conn = get_connection()
-    items = build_practice_session(conn)
+    items = build_practice_session(conn, get_visitor_id())
     conn.close()
     return jsonify({"items": items})
 

@@ -16,10 +16,13 @@ from .pattern_families import pattern_family_for, concept_lesson_for_family
 MAX_ITEMS = 5
 
 
-def _first_unsolved_in_family(conn, family):
+def _first_unsolved_in_family(conn, family, visitor_id):
     rows = conn.execute(
         """SELECT p.slug, p.title, p.topic, p.pattern FROM problems p
-           WHERE NOT EXISTS (SELECT 1 FROM attempts a WHERE a.problem_id = p.id AND a.passed = 1)"""
+           WHERE NOT EXISTS (
+               SELECT 1 FROM attempts a WHERE a.problem_id = p.id AND a.passed = 1 AND a.visitor_id = ?
+           )""",
+        (visitor_id,),
     ).fetchall()
     for r in rows:
         if pattern_family_for(r["topic"], r["pattern"]) == family:
@@ -27,7 +30,7 @@ def _first_unsolved_in_family(conn, family):
     return None
 
 
-def build_practice_session(conn):
+def build_practice_session(conn, visitor_id):
     today = datetime.date.today().isoformat()
     items = []
     seen = set()
@@ -51,8 +54,8 @@ def build_practice_session(conn):
     due = conn.execute(
         """SELECT p.slug, p.title, rs.next_due_date, rs.last_result
            FROM revision_schedule rs JOIN problems p ON rs.problem_id = p.id
-           WHERE rs.next_due_date <= ? ORDER BY rs.next_due_date LIMIT 1""",
-        (today,),
+           WHERE rs.next_due_date <= ? AND rs.visitor_id = ? ORDER BY rs.next_due_date LIMIT 1""",
+        (today, visitor_id),
     ).fetchone()
     if due:
         when = "today" if due["next_due_date"] == today else f"since {due['next_due_date']}"
@@ -64,7 +67,8 @@ def build_practice_session(conn):
     mistake_rows = conn.execute(
         """SELECT p.topic, p.pattern, m.category
            FROM mistakes m JOIN problems p ON m.problem_id = p.id
-           WHERE m.category IS NOT NULL"""
+           WHERE m.category IS NOT NULL AND m.visitor_id = ?""",
+        (visitor_id,),
     ).fetchall()
     pair_counts, family_counts, family_topics = {}, {}, {}
     for r in mistake_rows:
@@ -79,7 +83,7 @@ def build_practice_session(conn):
     recurring = [(k, c) for k, c in pair_counts.items() if c >= 2]
     if recurring:
         (family, category), count = max(recurring, key=lambda kv: kv[1])
-        candidate = _first_unsolved_in_family(conn, family)
+        candidate = _first_unsolved_in_family(conn, family, visitor_id)
         if candidate:
             add(candidate["slug"], candidate["title"], "recurring_mistake",
                 f"Recommended because '{category}' has come up {count} times in {family}.")
@@ -99,9 +103,10 @@ def build_practice_session(conn):
             status_row = conn.execute(
                 """SELECT COALESCE(clp.status, 'not_started') AS status
                    FROM concept_lessons cl
-                   LEFT JOIN concept_lesson_progress clp ON clp.concept_lesson_id = cl.id
+                   LEFT JOIN concept_lesson_progress clp
+                       ON clp.concept_lesson_id = cl.id AND clp.visitor_id = ?
                    WHERE cl.slug = ?""",
-                (lesson["slug"],),
+                (visitor_id, lesson["slug"]),
             ).fetchone()
             if status_row and status_row["status"] not in ("completed", "known"):
                 add_lesson(lesson["slug"], lesson["title"], "revisit_lesson",
@@ -114,21 +119,25 @@ def build_practice_session(conn):
     # the same underlying attempts.
     if family_counts:
         weak_family = max(family_counts, key=family_counts.get)
-        candidate = _first_unsolved_in_family(conn, weak_family)
+        candidate = _first_unsolved_in_family(conn, weak_family, visitor_id)
         if candidate:
             add(candidate["slug"], candidate["title"], "weak_pattern",
                 f"Recommended because you've had {family_counts[weak_family]} mistake(s) classified under {weak_family}.")
     if len(items) < 3:
         weak_topic_row = conn.execute(
             """SELECT p.topic, COUNT(*) c FROM attempts a JOIN problems p ON a.problem_id = p.id
-               WHERE a.passed = 0 OR a.hints_used > 0 GROUP BY p.topic ORDER BY c DESC LIMIT 1"""
+               WHERE (a.passed = 0 OR a.hints_used > 0) AND a.visitor_id = ?
+               GROUP BY p.topic ORDER BY c DESC LIMIT 1""",
+            (visitor_id,),
         ).fetchone()
         if weak_topic_row:
             candidate = conn.execute(
                 """SELECT slug, title FROM problems p WHERE topic = ?
-                   AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.problem_id = p.id AND a.passed = 1)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM attempts a WHERE a.problem_id = p.id AND a.passed = 1 AND a.visitor_id = ?
+                   )
                    ORDER BY day, id LIMIT 1""",
-                (weak_topic_row["topic"],),
+                (weak_topic_row["topic"], visitor_id),
             ).fetchone()
             if candidate:
                 add(candidate["slug"], candidate["title"], "weak_topic",
@@ -138,8 +147,9 @@ def build_practice_session(conn):
     # Core-tier problem, in curriculum day order.
     new_candidate = conn.execute(
         """SELECT slug, title, day FROM problems p WHERE path_tier = 'core'
-           AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.problem_id = p.id)
-           ORDER BY day, id LIMIT 1"""
+           AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.problem_id = p.id AND a.visitor_id = ?)
+           ORDER BY day, id LIMIT 1""",
+        (visitor_id,),
     ).fetchone()
     if new_candidate:
         add(new_candidate["slug"], new_candidate["title"], "new",

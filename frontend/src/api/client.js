@@ -2,6 +2,8 @@
 // all sharing the same error-handling shape (throw with the server's own
 // error message when available).
 
+import { getVisitorId } from "./visitorId";
+
 // Overridable via a VITE_API_BASE entry in frontend/.env(.local) for
 // anyone running the backend on a different host/port -- the default
 // (127.0.0.1:5001) is unchanged and matches backend/app.py's own default,
@@ -71,7 +73,13 @@ async function parseJsonResponse(res) {
 }
 
 async function get(path) {
-  const res = await fetch(`${API_BASE}${path}`);
+  const res = await fetch(`${API_BASE}${path}`, {
+    // X-Visitor-Id scopes any per-visitor data this endpoint reads
+    // (attempts/mistakes/revision schedule/progress/dashboard) to this
+    // browser -- see backend/app.py's get_visitor_id. Harmless to send on
+    // endpoints that don't use it (lessons/problems/concept content).
+    headers: { "X-Visitor-Id": getVisitorId() },
+  });
   if (!res.ok) {
     const body = await parseJsonResponse(res).catch(() => ({}));
     throw new Error(body?.error || `${path} failed: ${res.status}`);
@@ -82,7 +90,7 @@ async function get(path) {
 async function send(method, path, body) {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Visitor-Id": getVisitorId() },
     body: JSON.stringify(body ?? {}),
   });
   if (!res.ok) {

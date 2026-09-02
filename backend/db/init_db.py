@@ -25,9 +25,20 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "traceviz.db")
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 _TABLES = ["mistakes", "revision_schedule", "attempts", "hints",
-           "test_cases", "problems", "lessons",
+           "test_cases", "problems", "lesson_progress", "lessons",
            "concept_lesson_progress", "concept_practice_exercises",
            "concept_checkpoints", "concept_lessons"]
+# lesson_progress was missing from this list before per-visitor isolation
+# (see docs on visitor_id below) -- harmless as long as lesson_progress was
+# always empty when init_db() ran (true for every prior reseed, since
+# run_all_tests.sh's reseed() and every doc'd workflow delete traceviz.db
+# outright rather than calling init_db() against an existing one), but a
+# real FOREIGN KEY constraint failure waiting to happen the first time
+# init_db() runs against a database that actually has lesson_progress rows
+# -- dropping `lessons` while `lesson_progress` still references it (FK
+# enforcement is on, see get_connection()) fails unless lesson_progress is
+# dropped first. Fixed here since testing this change's migration surfaced
+# it directly.
 
 
 def get_connection():
@@ -203,6 +214,133 @@ def init_db():
           f"{concept_count} concept lessons.")
 
 
+# Sentinel visitor_id existing rows are backfilled to when a pre-visitor-
+# isolation database is migrated (see _migrate_add_visitor_id below). Must
+# match schema.sql's DEFAULT 'legacy-local-user' on every per-visitor
+# table, and app.py's DEFAULT_VISITOR_ID fallback for callers that don't
+# send an X-Visitor-Id header -- all three need to agree for a migrated
+# install's pre-existing progress to stay reachable at all (see that
+# function's docstring for how to actually reach it from a browser).
+LEGACY_VISITOR_ID = "legacy-local-user"
+
+
+def _table_columns(conn, table):
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _rebuild_table_with_visitor_pk(conn, table, create_sql, copy_columns):
+    """Shared implementation for the three tables whose PRIMARY KEY/UNIQUE
+    constraint has to change to include visitor_id -- SQLite can't ALTER an
+    existing key constraint in place, so this does the standard SQLite
+    "rebuild" migration: rename the old table aside, create the new one
+    from `create_sql` (which must match schema.sql's CREATE TABLE for
+    `table` exactly), copy every existing row across with visitor_id set to
+    LEGACY_VISITOR_ID, then drop the old table. Runs inside one transaction
+    with foreign_keys off for the swap, so a failure partway through never
+    leaves the database in a half-migrated state."""
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute(f"ALTER TABLE {table} RENAME TO {table}_pre_visitor")
+        conn.execute(create_sql)
+        cols = ", ".join(copy_columns)
+        conn.execute(
+            f"INSERT INTO {table} ({cols}, visitor_id) "
+            f"SELECT {cols}, ? FROM {table}_pre_visitor",
+            (LEGACY_VISITOR_ID,),
+        )
+        conn.execute(f"DROP TABLE {table}_pre_visitor")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
+def _migrate_add_visitor_id(conn):
+    """Anonymous per-visitor data isolation, added after Codeloupe had
+    already been running as a single global-progress install for a while
+    (see docs/decisions.md). Brings an existing traceviz.db up to the same
+    visitor_id-scoped shape schema.sql now defines for a fresh install,
+    WITHOUT deleting any recorded progress:
+
+    - attempts/mistakes just gain a plain visitor_id column (ALTER TABLE
+      ADD COLUMN works fine for a new nullable-by-default column).
+    - lesson_progress/revision_schedule/concept_lesson_progress each had a
+      PRIMARY KEY or UNIQUE constraint that has to actually change shape
+      (day -> (day, visitor_id), etc.), which SQLite cannot do with ALTER
+      TABLE -- those three go through the rebuild helper above instead.
+
+    Every existing row, in every case, is backfilled to LEGACY_VISITOR_ID
+    rather than dropped -- so upgrading never loses history. That id isn't
+    automatically "your" browser's new visitor id, though: the frontend
+    always generates a fresh random id for a browser profile that doesn't
+    have one yet (see frontend/src/api/visitorId.js), on purpose -- two
+    genuinely separate first-time visitors (e.g. two incognito windows on a
+    machine with no existing database) must never be handed the same id.
+    That means a solo user upgrading an existing local install won't
+    automatically see their pre-upgrade history under their new id. Their
+    data is NOT lost -- it's sitting in the database under
+    'legacy-local-user' -- and reclaiming it is one manual step: open the
+    browser console on http://127.0.0.1:5173 and run
+        localStorage.setItem('codeloupe_visitor_id', 'legacy-local-user')
+    then reload. ensure_db() prints this same note at startup whenever it
+    detects legacy rows, so it isn't buried in a comment nobody reads."""
+    if "visitor_id" not in _table_columns(conn, "attempts"):
+        conn.execute(f"ALTER TABLE attempts ADD COLUMN visitor_id TEXT NOT NULL DEFAULT '{LEGACY_VISITOR_ID}'")
+        conn.commit()
+    if "visitor_id" not in _table_columns(conn, "mistakes"):
+        conn.execute(f"ALTER TABLE mistakes ADD COLUMN visitor_id TEXT NOT NULL DEFAULT '{LEGACY_VISITOR_ID}'")
+        conn.commit()
+
+    if "visitor_id" not in _table_columns(conn, "lesson_progress"):
+        _rebuild_table_with_visitor_pk(
+            conn, "lesson_progress",
+            """CREATE TABLE lesson_progress (
+                   day INTEGER NOT NULL REFERENCES lessons(day),
+                   visitor_id TEXT NOT NULL DEFAULT 'legacy-local-user',
+                   status TEXT NOT NULL DEFAULT 'not_started'
+                       CHECK (status IN ('not_started', 'in_progress', 'completed', 'skipped', 'known')),
+                   started_at TEXT,
+                   completed_at TEXT,
+                   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                   PRIMARY KEY (day, visitor_id)
+               )""",
+            ["day", "status", "started_at", "completed_at", "updated_at"],
+        )
+
+    if "visitor_id" not in _table_columns(conn, "revision_schedule"):
+        _rebuild_table_with_visitor_pk(
+            conn, "revision_schedule",
+            """CREATE TABLE revision_schedule (
+                   id INTEGER PRIMARY KEY,
+                   problem_id INTEGER NOT NULL REFERENCES problems(id),
+                   visitor_id TEXT NOT NULL DEFAULT 'legacy-local-user',
+                   last_attempt_id INTEGER REFERENCES attempts(id),
+                   next_due_date TEXT NOT NULL,
+                   interval_index INTEGER NOT NULL DEFAULT 0,
+                   last_result TEXT,
+                   source TEXT NOT NULL DEFAULT 'auto',
+                   UNIQUE(problem_id, visitor_id)
+               )""",
+            ["id", "problem_id", "last_attempt_id", "next_due_date", "interval_index", "last_result", "source"],
+        )
+
+    if "visitor_id" not in _table_columns(conn, "concept_lesson_progress"):
+        _rebuild_table_with_visitor_pk(
+            conn, "concept_lesson_progress",
+            """CREATE TABLE concept_lesson_progress (
+                   concept_lesson_id INTEGER NOT NULL REFERENCES concept_lessons(id),
+                   visitor_id TEXT NOT NULL DEFAULT 'legacy-local-user',
+                   status TEXT NOT NULL DEFAULT 'not_started'
+                       CHECK (status IN ('not_started', 'in_progress', 'completed', 'known')),
+                   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                   PRIMARY KEY (concept_lesson_id, visitor_id)
+               )""",
+            ["concept_lesson_id", "status", "updated_at"],
+        )
+
+
 def _migrate_schema(conn):
     """Additive, idempotent migrations for databases created before a given
     column existed -- run on EVERY startup (not just fresh installs) so an
@@ -215,6 +353,29 @@ def _migrate_schema(conn):
     if "source" not in cols:
         conn.execute("ALTER TABLE revision_schedule ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'")
         conn.commit()
+
+    _migrate_add_visitor_id(conn)
+
+
+def _legacy_visitor_notice(conn):
+    """Printed at startup whenever a migrated database still has rows under
+    the legacy sentinel from _migrate_add_visitor_id -- see that function's
+    docstring for the one-line browser-console snippet this is pointing
+    at. Silent (no query at all) once every legacy row has been reclaimed
+    or has aged out, so this doesn't nag forever on a long-lived install."""
+    try:
+        n = conn.execute(
+            "SELECT COUNT(*) c FROM attempts WHERE visitor_id = ?", (LEGACY_VISITOR_ID,)
+        ).fetchone()["c"]
+    except sqlite3.OperationalError:
+        return  # pre-migration db mid-startup race; harmless, next check will see it
+    if n:
+        print(
+            f"[codeloupe] {n} attempt(s) from before per-visitor isolation are stored under a "
+            f"legacy id. To see them again in your browser, open its console and run:\n"
+            f"    localStorage.setItem('codeloupe_visitor_id', '{LEGACY_VISITOR_ID}')\n"
+            f"then reload the page."
+        )
 
 
 def ensure_db():
@@ -232,6 +393,7 @@ def ensure_db():
     else:
         conn = get_connection()
         _migrate_schema(conn)
+        _legacy_visitor_notice(conn)
         conn.close()
 
 

@@ -81,13 +81,23 @@ CREATE TABLE IF NOT EXISTS problems (
 -- Lets the curriculum be a *recommended path*, not a locked sequence: any
 -- day can be jumped to, marked complete/known/skipped, and resumed from.
 -- See docs/decisions.md "Non-linear curriculum navigation".
+--
+-- visitor_id (here and on every other per-visitor table below) is an
+-- anonymous, client-generated identifier -- see app.py's get_visitor_id
+-- docstring and frontend/src/api/visitorId.js. It is NOT an account: there
+-- is no password, no login, nothing linking it to a real identity. It
+-- exists purely so two concurrent anonymous visitors' data doesn't collide.
+-- The composite primary key (was just `day`) is what makes that possible:
+-- one status row per (day, visitor), not one global row per day.
 CREATE TABLE IF NOT EXISTS lesson_progress (
-    day INTEGER PRIMARY KEY REFERENCES lessons(day),
+    day INTEGER NOT NULL REFERENCES lessons(day),
+    visitor_id TEXT NOT NULL DEFAULT 'legacy-local-user',
     status TEXT NOT NULL DEFAULT 'not_started'
         CHECK (status IN ('not_started', 'in_progress', 'completed', 'skipped', 'known')),
     started_at TEXT,
     completed_at TEXT,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (day, visitor_id)
 );
 
 CREATE TABLE IF NOT EXISTS test_cases (
@@ -110,6 +120,7 @@ CREATE TABLE IF NOT EXISTS hints (
 CREATE TABLE IF NOT EXISTS attempts (
     id INTEGER PRIMARY KEY,
     problem_id INTEGER NOT NULL REFERENCES problems(id),
+    visitor_id TEXT NOT NULL DEFAULT 'legacy-local-user',  -- see lesson_progress's comment above
     submitted_code TEXT NOT NULL,
     passed INTEGER NOT NULL,           -- 1 if all visible+hidden tests passed
     hints_used INTEGER NOT NULL DEFAULT 0,
@@ -122,7 +133,8 @@ CREATE TABLE IF NOT EXISTS attempts (
 
 CREATE TABLE IF NOT EXISTS revision_schedule (
     id INTEGER PRIMARY KEY,
-    problem_id INTEGER NOT NULL UNIQUE REFERENCES problems(id),
+    problem_id INTEGER NOT NULL REFERENCES problems(id),
+    visitor_id TEXT NOT NULL DEFAULT 'legacy-local-user',  -- see lesson_progress's comment above
     last_attempt_id INTEGER REFERENCES attempts(id),
     next_due_date TEXT NOT NULL,       -- ISO date
     interval_index INTEGER NOT NULL DEFAULT 0,  -- position in the ladder: 0,1,2,3,4
@@ -134,7 +146,8 @@ CREATE TABLE IF NOT EXISTS revision_schedule (
     -- this problem (pass or fail) resets source back to 'auto' as part of
     -- log_attempt's normal UPDATE, handing the row back to the automatic
     -- ladder. See log_attempt's revision-scheduling comment in app.py.
-    source TEXT NOT NULL DEFAULT 'auto'
+    source TEXT NOT NULL DEFAULT 'auto',
+    UNIQUE(problem_id, visitor_id)  -- was UNIQUE(problem_id) -- one schedule row per problem PER VISITOR now
 );
 
 -- Mistake journal: one row per FAILED attempt (never for a pass), created
@@ -148,6 +161,10 @@ CREATE TABLE IF NOT EXISTS mistakes (
     id INTEGER PRIMARY KEY,
     attempt_id INTEGER NOT NULL UNIQUE REFERENCES attempts(id),
     problem_id INTEGER NOT NULL REFERENCES problems(id),
+    visitor_id TEXT NOT NULL DEFAULT 'legacy-local-user',  -- see lesson_progress's comment above.
+                                         -- Denormalized from the parent attempt (rather than joining
+                                         -- through attempts on every read) so mistake-journal/dashboard
+                                         -- queries can filter by visitor directly.
     category TEXT,                      -- one of logic/mistakes.py's MISTAKE_CATEGORIES, or NULL
     confidence TEXT NOT NULL,           -- 'unclassified' (category IS NULL) | 'observed_confirmed' |
                                          -- 'likely_issue' | 'user_confirmed' | 'manually_selected'
@@ -247,8 +264,10 @@ CREATE TABLE IF NOT EXISTS concept_practice_exercises (
 -- above (a learner can know the "two pointers" pattern lesson without
 -- that being tied to any single curriculum day).
 CREATE TABLE IF NOT EXISTS concept_lesson_progress (
-    concept_lesson_id INTEGER PRIMARY KEY REFERENCES concept_lessons(id),
+    concept_lesson_id INTEGER NOT NULL REFERENCES concept_lessons(id),
+    visitor_id TEXT NOT NULL DEFAULT 'legacy-local-user',  -- see lesson_progress's comment above
     status TEXT NOT NULL DEFAULT 'not_started'
         CHECK (status IN ('not_started', 'in_progress', 'completed', 'known')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (concept_lesson_id, visitor_id)
 );
