@@ -62,3 +62,6 @@ export default function CodeEditor({ value, onChange, bubbleScroll = false }) {
           window.__tracevizEditor = editor;
         }}
       />
+    </div>
+  );
+}
