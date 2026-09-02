@@ -14,12 +14,16 @@ docs/architecture.md for the full picture.
 """
 import json
 import os
+from functools import wraps
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from db.init_db import get_connection, ensure_db
 from execution.sandbox import run_code
+from execution.safety_check import find_safety_violation
 from execution.test_runner import run_against_tests, _extract_function_name
 from execution.tracer import trace_code, DEFAULT_TIMEOUT_SECONDS as DEFAULT_TRACE_TIMEOUT
 from logic.revision import compute_next_schedule
@@ -51,6 +55,107 @@ CORS(
     # invisibly for anyone running frontend and backend on separate hosts.
     allow_headers=["Content-Type", "X-Visitor-Id"],
 )
+
+
+# ---------------------------------------------------------- deployment ----
+# Debug mode (the interactive Werkzeug debugger + auto-reload) is the right
+# default for local development -- exactly what this app is built for -- but
+# its debugger is an unauthenticated remote-code-execution console if this
+# process is ever reachable from outside localhost. This used to be computed
+# only inside `if __name__ == "__main__":` below, which is fine for
+# `python3 app.py` but is NEVER executed by a WSGI server (PythonAnywhere,
+# gunicorn, etc. import this module and call `app` directly) -- so it's
+# computed here, at import time, both to actually apply it (app.config
+# below) and because the rate limiting setup right after needs to know it.
+# FLASK_DEBUG=0 is already the documented requirement for any deployment
+# beyond "on my own machine, for myself" (see docs/architecture.md's
+# Deployment section) -- reusing that one existing signal to also gate rate
+# limiting means there's no second flag to remember to set for a real
+# deployment.
+debug = os.environ.get("FLASK_DEBUG", "1") not in ("0", "false", "False")
+app.config["DEBUG"] = debug
+
+# A generous cap on request body size -- 256 KB comfortably fits any real
+# code submission (even a few hundred lines is only a handful of KB) while
+# closing off a trivial abuse pattern -- repeatedly POSTing a huge body just
+# to churn CPU/memory parsing/storing it -- that rate limiting alone
+# wouldn't stop. Overridable for anyone who genuinely needs more.
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH_BYTES", 256 * 1024))
+
+# Basic per-IP rate limiting. This matters more than it would for a typical
+# API because of the specific free-tier target this was written for
+# (PythonAnywhere): the free plan's entire daily budget is 100 CPU-seconds,
+# so a handful of unmetered rapid-fire requests -- whether an eager visitor
+# double-clicking Run or a scripted flood -- can burn through a whole day's
+# budget for every visitor before anyone else gets a turn. In-memory
+# storage (no Redis or other external service) keeps this at $0 and needs
+# no new infrastructure; the honest tradeoff is that counts reset on every
+# process restart and aren't shared across multiple worker processes --
+# fine for a single free-tier web worker, not a multi-worker deployment.
+# Off by default in local dev (debug=True is the existing default) so this
+# never affects local development or this repo's own test/verify scripts;
+# a WSGI deployment running with FLASK_DEBUG=0 gets it automatically.
+# RATELIMIT_ENABLED, if set, overrides either default explicitly.
+_ratelimit_enabled_env = os.environ.get("RATELIMIT_ENABLED")
+if _ratelimit_enabled_env is not None:
+    _ratelimit_enabled = _ratelimit_enabled_env not in ("0", "false", "False")
+else:
+    _ratelimit_enabled = not debug
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[os.environ.get("RATELIMIT_DEFAULT", "60 per minute;1000 per day")],
+    storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+    enabled=_ratelimit_enabled,
+)
+# A tighter limit for the specific endpoints that actually spawn a Python
+# subprocess (run/trace/complexity-estimate/approach-comparison) -- these
+# are the ones spending the scarce CPU-second budget described above, so
+# they get their own stricter number rather than sharing the general
+# per-route default above.
+_EXECUTION_RATE_LIMIT = os.environ.get("RATELIMIT_EXECUTION", "20 per minute;300 per hour")
+
+# ensure_db() only creates+seeds traceviz.db if it doesn't exist yet -- never
+# wipes progress on restart (see db/init_db.py's own docstring). Called here
+# at import time -- not just inside `if __name__ == "__main__":` below --
+# for the same WSGI reason as `debug` above: a WSGI server never runs that
+# guard, so a fresh deploy's database would otherwise never get created, and
+# every request would 404/500 against a traceviz.db that doesn't exist.
+ensure_db()
+
+
+# A static, pre-execution AST safety filter -- see execution/safety_check.py's
+# module docstring for what this is (a defense-in-depth layer closing the
+# trivial "just open() the database" attack) and, just as importantly, what
+# it explicitly is NOT (a security boundary, or a claim that arbitrary code
+# execution has been made generally safe). Implemented as a decorator,
+# alongside @limiter.limit above, so there is exactly one shared
+# implementation and exactly one place to look to confirm every endpoint
+# that hands learner code to the sandbox is covered -- applied to all seven
+# below. Deliberately checks the request's raw `code` field itself, before
+# any of those seven routes gets a chance to concatenate it with this app's
+# own trusted harness/runner code (test_runner.py, tracer.py, the appended
+# test-case call in trace_problem) -- see safety_check.py's docstring for
+# why checking post-concatenation would be actively wrong, not just
+# redundant.
+def require_safe_code(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        payload = request.get_json(silent=True) or {}
+        code = payload.get("code", "")
+        if isinstance(code, str) and code.strip():
+            violation = find_safety_violation(code)
+            if violation:
+                return jsonify({
+                    "error": (
+                        "Codeloupe only supports normal algorithm/DSA code -- "
+                        "filesystem, network, and process access aren't allowed. "
+                        f"Your submission {violation}."
+                    )
+                }), 400
+        return view(*args, **kwargs)
+    return wrapped
 
 
 def row_to_dict(row):
@@ -489,6 +594,8 @@ def get_solution(slug):
 
 
 @app.route("/api/problems/<slug>/run", methods=["POST"])
+@limiter.limit(_EXECUTION_RATE_LIMIT)
+@require_safe_code
 def run_problem(slug):
     payload = request.get_json(silent=True) or {}
     code = payload.get("code", "")
@@ -526,6 +633,8 @@ def run_problem(slug):
 
 
 @app.route("/api/problems/<slug>/run-custom", methods=["POST"])
+@limiter.limit(_EXECUTION_RATE_LIMIT)
+@require_safe_code
 def run_custom(slug):
     """Custom test-case playground: run the learner's code against ONE
     input THEY provide, rather than the problem's seeded test cases. This
@@ -1125,6 +1234,8 @@ def practice_session():
 # ----------------------------------------------------------- complexity --
 
 @app.route("/api/problems/<slug>/complexity-estimate", methods=["POST"])
+@limiter.limit(_EXECUTION_RATE_LIMIT)
+@require_safe_code
 def complexity_estimate(slug):
     payload = request.get_json(silent=True) or {}
     code = payload.get("code", "")
@@ -1149,6 +1260,8 @@ def complexity_estimate(slug):
 # ---------------------------------------------------- approach comparison --
 
 @app.route("/api/problems/<slug>/approach-comparison", methods=["POST"])
+@limiter.limit(_EXECUTION_RATE_LIMIT)
+@require_safe_code
 def approach_comparison(slug):
     """Optional, explicitly-triggered comparison between the learner's own
     code and this problem's reference approach(es). Never run
@@ -1232,6 +1345,8 @@ def approach_comparison(slug):
 # --------------------------------------------------------- plain run/trace --
 
 @app.route("/api/run", methods=["POST"])
+@limiter.limit(_EXECUTION_RATE_LIMIT)
+@require_safe_code
 def run():
     payload = request.get_json(silent=True) or {}
     code = payload.get("code", "")
@@ -1242,6 +1357,8 @@ def run():
 
 
 @app.route("/api/trace", methods=["POST"])
+@limiter.limit(_EXECUTION_RATE_LIMIT)
+@require_safe_code
 def trace():
     payload = request.get_json(silent=True) or {}
     code = payload.get("code", "")
@@ -1256,6 +1373,8 @@ def trace():
 
 
 @app.route("/api/problems/<slug>/trace", methods=["POST"])
+@limiter.limit(_EXECUTION_RATE_LIMIT)
+@require_safe_code
 def trace_problem(slug):
     """Like /api/trace, but for a problem-workspace submission specifically:
     the learner's code is normally JUST a function definition (that's what
@@ -1350,15 +1469,10 @@ def trace_problem(slug):
 
 
 if __name__ == "__main__":
-    ensure_db()  # only creates+seeds if traceviz.db doesn't exist yet -- never wipes progress on restart
-    # Debug mode (the interactive Werkzeug debugger + auto-reload) is the
-    # right default for local development -- exactly what this app is built
-    # for -- but its debugger is an unauthenticated remote-code-execution
-    # console if this process is ever reachable from outside localhost. Set
-    # FLASK_DEBUG=0 before running for anything other than "on my own
-    # machine, for myself" (see docs/architecture.md's "Running beyond
-    # local dev" section). PORT is likewise overridable for anyone who
-    # already has something on 5001.
-    debug = os.environ.get("FLASK_DEBUG", "1") not in ("0", "false", "False")
+    # `debug`, ensure_db(), MAX_CONTENT_LENGTH, and rate limiting are all
+    # already set up above at module level (so a WSGI server gets them too
+    # -- see that section's comment). PORT is the one thing that only makes
+    # sense for Flask's own dev server; overridable for anyone who already
+    # has something on 5001.
     port = int(os.environ.get("PORT", "5001"))
     app.run(debug=debug, port=port)
