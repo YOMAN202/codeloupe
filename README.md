@@ -17,6 +17,7 @@ Most learning platforms fall into one of two camps: static content (videos, arti
 - **A full curriculum, not a problem dump.** 45 days, Core/Extended/Advanced tiers, prerequisite tracking, and 28 concept lessons that teach *why* a pattern works before you're asked to apply it.
 - **Traces your actual code, not a canned animation.** The trace visualizer runs *your* submitted solution under `sys.settrace` and replays its real execution — including when it's wrong. Most "algorithm visualizers" animate a known-correct reference implementation; Codeloupe's traces the thing you actually wrote, so a bug shows up as a bug in the visualization too, not as a generic failure message.
 - **Topic-specific visualizations, not one generic view.** Arrays get pointer/window views, linked lists and trees get node-graph views, graphs get grid or adjacency views, heaps get tree-heap views, DP problems get table views with cell-level diff highlighting — the same rendering components are reused for both the curated concept-lesson walkthroughs and real trace output, so the visual language stays consistent everywhere in the app.
+- **Live Preview, not just on-demand tracing.** As you type in the editor, a debounced live trace of your code updates automatically in the background — no need to click anything first to see it start executing. One click ("Open in full Trace") promotes that exact trace into the full Trace view, scrolled straight to it.
 - **A Mistake Journal that's honest about uncertainty.** Failed attempts are classified into a fixed set of DSA mistake categories (off-by-one, wrong base case, missed edge case, etc.), but the classifier never claims more confidence than it has — an automatic guess is always labeled "likely," never presented as fact, and a recurring pattern of mistakes links back to the concept lesson that covers it.
 - **Adaptive, explainable "Today's session."** A small recommender surfaces a due revision, a problem tied to a recurring mistake, an occasional lesson revisit, and a new problem — every suggestion carries a plain-language reason, nothing is ever gated behind it, and you can navigate anywhere regardless.
 - **Approach comparison and complexity analysis**, so you can see *why* one approach beats another on your own problem's inputs, not just that it does.
@@ -33,7 +34,7 @@ Most learning platforms fall into one of two camps: static content (videos, arti
   <img src="docs/screenshots/concept-lesson.png" alt="Concept lesson with interactive walkthrough" width="800">
 </p>
 
-**2. Practice → Solve** — Open a related problem, write your own solution in the Monaco editor, run it against real test cases.
+**2. Practice → Solve** — Open a related problem, write your own solution in the Monaco editor. A Live Preview panel traces your code automatically as you type, so you can watch it execute before you've run a single test; run it against real test cases when you're ready.
 
 <p align="center">
   <img src="docs/screenshots/problem-workspace.png" alt="Problem workspace with editor and tests" width="800">
@@ -80,6 +81,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full breakdown — sy
 - 28 concept lessons (what/why/recognize/intuition, an interactive worked-example walkthrough, inline checkpoints, a practice exercise) across every topic the curriculum covers
 - 109 curated, interview-style problems with visible test cases, edge-case notes, and constraints
 - A Monaco-based code editor with a real Python sandbox behind "Run tests"
+- Live Preview: an automatic, debounced trace of your code as you type, one click away from the full Trace view
 - Step-by-step execution tracing of your own submitted code (correct or buggy), including a predict-mode
 - Topic-specific visualizations: array/pointer, linked list, tree, heap, grid graph, node graph, and DP table views
 - A 3-rung progressive hint system
