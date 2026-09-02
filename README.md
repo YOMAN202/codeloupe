@@ -88,6 +88,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full breakdown — sy
 - Spaced revision scheduling for problems due for review
 - An adaptive, fully-explained "Today's session" recommender (revision, recurring mistake, occasional lesson revisit, weak pattern/topic, new problem) — always explainable, never a required path
 - A dashboard tracking curriculum progress, concept-lesson progress (tracked separately, since they're two different tracks), solve rate, streak, and topic/pattern-level strengths and weaknesses
+- A Support Codeloupe page — an entirely optional way to back the project (UPI, with a QR code) or support it for free (star the repo, share it, send feedback)
 
 ## Running it locally
 

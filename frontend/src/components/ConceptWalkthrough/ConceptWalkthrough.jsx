@@ -164,7 +164,13 @@ export default function ConceptWalkthrough({ frames, topic, pattern }) {
       ) : isHeap ? (
         <HeapView locals={frame.locals} />
       ) : isGraphGrid ? (
-        <GridGraphView locals={frame.locals} />
+        // steps/index (like DPTableView below) -- GridGraphView's
+        // everChangedCells() fallback (used whenever a frame's locals don't
+        // include an explicit visited/seen/explored set) walks `steps[0..index]`
+        // to infer which cells have changed since the walkthrough started, and
+        // crashes on `steps[index]` when either is missing. Omitting them here
+        // was fine back when that fallback didn't exist; it isn't anymore.
+        <GridGraphView locals={frame.locals} steps={frames} index={index} />
       ) : isGraphNode ? (
         <GraphNodeView graph={buildGraphNodeGraph(frame.locals)} />
       ) : isDPTable ? (

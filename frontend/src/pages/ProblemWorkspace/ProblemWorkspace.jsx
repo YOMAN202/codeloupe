@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import CodeEditor from "../../components/Editor/CodeEditor";
 import TraceViewer from "../../components/TraceViewer/TraceViewer";
+import SpecializedVisualization from "../../components/Visualizers/Visualizers";
 import { DifficultyBadge, PriorityBadge, TierBadge } from "../../components/Badges/Badges";
 import MultilineText, { renderInlineCode } from "../../components/MultilineText/MultilineText";
 import { describeMismatch } from "../../utils/compare";
+import { formatValue } from "../../utils/format";
 import {
   fetchProblem,
   fetchHint,
@@ -19,6 +21,9 @@ import {
   runProblemCustom,
   fetchAttempts,
   updateMistake,
+  fetchRevisionStatus,
+  addToRevision,
+  removeFromRevision,
 } from "../../api/client";
 
 // Ordered to match the actual learning loop: write code -> run tests ->
@@ -27,6 +32,20 @@ import {
 // reordered so Trace sits directly next to Tests, since it's the natural
 // next step after seeing a failure, not something to reach past Hints for.
 const TABS = ["Tests", "Trace", "Hints", "Complexity", "Approaches", "Playground", "History"];
+
+// Live preview tuning. 700ms (not the snappier end of the suggested
+// 500-1000ms range) is deliberate: the dev backend (backend/app.py's
+// `app.run(...)`) is single-threaded by default, so every live-trace
+// request blocks "Run tests", the manual Trace tab, and everything else in
+// the app for its duration -- skewing the debounce longer keeps the
+// average request rate lower on that single worker. LIVE_TRACE_TIMEOUT_SECONDS
+// is passed to the backend, which clamps it to at most its own default (see
+// app.py's trace_problem) -- it can only make live requests time out
+// FASTER than a manual trace, never slower, so a snippet that hangs mid-
+// typing gives up in ~3s instead of tying up the server for the full 8s
+// default on every debounce tick.
+const LIVE_TRACE_DEBOUNCE_MS = 700;
+const LIVE_TRACE_TIMEOUT_SECONDS = 3;
 
 // Mirrors logic/mistakes.py's MISTAKE_CATEGORIES exactly -- the backend is
 // the source of truth and rejects anything outside this list, so this
@@ -133,16 +152,16 @@ function FailureAnalysis({ runResult, onInspect }) {
       <h4>First failing case (test {firstFailure.index + 1})</h4>
       <div className="failure-analysis-row">
         <span>
-          <strong>Input:</strong> <code>{JSON.stringify(firstFailure.args)}</code>
+          <strong>Input:</strong> <code>{formatValue(firstFailure.args)}</code>
         </span>
       </div>
       <div className="failure-analysis-row">
         <span>
-          <strong>Expected:</strong> <code>{JSON.stringify(firstFailure.expected)}</code>
+          <strong>Expected:</strong> <code>{formatValue(firstFailure.expected)}</code>
         </span>
         <span>
           <strong>Got:</strong>{" "}
-          <code>{firstFailure.error ? firstFailure.error : JSON.stringify(firstFailure.actual)}</code>
+          <code>{firstFailure.error ? firstFailure.error : formatValue(firstFailure.actual)}</code>
         </span>
       </div>
       {!firstFailure.error && (
@@ -366,6 +385,254 @@ function ApproachCard({ title, candidate, narrative, onTrace, tracing }) {
   );
 }
 
+// ============================== Live preview ==============================
+// A compact, always-updating snapshot next to the editor -- write code, see
+// the effect without clicking "Trace my code". Deliberately NOT a second
+// tracing system: it calls the exact same traceProblem() endpoint and
+// renders the exact same SpecializedVisualization component the full Trace
+// tab uses (see below), just with its own request lifecycle and a trimmed
+// status strip instead of the full step/scrub/predict chrome.
+
+// Best-effort "does this look mid-edit" check -- NOT a real Python parser,
+// just enough to skip the network round trip for the extremely common
+// "still typing this line" case (a dangling operator, an unterminated
+// string, an unclosed bracket) before it ever reaches the backend. The
+// backend's own compile() inside tracer.py stays the actual authority on
+// syntax validity -- anything this heuristic lets through still gets
+// checked for real and comes back as a normal, non-scary "syntax_error"
+// status if it's still broken in some way this can't detect (e.g. a
+// keyword typo). False negatives here are fine and expected; a false
+// POSITIVE (blocking code that's actually valid) is the failure mode this
+// is written to avoid, so it only flags the unambiguous cases.
+function looksMidEdit(code) {
+  const trimmed = code.trim();
+  if (!trimmed) return true;
+  const lastLine = code.replace(/\s+$/, "").split("\n").pop().trim();
+  if (lastLine.endsWith("\\")) return true; // explicit line continuation
+  // A trailing operator/comma/colon/dot on the last line -- "left =",
+  // "if x:", "nums[i]," etc typed but not yet finished. The lookbehind
+  // avoids flagging a completed "==" comparison as if it were a dangling
+  // "=" assignment.
+  if (
+    /(?<!=)[=+\-*/%&|^~,:.]$/.test(lastLine) ||
+    /[^=]<$/.test(lastLine) ||
+    /[^=]>$/.test(lastLine) ||
+    /[=!<>]=$/.test(lastLine) // dangling "==", "!=", "<=", ">=" with nothing after
+  ) {
+    return true;
+  }
+
+  // Best-effort bracket/quote balance, skipping over string contents so a
+  // paren/bracket character inside a string literal doesn't miscount.
+  // Doesn't special-case triple-quoted strings correctly (each `"""` is
+  // just three toggles) -- an unclosed triple-quoted docstring can
+  // therefore read as "unterminated string" here, which is usually true
+  // anyway while it's still being typed.
+  //
+  // Also skips `#`-to-end-of-line comments (when not already inside a
+  // string) the same way a real Python tokenizer would -- otherwise an
+  // apostrophe in an ordinary English comment ("you're", "don't", "it's")
+  // gets misread as opening a string literal that never closes, and
+  // perfectly valid, untouched starter code ends up permanently flagged as
+  // mid-edit. A `#` that appears INSIDE an already-open string is not a
+  // comment start at all, so this must only take effect while `inString`
+  // is falsy -- which the `if (inString) {...continue;}` branch below
+  // already guarantees by handling in-string characters first.
+  const stack = [];
+  let inString = null;
+  let escaped = false;
+  let inComment = false;
+  const pairs = { ")": "(", "]": "[", "}": "{" };
+  for (const ch of code) {
+    if (ch === "\n") {
+      inComment = false;
+      if (!inString) continue;
+    }
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === inString) {
+        inString = null;
+      }
+      continue;
+    }
+    if (inComment) continue;
+    if (ch === "#") {
+      inComment = true;
+    } else if (ch === '"' || ch === "'") {
+      inString = ch;
+    } else if (ch === "(" || ch === "[" || ch === "{") {
+      stack.push(ch);
+    } else if (ch === ")" || ch === "]" || ch === "}") {
+      if (stack.pop() !== pairs[ch]) return true; // mismatched bracket
+    }
+  }
+  if (inString || stack.length > 0) return true;
+
+  return false;
+}
+
+const LIVE_STATUS_COPY = {
+  empty: "Write some code to see a live preview.",
+  invalid: "Waiting for valid code…",
+  tracing: "Tracing…",
+  error: "Live preview unavailable right now.",
+};
+
+// The trace's very last step is almost always a "return" event (either the
+// learner's function returning, or the module-level completion synthesized
+// by tracer.py -- see TraceViewer.jsx's isSyntheticLine) -- and "return"
+// steps never carry a `locals` snapshot at all (see tracer.py's tracer
+// function: only "call"/"line" events do). Defaulting the live preview to
+// the literal last index would therefore show an empty/no-locals state on
+// almost every successful trace. Show the last "line" step instead -- the
+// last point where real computed state actually exists -- falling back to
+// the true last step only for the degenerate case of a trace with no line
+// events at all.
+function lastMeaningfulIndex(steps) {
+  for (let i = steps.length - 1; i >= 0; i--) {
+    if (steps[i].event === "line") return i;
+  }
+  return steps.length - 1;
+}
+
+function LivePreviewPanel({ problem, liveStatus, liveTrace, onOpenFullTrace, onCollapse }) {
+  const steps = liveTrace?.steps || [];
+  const lastIndex = lastMeaningfulIndex(steps);
+  // BUGFIX: this used to also require `liveStatus === "ready"`, which meant
+  // the panel showed nothing at all (not even the dimmed last-good preview
+  // the comments above promise) for the entire "tracing" window on every
+  // single retrace, and for the "invalid" window whenever the learner paused
+  // mid-edit -- confirmed by instrumenting a real run: the preview visibly
+  // vanished to "Tracing..." and reappeared a moment later on every edit.
+  // Whether there's anything to show is really just "do we have trace data",
+  // independent of what the CURRENT in-flight status is -- see fireLiveTrace,
+  // which only ever nulls out liveTrace for "empty" code and for a hard
+  // error, never while a new request is merely pending/in flight.
+  const hasRenderableTrace = steps.length > 0;
+  // "stale" = the visible data is not guaranteed to match the code in the
+  // editor RIGHT NOW (a newer trace is in flight, or the current code looks
+  // incomplete/invalid) -- as opposed to "ready", where it's the exact
+  // result of tracing exactly what's in the editor.
+  const isStale = liveStatus === "tracing" || liveStatus === "invalid";
+
+  // Reuses TraceViewer's own outcome labels/tone so the two surfaces agree
+  // on what e.g. "truncated" means -- not duplicated wording invented here.
+  const outcomeLabel = {
+    completed: null, // the normal case -- no extra label needed
+    runtime_error: "Runtime error",
+    truncated: "Still running -- step limit reached",
+  }[liveTrace?.status];
+
+  return (
+    <div id="live-preview-panel" className={`live-preview-panel${hasRenderableTrace ? "" : " live-preview-panel-empty"}`}>
+      <div className="live-preview-header">
+        <span className="live-preview-title">Live preview</span>
+        {isStale && <span className="live-preview-status-dot" data-status={liveStatus} aria-hidden="true" />}
+        {hasRenderableTrace && (
+          <button className="chip chip-small" onClick={onOpenFullTrace}>
+            Open in full Trace &rarr;
+          </button>
+        )}
+        {/* Focus-editor mode: hides this whole panel so Monaco can take the
+            row's full width. A persistent "Show Live Preview" control (see
+            .live-preview-collapsed-bar in ProblemWorkspace's main render)
+            takes this panel's place in the layout while hidden, so
+            restoring it is never more than one obvious click away. */}
+        <button
+          type="button"
+          className="chip chip-small live-preview-hide-btn"
+          onClick={onCollapse}
+          aria-expanded="true"
+          aria-controls="live-preview-panel"
+          aria-label="Hide Live Preview"
+          title="Hide Live Preview"
+        >
+          Hide
+        </button>
+      </div>
+
+      {/* Everything below the header lives in its own scroll container
+          (App.css's .live-preview-scroll) so the header stays fixed at the
+          top while THIS grows to fill the panel's stretched height (which
+          now matches the editor's, via the row's align-items: stretch) --
+          internal scrolling only ever kicks in here, and only as a
+          fallback for a frame whose content genuinely doesn't fit even
+          that full height. */}
+      <div className="live-preview-scroll">
+        {!hasRenderableTrace && (
+          <p className="muted small live-preview-message">
+            {LIVE_STATUS_COPY[liveStatus] || LIVE_STATUS_COPY.empty}
+          </p>
+        )}
+
+        {hasRenderableTrace && (
+          <div className={isStale ? "live-preview-dim" : ""}>
+            {isStale && (
+              <p className="muted small live-preview-stale-note">
+                {liveStatus === "invalid"
+                  ? "Showing your last successful preview -- the current code isn't valid yet."
+                  : "Updating for your latest edit..."}
+              </p>
+            )}
+            {outcomeLabel && <p className="muted small live-preview-outcome">{outcomeLabel}</p>}
+            <LivePreviewBody problem={problem} steps={steps} index={lastIndex} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Mirrors TraceViewer.jsx's own layout: a compact locals list stays
+// visible ABOVE the structural visualization rather than being replaced by
+// it (TraceViewer's comment: "The generic locals table below always stays
+// visible"). Matters beyond consistency -- a scalar running total like
+// `best = float("inf")` in a two-pointer/sliding-window solution isn't
+// part of the array/pointer structure SpecializedVisualization draws, so
+// without this it would never be visible in Live Preview at all, even
+// though it's plainly shown in full Trace. Falls back to just the locals
+// list (or an empty-state note) when nothing structural is detected for
+// this step (e.g. a problem topic/shape this app doesn't have a dedicated
+// view for yet) -- SpecializedVisualization returns null in that case by
+// design (see Visualizers.jsx).
+function LivePreviewBody({ problem, steps, index }) {
+  // Called as a plain function, NOT written as `<SpecializedVisualization
+  // .../>`, deliberately: JSX would always hand back a truthy element
+  // descriptor regardless of what the component eventually renders, so
+  // there'd be no way to tell "it rendered nothing" apart from "it
+  // rendered something" in order to decide whether to show the fallback
+  // below. SpecializedVisualization has no hooks anywhere in its tree
+  // (Visualizers.jsx is a pure presentational component tree), so calling
+  // it directly to read its real return value up front is safe.
+  const viz = SpecializedVisualization({ problem, steps, index });
+
+  const locals = steps[index]?.locals || {};
+  const entries = Object.entries(locals);
+  const localsList =
+    entries.length > 0 ? (
+      <ul className="live-preview-locals">
+        {entries.map(([k, v]) => (
+          <li key={k}>
+            <code>{k}</code> = <code>{formatValue(v)}</code>
+          </li>
+        ))}
+      </ul>
+    ) : viz == null ? (
+      <p className="muted small">No local variables at this point yet.</p>
+    ) : null;
+
+  if (viz == null) return localsList;
+  return (
+    <>
+      {localsList}
+      {viz}
+    </>
+  );
+}
+
 export default function ProblemWorkspace() {
   const { slug } = useParams();
   const [problem, setProblem] = useState(null);
@@ -375,6 +642,21 @@ export default function ProblemWorkspace() {
   const [code, setCode] = useState("");
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState(null);
+
+  // "Focus editor" mode: hides the Live Preview column so Monaco can use
+  // the full row width. Deliberately PLAIN component state, not
+  // localStorage like the sidebar's collapse (see App.jsx's
+  // SIDEBAR_COLLAPSED_KEY) -- hiding Live Preview is meant to be a
+  // temporary, session-scoped focus action, not a saved long-term
+  // preference: every fresh page load/refresh should always introduce the
+  // learner to Live Preview again, visible by default. Because
+  // ProblemWorkspace stays mounted (React Router doesn't remount it) when
+  // navigating between problems via the app's own links/nav -- only the
+  // :slug param changes -- this still "remains hidden for the current
+  // active workspace session" across problem switches for free, with zero
+  // extra wiring; only an actual full page reload resets it, which is
+  // exactly the reset trigger asked for.
+  const [livePreviewCollapsed, setLivePreviewCollapsed] = useState(false);
 
   const [tab, setTab] = useState("Tests");
 
@@ -395,6 +677,51 @@ export default function ProblemWorkspace() {
   const [traceTestCaseIndex, setTraceTestCaseIndex] = useState(0);
   const [traceFocusEnd, setTraceFocusEnd] = useState(false);
   const [tracedLabel, setTracedLabel] = useState("Your code");
+
+  // Live preview -- entirely separate state from `trace`/`tracing` above on
+  // purpose, so an automatic background trace fired while the learner is
+  // typing can NEVER overwrite or interrupt a manual "Trace my code" /
+  // Predict-mode session they have open on the Trace tab. liveStatus is one
+  // of: "empty" | "invalid" | "tracing" | "ready" | "error".
+  const [liveTrace, setLiveTrace] = useState(null);
+  const [liveStatus, setLiveStatus] = useState("empty");
+  // Refs (not state) for everything the debounce/request machinery needs to
+  // read at fire time without re-running effects on every change, and for
+  // values that must never trigger a re-render on their own:
+  //  - codeRef/testCaseRef/slugRef: always the LATEST inputs, read at the
+  //    moment a (possibly delayed/coalesced) request actually fires, so a
+  //    request scheduled earlier never sends stale code.
+  //  - liveRequestIdRef: bumped on every fire; a response is only applied
+  //    if its id is still the current one, so a slow, superseded response
+  //    can never clobber a newer one ("stale response protection").
+  //  - liveInFlightRef/livePendingRef: at most one live-trace request in
+  //    flight at a time; a debounce tick that lands while one is still
+  //    running just marks "pending" and re-fires (with fresh refs) the
+  //    moment the in-flight one finishes, instead of firing concurrently.
+  const codeRef = useRef(code);
+  codeRef.current = code;
+  const testCaseRef = useRef(traceTestCaseIndex);
+  testCaseRef.current = traceTestCaseIndex;
+  const slugRef = useRef(slug);
+  slugRef.current = slug;
+  const liveRequestIdRef = useRef(0);
+  const liveInFlightRef = useRef(false);
+  const livePendingRef = useRef(false);
+  // "Open in full Trace" scroll handoff: `.workspace-right` (the column
+  // holding the editor/Live Preview/tabs) is sticky-positioned, so once its
+  // content is taller than the viewport -- which the Trace tab's content
+  // usually is -- switching to it with setTab alone doesn't bring it into
+  // view; the learner still has to scroll the page down by hand to find it.
+  // tabRowRef marks the scroll target (the tab bar itself, not just the
+  // trace content below it, so the highlighted "Trace" chip stays visible
+  // as context). traceScrollToken is bumped on every click of that one
+  // button (see openLiveTraceInFullView) and nothing else, so the effect
+  // below re-fires on every click -- including a second click after
+  // re-editing and re-tracing, where `tab` alone never changes away from
+  // "Trace" and so couldn't retrigger an effect keyed on it.
+  const tabRowRef = useRef(null);
+  const [traceScrollToken, setTraceScrollToken] = useState(0);
+  const liveDebounceRef = useRef(null);
 
   const [patternOpen, setPatternOpen] = useState(false);
   const [patternGuess, setPatternGuess] = useState(null);
@@ -420,6 +747,12 @@ export default function ProblemWorkspace() {
   const [mistakePickerOpen, setMistakePickerOpen] = useState(false);
   const [mistakeSavedLabel, setMistakeSavedLabel] = useState(null);
 
+  // Manual "Add to revision" -- independent of runResult/attempts above,
+  // since it reflects revision_schedule.source, not anything about the
+  // learner's code. null while unloaded/loading (button stays disabled).
+  const [revisionStatus, setRevisionStatus] = useState(null);
+  const [revisionBusy, setRevisionBusy] = useState(false);
+
   useEffect(() => {
     setLoading(true);
     setRunResult(null);
@@ -434,6 +767,18 @@ export default function ProblemWorkspace() {
     setTraceTestCaseIndex(0);
     setTraceFocusEnd(false);
     setTracedLabel("Your code");
+    // Invalidate rather than wait for it to time out on its own -- any
+    // still-in-flight live-trace response for the PREVIOUS problem is now
+    // guaranteed stale and will be dropped when it arrives (see the id
+    // check in fireLiveTrace), and clearing liveInFlightRef lets the new
+    // problem's own live preview start immediately instead of waiting
+    // behind it.
+    if (liveDebounceRef.current) clearTimeout(liveDebounceRef.current);
+    liveRequestIdRef.current += 1;
+    liveInFlightRef.current = false;
+    livePendingRef.current = false;
+    setLiveTrace(null);
+    setLiveStatus("empty");
     setPatternOpen(false);
     setPatternGuess(null);
     setPatternRevealed(false);
@@ -462,6 +807,32 @@ export default function ProblemWorkspace() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [slug]);
+
+  // Loaded eagerly (not lazily like History below) since the header button
+  // needs to know its state as soon as it renders. A fetch failure just
+  // leaves the button disabled/unlabeled rather than surfacing a page-level
+  // error -- this is a secondary affordance, not core problem data.
+  useEffect(() => {
+    if (!slug) return;
+    setRevisionStatus(null);
+    fetchRevisionStatus(slug)
+      .then(setRevisionStatus)
+      .catch(() => {});
+  }, [slug]);
+
+  async function handleToggleRevision() {
+    setRevisionBusy(true);
+    try {
+      const updated = revisionStatus?.in_revision
+        ? await removeFromRevision(slug)
+        : await addToRevision(slug);
+      setRevisionStatus(updated);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setRevisionBusy(false);
+    }
+  }
 
   // History tab loads lazily -- attempt data isn't needed until the learner
   // actually asks to see their journey on this problem.
@@ -502,6 +873,11 @@ export default function ProblemWorkspace() {
           .then((result) => setAttempts(result.attempts || []))
           .catch(() => {});
       }
+      // A logged attempt (pass or fail) hands a manually-added problem's
+      // revision row back to the automatic ladder server-side (source
+      // reverts to 'auto' -- see app.py's log_attempt), so re-fetch here
+      // to flip the header button back to "Add to revision" right away.
+      fetchRevisionStatus(slug).then(setRevisionStatus).catch(() => {});
     } catch (e) {
       setError(e.message);
     } finally {
@@ -572,6 +948,121 @@ export default function ProblemWorkspace() {
       setTracing(false);
     }
   }
+
+  // Fires one live-preview trace using whatever code/test-case/slug are
+  // CURRENT at the moment it actually runs (via the refs above), never
+  // whatever they were when this particular call was scheduled. Reads
+  // nothing from component state/closures directly for that reason, so it
+  // never needs re-creating -- stable across renders (empty dep array).
+  const fireLiveTrace = useCallback(async () => {
+    if (liveInFlightRef.current) {
+      // Already tracing one version of the code; don't fire a second,
+      // overlapping request against this single-worker dev backend. Once
+      // the in-flight one finishes, its `finally` block below re-fires
+      // this same function, which will pick up whatever is newest in the
+      // refs at that point -- so this coalesces any number of edits that
+      // happened while we were waiting into exactly one follow-up request.
+      livePendingRef.current = true;
+      return;
+    }
+    liveInFlightRef.current = true;
+    const myRequestId = ++liveRequestIdRef.current;
+    const myCode = codeRef.current;
+    const myTestCaseIndex = testCaseRef.current;
+    const mySlug = slugRef.current;
+    setLiveStatus("tracing");
+    try {
+      const result = await traceProblem(mySlug, myCode, myTestCaseIndex, { timeoutSeconds: LIVE_TRACE_TIMEOUT_SECONDS });
+      if (myRequestId !== liveRequestIdRef.current) return; // superseded -- drop it
+      if (result.status === "syntax_error") {
+        // Our client-side heuristic let this through (it only catches the
+        // unambiguous cases), but the backend's real compile() says it's
+        // still not valid Python yet -- same non-scary "still typing"
+        // treatment as the cases the heuristic DOES catch, not an error.
+        // Deliberately does NOT clear liveTrace (it used to) -- the last
+        // successful preview should stay visible and dimmed here too, same
+        // as the client-heuristic "invalid" path just below, rather than
+        // vanishing the moment the backend independently confirms invalid
+        // syntax. See LivePreviewPanel's isStale/live-preview-stale-note.
+        setLiveStatus("invalid");
+      } else {
+        setLiveTrace(result);
+        setLiveStatus("ready");
+      }
+    } catch {
+      // Network/HTTP failure only -- a bad-but-parseable response is
+      // handled in the `try` above, and this deliberately never touches
+      // the page-level `error` state (that one blanks the ENTIRE
+      // workspace -- see the `if (error) return ...` guard near the top of
+      // this component -- which would be a wildly disproportionate
+      // reaction to a single background live-preview request failing).
+      if (myRequestId !== liveRequestIdRef.current) return;
+      setLiveTrace(null);
+      setLiveStatus("error");
+    } finally {
+      liveInFlightRef.current = false;
+      if (livePendingRef.current) {
+        livePendingRef.current = false;
+        fireLiveTrace();
+      }
+    }
+  }, []);
+
+  // Debounced trigger: every keystroke lands here, cancels whatever wait
+  // was already pending, and (if the code doesn't look obviously mid-edit)
+  // starts a fresh LIVE_TRACE_DEBOUNCE_MS wait before actually tracing.
+  // Deliberately does NOT clear liveTrace on every keystroke -- the last
+  // successful preview stays on screen (dimmed while a new one is pending/
+  // tracing) instead of flashing empty on every character typed.
+  useEffect(() => {
+    if (liveDebounceRef.current) clearTimeout(liveDebounceRef.current);
+    if (!code.trim()) {
+      setLiveStatus("empty");
+      setLiveTrace(null);
+      return undefined;
+    }
+    if (looksMidEdit(code)) {
+      setLiveStatus("invalid");
+      return undefined;
+    }
+    liveDebounceRef.current = setTimeout(fireLiveTrace, LIVE_TRACE_DEBOUNCE_MS);
+    return () => clearTimeout(liveDebounceRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, traceTestCaseIndex, slug, fireLiveTrace]);
+
+  // "Open in full Trace": the live preview already has a perfectly good
+  // trace of this exact code -- hand it straight to the manual `trace`
+  // state (starting from step 0, like a fresh "Trace my code" click would)
+  // rather than making the learner re-request the same thing. This is a
+  // one-time, explicitly user-initiated handoff, not a live sync -- once
+  // open on the Trace tab it behaves exactly like any other manual trace
+  // and further typing won't touch it.
+  function openLiveTraceInFullView() {
+    if (!liveTrace) return;
+    setTracedLabel("Your code");
+    setTraceFocusEnd(false);
+    setTrace(liveTrace);
+    setTab("Trace");
+    setTraceScrollToken((n) => n + 1);
+  }
+
+  // Runs the actual scroll for openLiveTraceInFullView above, once React has
+  // committed the "Trace" tab's content to the DOM (an effect, rather than
+  // scrolling inline in the handler, specifically so it runs after that
+  // commit rather than against the still-on-the-previous-tab DOM). Skips the
+  // very first render (token starts at 0, and this effect's own setup would
+  // otherwise fire it on mount) via the ref guard below. `prefers-reduced-
+  // motion` disables the smooth animation, matching how the rest of the app
+  // already treats that setting elsewhere.
+  const skippedInitialScrollRef = useRef(false);
+  useEffect(() => {
+    if (!skippedInitialScrollRef.current) {
+      skippedInitialScrollRef.current = true;
+      return;
+    }
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    tabRowRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  }, [traceScrollToken]);
 
   // Approach comparison: numbers first (reveal_code=false), reference code
   // only on an explicit second click -- same two-stage gate as the Hints
@@ -754,6 +1245,18 @@ export default function ProblemWorkspace() {
               {problem.topic} &middot; {problem.pattern}
               {problem.canonical_reference && <> &middot; {problem.canonical_reference}</>}
             </p>
+            <button
+              className={`chip chip-small${revisionStatus?.in_revision ? " chip-active" : ""}`}
+              onClick={handleToggleRevision}
+              disabled={revisionBusy || !revisionStatus}
+              title={
+                revisionStatus?.in_revision
+                  ? "Remove this problem from your revision queue"
+                  : "Add this problem to your revision queue, due today"
+              }
+            >
+              {revisionStatus?.in_revision ? "Remove from revision" : "Add to revision"}
+            </button>
             {problem.day != null ? (
               <Link to={`/lessons/${problem.day}`} className="muted small">
                 &larr; back to Day {problem.day}
@@ -789,8 +1292,8 @@ export default function ProblemWorkspace() {
               <ul>
                 {problem.visible_test_cases.slice(0, 3).map((tc, i) => (
                   <li key={i}>
-                    <code>{JSON.stringify(tc.args)}</code> &rarr;{" "}
-                    <code>{JSON.stringify(tc.expected)}</code>
+                    <code>{formatValue(tc.args)}</code> &rarr;{" "}
+                    <code>{formatValue(tc.expected)}</code>
                   </li>
                 ))}
               </ul>
@@ -819,10 +1322,51 @@ export default function ProblemWorkspace() {
               setRevealed={setPatternRevealed}
             />
           )}
-          <CodeEditor value={code} onChange={setCode} />
-          <button className="run-button" onClick={handleRun} disabled={running}>
-            {running ? "Running..." : "Run tests"}
-          </button>
+          <div className={`editor-live-row${livePreviewCollapsed ? " live-preview-is-collapsed" : ""}`}>
+            <div className="editor-live-column">
+              {livePreviewCollapsed && (
+                // Lives INSIDE the editor column's own vertical stack, not
+                // as a sibling column in the row -- a sibling wide enough
+                // to read as a real button (long label, real padding) ends
+                // up costing nearly as much row width as the Live Preview
+                // panel it replaced, which was tried and measured: the
+                // editor only gained ~9px. Putting it here instead means
+                // the row has nothing else in it when collapsed, so the
+                // editor column's flex: 1 1 auto (below) claims the ENTIRE
+                // freed width -- while the button still sits right above
+                // Monaco's top-right corner, i.e. still "near the right
+                // edge... where Live Preview previously existed", and is
+                // still always visible (a static bar, not tied to scroll
+                // position).
+                <div className="live-preview-collapsed-bar">
+                  <button
+                    type="button"
+                    className="live-preview-restore-btn"
+                    onClick={() => setLivePreviewCollapsed(false)}
+                    aria-expanded="false"
+                    aria-controls="live-preview-panel"
+                    aria-label="Show Live Preview"
+                    title="Show Live Preview"
+                  >
+                    <span aria-hidden="true">&#9664;</span> Show Live Preview
+                  </button>
+                </div>
+              )}
+              <CodeEditor value={code} onChange={setCode} />
+              <button className="run-button" onClick={handleRun} disabled={running}>
+                {running ? "Running..." : "Run tests"}
+              </button>
+            </div>
+            {!livePreviewCollapsed && (
+              <LivePreviewPanel
+                problem={problem}
+                liveStatus={liveStatus}
+                liveTrace={liveTrace}
+                onOpenFullTrace={openLiveTraceInFullView}
+                onCollapse={() => setLivePreviewCollapsed(true)}
+              />
+            )}
+          </div>
 
           {attemptFeedback && (
             <p className={attemptFeedback.is_independent ? "success" : "warning"}>
@@ -853,7 +1397,7 @@ export default function ProblemWorkspace() {
             complexity={complexity}
           />
 
-          <div className="tab-row">
+          <div className="tab-row" ref={tabRowRef}>
             {TABS.map((t) => (
               <button key={t} className={`chip ${tab === t ? "chip-active" : ""}`} onClick={() => setTab(t)}>
                 {t}
@@ -878,11 +1422,11 @@ export default function ProblemWorkspace() {
                       {runResult.results.map((r) => (
                         <li key={r.index} className={r.passed ? "test-pass" : "test-fail"}>
                           <span>{r.passed ? "PASS" : "FAIL"}</span>
-                          <code>input: {JSON.stringify(r.args)}</code>
+                          <code>input: {formatValue(r.args)}</code>
                           {!r.passed && (
                             <>
-                              <code>expected: {JSON.stringify(r.expected)}</code>
-                              <code>got: {r.error ? r.error : JSON.stringify(r.actual)}</code>
+                              <code>expected: {formatValue(r.expected)}</code>
+                              <code>got: {r.error ? r.error : formatValue(r.actual)}</code>
                             </>
                           )}
                         </li>
@@ -971,7 +1515,7 @@ export default function ProblemWorkspace() {
                     >
                       {problem.visible_test_cases.map((tc, i) => (
                         <option key={i} value={i}>
-                          test case {i + 1}: {JSON.stringify(tc.args)}
+                          test case {i + 1}{tc.label ? ` (${tc.label})` : ""}: {formatValue(tc.args)}
                         </option>
                       ))}
                     </select>
@@ -995,7 +1539,7 @@ export default function ProblemWorkspace() {
                 {trace?.traced_test_case_args && (
                   <p className="muted small">
                     Traced with: <code>{problem.function_signature.match(/def\s+(\w+)/)?.[1]}(
-                    {trace.traced_test_case_args.map((a) => JSON.stringify(a)).join(", ")})</code>
+                    {trace.traced_test_case_args.map((a) => formatValue(a)).join(", ")})</code>
                   </p>
                 )}
                 <TraceViewer trace={trace} problem={problem} focusEnd={traceFocusEnd} />
@@ -1156,7 +1700,7 @@ export default function ProblemWorkspace() {
                       </p>
                     ) : (
                       <p>
-                        <strong>Output:</strong> <code>{JSON.stringify(customResult.actual)}</code>
+                        <strong>Output:</strong> <code>{formatValue(customResult.actual)}</code>
                       </p>
                     )}
                   </div>

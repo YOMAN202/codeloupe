@@ -55,6 +55,15 @@
   --err: #ff5c72;
   --err-soft: rgba(255, 92, 114, 0.14);
 
+  /* Used for exactly one thing: the Support Codeloupe nav item. Its own
+     token rather than reusing --err (close in hue but semantically
+     "danger/error" everywhere else it appears) so the two meanings never
+     get tangled just because the colors happen to look similar. Paired
+     with a "-soft" tint, same pattern as every other accent above, for
+     the item's own subtle background/border treatment. */
+  --heart: #ff5c8a;
+  --heart-soft: rgba(255, 92, 138, 0.12);
+
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
@@ -163,11 +172,38 @@ select:focus-visible,
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  transition: width 0.18s ease, padding 0.18s ease;
 }
+
+.sidebar-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.sidebar-toggle {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--s2);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.sidebar-toggle:hover { color: var(--text); border-color: var(--border-strong); }
+.sidebar-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 
 .brand {
   margin-bottom: 1.4rem;
   padding: 0 0.3rem;
+  min-width: 0;
 }
 .brand-lockup {
   display: flex;
@@ -175,10 +211,23 @@ select:focus-visible,
   gap: 0.55rem;
   color: var(--text);
 }
-.brand-mark { flex-shrink: 0; display: block; }
+/* width/height here override BrandMark's own SVG width/height attributes
+   (App.jsx defaults size to 22) -- a plain CSS rule always wins over an
+   element's presentational width/height attributes, so this is the one
+   place icon size is actually controlled, in both sidebar states below,
+   without needing separate JSX props per breakpoint. Sized up only
+   slightly (22 -> 24) at rest: this is the app's own identity mark, not
+   another actionable nav item, so its resting size stays a deliberately
+   quiet header element even as the collapsed-only size below picks up
+   noticeably more presence (see the .sidebar-is-collapsed override). */
+.brand-mark { flex-shrink: 0; display: block; width: 24px; height: 24px; }
 .brand-wordmark {
   font-weight: 800;
-  font-size: 1.15rem;
+  /* A small bump alongside the icon (was 1.15rem) -- enough that the
+     whole brand lockup reads with a touch more presence next to the
+     newly-more-prominent Support item below it, without turning the
+     header into its own competing focal point. */
+  font-size: 1.22rem;
   letter-spacing: -0.02em;
 }
 .brand-wordmark .accent { color: var(--teal); }
@@ -215,17 +264,172 @@ select:focus-visible,
   flex-shrink: 0;
 }
 .nav-link.active .nav-link-dot { background: var(--teal); }
+.nav-link-short { display: none; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700; }
+
+/* Support link's heart: plays the exact same role/slot as .nav-link-dot
+   (expanded) and .nav-link-short (collapsed), just styled pink/red and
+   sized up well past a normal glyph so it reads as a small icon rather
+   than punctuation. Renders <HeartIcon /> (a real filled SVG shape, not a
+   text character -- see that component in App.jsx for why: a plump,
+   rounded heart isn't reliably achievable from a font glyph). `color` is
+   set directly on each span rather than relying on .nav-link's own color,
+   so it stays pink through hover/active too -- .nav-link.active sets
+   color on the <a>, but a child's own `color` always wins over an
+   inherited one regardless of order, and the SVG's fill="currentColor"
+   picks up whatever color its wrapping span resolves to. display: flex
+   (rather than the span's normal inline flow) removes the few px of
+   baseline whitespace an inline SVG otherwise sits in, so sizing the icon
+   is exactly what centers it -- no extra line-height juggling needed the
+   way a text glyph required. */
+.nav-link-heart {
+  color: var(--heart);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav-link-heart svg { width: 20px; height: 20px; display: block; }
+
+/* Collapsed rail: sized a little larger than the expanded heart on
+   purpose -- with no label text sharing the row, the heart is the entire
+   visual content here, so it can (and should) carry more presence than
+   it does sitting next to "Support Codeloupe" in the expanded row, while
+   staying comfortably inside its ~44px button (see .nav-link-support
+   below) rather than crowding it. `display: flex` for this one is set
+   only inside the collapsed breakpoint below (matching the specificity
+   .nav-link-short's own display:none/inline toggle already uses) --
+   setting it here unconditionally would defeat that toggle and leave the
+   collapsed-only heart visible in the expanded sidebar too. */
+.nav-link-short.nav-link-short-heart { color: var(--heart); }
+.nav-link-short-heart svg { width: 22px; height: 22px; display: block; }
+
+/* Support link: builds on the same .nav-link/-heart/-short/-label shapes
+   as the primary six (see NavItem in App.jsx) but adds its own quiet
+   pink-tinted card -- slightly larger padding/type than the primary
+   items, a soft background + hairline border in the same pink as the
+   heart, and a visibly stronger hover/active state -- so the whole row
+   reads as a distinct, clearly-clickable support action at a glance,
+   not just a slightly-colored copy of the other six. Still deliberately
+   quiet next to them: no bold weight or full-saturation fill at rest,
+   just enough presence to be noticed without competing for attention. */
+.nav-link-support {
+  padding: 0.68rem 0.75rem;
+  font-size: 0.95rem;
+  background: var(--heart-soft);
+  border: 1px solid rgba(255, 92, 138, 0.28);
+  border-radius: var(--radius-sm);
+}
+.nav-link-support:hover {
+  background: rgba(255, 92, 138, 0.2);
+  border-color: var(--heart);
+  color: var(--text);
+}
+.nav-link-support:focus-visible { outline: 2px solid var(--heart); outline-offset: 2px; }
+/* Placed after the generic .nav-link.active rule (same specificity, so
+   source order decides) -- keeps the Support item's "current page" state
+   in its own pink identity instead of the primary six's teal, since
+   Support was already deliberately kept out of that primary group. */
+.nav-link-support.active {
+  background: rgba(255, 92, 138, 0.24);
+  border-color: var(--heart);
+  color: var(--text);
+}
+
+/* Support link position: set off below a divider so it reads as a
+   clearly separate, secondary destination -- not mixed into the primary
+   six, but also not pinned to the sidebar's extreme bottom edge (a
+   100vh-tall sidebar on a normal monitor would otherwise strand it far
+   below the visible nav items). margin-top: auto still pushes it toward
+   the bottom of the column, but the margin-bottom below stops it short
+   of the very edge by a fixed, deliberate gap -- consistent regardless
+   of viewport height, and enough to read as "toward the bottom,
+   intentionally placed" rather than either "just another primary item"
+   or "shoved into the corner". */
+.sidebar-bottom { margin-top: auto; margin-bottom: 2.4rem; padding-top: 0.6rem; }
+.sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 0 0 0.5rem; }
 
 .main-content {
   flex: 1;
   min-width: 0;
   padding: 1.9rem 2.2rem 3rem;
-  max-width: 1180px;
+  /* Was a flat 1180px regardless of viewport or sidebar state -- on any
+     1440px+ monitor that left real dead space to the right of every page
+     (confirmed by measuring: 512px of unused width at 1920px with the
+     sidebar open), and because this number never changed when the sidebar
+     collapsed, the freed ~164px went nowhere -- main-content just shifted
+     left and the dead space got BIGGER, not smaller. 1440px gives every
+     page real room on common wide screens while still capping long-form
+     reading pages (Learn/lesson prose) well short of an uncomfortable
+     line length; the collapsed-sidebar override below raises it further
+     so collapsing has a real, consistent effect everywhere main-content
+     is used, not just on ProblemWorkspace. */
+  max-width: 1440px;
 }
 
 .page-header { margin-bottom: 1.2rem; }
 .page-header h2 { margin: 0 0 0.3rem; }
 .page-header p { margin: 0; }
+
+/* ---- collapsible sidebar (desktop "focus mode" only) ------------------ */
+/* Scoped to desktop widths on purpose: the existing mobile layout below
+   (a horizontal always-visible nav bar, no collapse concept) must render
+   exactly as it did before regardless of whether `collapsed` happens to be
+   true from a previous desktop session -- so none of these rules apply
+   under the 860px breakpoint, and the toggle button itself is hidden
+   there too (see that block). */
+@media (min-width: 861px) {
+  /* Collapsing frees ~164px from the sidebar -- raising main-content's own
+     cap here (not just letting it slide left into the freed space) is what
+     makes the collapse have a real, consistent effect on every page that
+     renders inside main-content, not only ProblemWorkspace. */
+  .sidebar-is-collapsed .main-content { max-width: 1600px; }
+  .sidebar-is-collapsed .sidebar { width: 64px; padding-left: 0.6rem; padding-right: 0.6rem; }
+  .sidebar-is-collapsed .sidebar-top { flex-direction: column-reverse; align-items: center; gap: 0.6rem; }
+  .sidebar-is-collapsed .brand { padding: 0; margin-bottom: 0; }
+  .sidebar-is-collapsed .brand-wordmark,
+  .sidebar-is-collapsed .brand-tagline { display: none; }
+  /* With the wordmark/tagline hidden, this icon IS the entire brand
+     presence in the collapsed rail -- same reasoning as the collapsed
+     Support heart getting more room than its expanded counterpart, and
+     sized to match that heart's own collapsed prominence (22px) rather
+     than reading small/secondary next to it. Still centers cleanly: the
+     64px collapsed sidebar (see .sidebar-is-collapsed .sidebar above)
+     leaves ample room around a 30px icon. */
+  .sidebar-is-collapsed .brand-mark { width: 30px; height: 30px; }
+  .sidebar-is-collapsed .sidebar-nav { margin-top: 0.8rem; }
+  .sidebar-is-collapsed .nav-link { justify-content: center; padding: 0.55rem 0.2rem; gap: 0; }
+  .sidebar-is-collapsed .nav-link-dot,
+  .sidebar-is-collapsed .nav-link-heart,
+  .sidebar-is-collapsed .nav-link-label { display: none; }
+  .sidebar-is-collapsed .nav-link-short { display: inline; }
+  /* Overrides the plain `display: inline` above for the heart's own short
+     slot specifically -- it holds an SVG (see HeartIcon in App.jsx), not
+     a text glyph, and flex is what centers that SVG cleanly with no
+     stray inline baseline gap around it. Equal selector specificity to
+     the rule above (two classes each), so source order is what makes
+     this one win here. */
+  .sidebar-is-collapsed .nav-link-short-heart {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* .sidebar-bottom uses the exact same vertical rhythm (padding-top,
+     divider, single nav-link height) in both sidebar states -- nothing
+     here needs to change between them for the collapsed heart to land at
+     the same vertical position the expanded Support row occupies; only
+     the row's own contents (label vs. short glyph) swap via the rules
+     above, same as every other nav item.
+
+     .nav-link-support's own vertical padding (see above) matches this
+     override exactly -- 0.68rem top/bottom in both expanded and collapsed
+     -- specifically so the two stay aligned with each other per that same
+     rule; only the horizontal padding shrinks here, same pattern the
+     primary six already use going into the narrow rail. Needs its own
+     rule at all because .sidebar-is-collapsed .nav-link above is a more
+     specific selector than plain .nav-link-support and would otherwise
+     win and flatten it back down to the primary items' collapsed size. */
+  .sidebar-is-collapsed .nav-link-support { padding: 0.68rem 0.3rem; }
+}
 
 @media (max-width: 860px) {
   .app-shell { flex-direction: column; }
@@ -237,11 +441,18 @@ select:focus-visible,
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
+  .sidebar-top { align-items: center; }
+  .sidebar-toggle { display: none; }
   .brand { margin-bottom: 0.8rem; }
   .brand-tagline { display: none; }
   .sidebar-nav { flex-direction: row; flex-wrap: wrap; gap: 0.3rem; }
   .nav-link { padding: 0.4rem 0.6rem; font-size: 0.85rem; }
   .main-content { padding: 1.4rem 1.1rem 2.5rem; }
+  /* The desktop bottom-gap (see .sidebar-bottom above) exists purely to
+     pull Support up off the edge of a 100vh column -- on mobile the
+     sidebar is auto-height, not pinned to the viewport at all, so that
+     gap would just be dead space under the row instead. */
+  .sidebar-bottom { margin-top: 0.6rem; margin-bottom: 0; padding-top: 0.6rem; }
 }
 
 /* ---- badges / chips -------------------------------------------------- */
@@ -351,6 +562,20 @@ select:focus-visible,
 .callout-resume { border-left-color: var(--sky); }
 .callout-next { border-left-color: var(--teal); }
 .callout-revision { border-left-color: var(--amber); }
+/* Zero state ("0 due for revision") swaps the amber attention accent for a
+   neutral one -- amber reads as "needs action", which would be misleading
+   when there's genuinely nothing due. Still a real, visible card (not
+   hidden), just calm rather than alarming. */
+.callout-revision-empty { border-left-color: var(--border-strong); }
+.callout-revision-empty strong { color: var(--text-dim); }
+
+/* Strips real <button> UA chrome so the "due for revision" card (a button,
+   not a Link -- see Dashboard.jsx's comment on why) is visually identical
+   to the <a>-based callouts beside it. Deliberately doesn't touch border/
+   background/color -- .callout and .callout-revision above already own
+   those, and re-declaring them here would just be one more place they
+   could drift out of sync. */
+.callout-button { font: inherit; text-align: left; cursor: pointer; width: 100%; appearance: none; }
 
 /* ---- curriculum map --------------------------------------------------- */
 
@@ -554,10 +779,175 @@ code:not(pre code) {
 .workspace-columns { display: flex; gap: 1.75rem; align-items: flex-start; }
 .workspace-left { flex: 1; min-width: 0; }
 .workspace-right { flex: 1.3; min-width: 0; position: sticky; top: 1.75rem; }
+/* Scroll target for "Open in full Trace" (see ProblemWorkspace.jsx's
+   openLiveTraceInFullView) -- matches workspace-right's own sticky offset
+   above so scrollIntoView doesn't land the tab bar half-hidden behind it. */
+.workspace-right .tab-row { scroll-margin-top: 1.75rem; }
 
 @media (max-width: 860px) {
   .workspace-columns { flex-direction: column; }
   .workspace-right { position: static; width: 100%; }
+}
+
+/* ---- editor + live preview ------------------------------------------------ */
+/* Side by side on desktop (editor | live visualization, per the requested
+   mockup); stacked on narrow screens, same 860px breakpoint the outer
+   workspace columns already use for consistency.
+
+   The editor is meant to visually dominate this row (~65-70% of the row's
+   emphasis, Live Preview useful but secondary) -- flex-basis below carries
+   that ratio (2 : 1 is 66.7:33.3, comfortably inside the 65-70% target with
+   margin for border/padding rounding -- measured in a real browser: the
+   previous 1.85:1 rendered closer to 62:38 once the panel's own border and
+   padding were accounted for), and CodeEditor.jsx's wrapper gets its actual
+   height here rather than as a hardcoded Monaco prop, so it can be tuned
+   per breakpoint by a plain media query. */
+.editor-live-row { display: flex; gap: 1rem; align-items: stretch; margin-top: 0.5rem; }
+.editor-live-column {
+  flex: 2.3;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* Animates the width change when Live Preview is hidden/restored --
+     CodeEditor's automaticLayout option (see that file) keeps Monaco's own
+     canvas in sync with this in real time as it transitions, rather than
+     jumping straight to its final size. Respects prefers-reduced-motion
+     via the blanket transition-duration override at the top of this file. */
+  transition: flex 0.18s ease;
+}
+/* Focus-editor mode: Live Preview's column is gone entirely (not replaced
+   by another row sibling -- see .live-preview-collapsed-bar below), so the
+   editor is the row's ONLY child and flex: 1 1 auto lets it claim the
+   full freed width instead of stopping at its normal ~66% share. */
+.editor-live-row.live-preview-is-collapsed .editor-live-column { flex: 1 1 auto; }
+
+/* The always-visible "Show Live Preview" control, while Live Preview is
+   hidden -- sits in the editor column's OWN vertical stack (above Monaco),
+   not as a sibling column in the row: a sibling wide enough to read as a
+   real labeled button costs nearly as much row width as the panel it
+   replaced (measured), which defeats the point. Right-aligned so it still
+   lands near the row's top-right corner, roughly where Live Preview's own
+   header used to sit, and it's a static bar (not scroll-dependent), so
+   it's always visible the whole time the panel is hidden. */
+.live-preview-collapsed-bar { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }
+.live-preview-restore-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--s2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.live-preview-restore-btn:hover { border-color: var(--teal); color: var(--teal); }
+.live-preview-restore-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* Comfortable room for a real 20-50 line DSA solution without excessive
+   scrolling -- was effectively capped much shorter (the old 360px Monaco
+   prop) before this. */
+.code-editor-wrap { height: 640px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+
+.live-preview-panel {
+  flex: 1;
+  min-width: 0;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  /* No fixed/max height here anymore -- the row's own align-items: stretch
+     (see .editor-live-row) already matches this panel's height to
+     whatever the editor column's actual height is (640px .code-editor-wrap
+     plus the Run tests button below it), so it reads as a real companion
+     panel to the editor rather than a short fixed card with its own
+     scrollbar. overflow: hidden here (not auto) is deliberate: the HEADER
+     must stay put at the top, so the scrolling -- for the rare frame whose
+     content genuinely doesn't fit even the stretched height -- happens on
+     .live-preview-scroll below, not on this outer element; see that rule
+     for the actual fallback scrollbar. */
+  overflow: hidden;
+}
+/* The "write some code" / status-copy empty state reads oddly stretched
+   to the editor's full ~685px if centered inside a box that tall on its
+   own -- centering happens on the inner scroll wrapper below instead, so
+   only the WHOLE PANEL still gets its normal stretched height (consistent
+   sizing whether empty or full of content) while the message inside it
+   sits centered rather than pinned to the top. */
+.live-preview-panel-empty .live-preview-scroll { align-items: flex-start; justify-content: center; }
+
+/* Everything below the header: this is what actually grows to fill the
+   panel's remaining height (flex: 1, min-height: 0 is what lets a flex
+   child shrink below its content size so overflow-y can ever kick in at
+   all) and, only as a fallback for genuinely oversized content, scrolls
+   internally -- normal arrays/pointers/locals for a typical problem fit
+   comfortably within the stretched height and this never shows a
+   scrollbar in practice. */
+.live-preview-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; }
+
+.live-preview-header { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
+.live-preview-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.live-preview-header .chip-small { margin-left: auto; }
+
+/* Small pulsing dot rather than a text label for the two transient states
+   (debounce pending is folded into "invalid" until code looks complete,
+   "tracing" while the request is actually in flight) -- deliberately quiet,
+   see the module comment on LivePreviewPanel for why this stays subtle
+   rather than a spinner/banner. */
+.live-preview-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+.live-preview-status-dot[data-status="tracing"] { background: var(--sky); animation: live-preview-pulse 1s ease-in-out infinite; }
+.live-preview-status-dot[data-status="invalid"] { background: var(--caution); }
+
+@keyframes live-preview-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.live-preview-message { margin: 0; }
+.live-preview-outcome { margin: 0 0 0.3rem; color: var(--caution); }
+.live-preview-dim { opacity: 0.55; transition: opacity 0.15s ease; }
+.live-preview-stale-note { margin: 0 0 0.3rem; font-style: italic; }
+
+.live-preview-locals { list-style: none; margin: 0; padding: 0; font-family: var(--font-code); font-size: 0.8rem; }
+.live-preview-locals li { padding: 0.15rem 0; color: var(--text-dim); }
+.live-preview-locals code { color: var(--text); }
+
+@media (max-width: 860px) {
+  .editor-live-row { flex-direction: column; }
+  .editor-live-column { flex: 1; }
+  .code-editor-wrap { height: 420px; }
+  /* Stacked here (column direction), so the row's align-items: stretch
+     doesn't size this panel against the editor the way it does on desktop
+     -- same bounded-box treatment the editor itself already gets on this
+     breakpoint (a fixed height above, with its own internal scroll for
+     long code), just applied to Live Preview's SCROLL WRAPPER specifically
+     (not the outer panel) so the header still stays put above it, same as
+     desktop. */
+  .live-preview-scroll { max-height: 320px; }
+  /* Full-width and centered rather than the desktop's right-aligned pill --
+     matches how every other stacked control on this breakpoint reads, and
+     is an easier tap target on a narrow/touch viewport. Same collapse/
+     restore mechanism either way, just adapted sizing. */
+  .live-preview-restore-btn { width: 100%; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-preview-status-dot[data-status="tracing"] { animation: none; }
 }
 
 .run-button {
@@ -806,3 +1196,138 @@ code:not(pre code) {
 .lesson-status-segment.status-completed { background: var(--ok); }
 .lesson-status-segment.status-skipped { background: var(--text-faint); }
 .lesson-status-segment.status-known { background: var(--sky); }
+
+/* ---- mistake journal: remove entry ------------------------------------- */
+
+.attempt-history-row-actions { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Small, quiet "x" -- unobtrusive until hovered/focused, but always a real
+   28px hit target and always keyboard-reachable (a plain <button>, no
+   tabindex tricks). Kept visually minimal on purpose: this sits next to a
+   timestamp in a list of records, not a primary action. */
+.mistake-remove-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.mistake-remove-btn:hover { color: var(--err); border-color: rgba(255, 92, 114, 0.35); background: var(--err-soft); }
+.mistake-remove-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.mistake-remove-confirm {
+  background: var(--err-soft);
+  border: 1px solid rgba(255, 92, 114, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.8rem;
+}
+.mistake-remove-confirm-question { margin: 0 0 0.15rem; font-weight: 600; }
+.mistake-remove-confirm .muted.small { margin: 0 0 0.5rem; }
+.mistake-remove-confirm .error.small { margin: 0.3rem 0; }
+
+/* ---- Support Codeloupe page --------------------------------------------
+   Financial support (the coffee card) gets its own distinct violet-accented
+   card -- deliberately NOT teal (reserved for brand/nav/primary actions)
+   or amber (reserved for "look here right now") -- while community actions
+   below sit in a plain neutral grid, so the two read as visually separate
+   categories per the page's own requirement, without either one competing
+   for the same "primary action" visual weight the rest of the app uses. */
+.support-coffee {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--violet);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+  margin: 1.2rem 0 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.support-coffee-header { display: flex; flex-direction: column; gap: 0.3rem; }
+.support-coffee-header h3 { margin: 0; }
+.support-upi-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.support-upi-id {
+  background: var(--s2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.8rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text);
+  user-select: all;
+}
+.support-coffee-note { margin: 0; }
+.support-upi-hint { margin: 0; }
+
+/* The QR image already carries its own light card background/framing
+   (it's a full "scan to pay" card, not a bare code), so this only adds a
+   thin border + soft shadow to seat that light rectangle naturally on the
+   dark page -- no extra background or padding stacked on top of it, which
+   would just double up on framing the image already has. width/height are
+   deliberately NOT constrained beyond max-width -- `height: auto` keeps
+   the source aspect ratio exactly, so the QR pattern itself is never
+   stretched or squashed in a way that could affect scanning. */
+.support-qr-wrap { display: flex; justify-content: flex-start; }
+.support-qr {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* Exactly 6 community cards, laid out to land as clean full rows at every
+   width (never an odd trailing card): 1 column stacked on mobile, 2
+   columns (3 full rows) on tablet/narrow desktop, 3 columns (2 full rows)
+   from a "normal desktop" width up -- 6 divides evenly by both 2 and 3, so
+   there's never an orphan card regardless of which of the three applies. */
+.support-links-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.7rem;
+  margin-top: 0.7rem;
+}
+@media (min-width: 640px) {
+  .support-links-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 900px) {
+  .support-links-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.support-link-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
+  color: var(--text);
+  transition: border-color 0.12s ease, background 0.12s ease;
+  /* Some of these cards render as <button> (Share Codeloupe triggers JS,
+     not navigation) and some as <a> (everything else) -- this reset makes
+     both look and size identically, so the grid never gives away which
+     is which just from appearance. */
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  appearance: none;
+}
+.support-link-card:hover { background: var(--s2); border-color: var(--teal); text-decoration: none; }
+.support-link-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.support-link-icon { font-size: 1.2rem; line-height: 1.3; flex-shrink: 0; }
+.support-link-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.support-link-label { font-weight: 600; font-size: 0.88rem; }
+/* Keeps card copy short enough that six cards stay a consistent height in
+   a 3x2 grid rather than one long description stretching its whole row. */
+.support-link-text .muted.small { line-height: 1.35; }

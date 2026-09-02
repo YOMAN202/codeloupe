@@ -6,9 +6,33 @@
    frame, a tracked cursor position) -- never a structural warning. Cycle
    detection, orphaned nodes and other correctness flags use --caution or
    --err instead, so amber keeps meaning exactly one thing everywhere a
-   learner encounters it. */
+   learner encounters it.
+
+   Two more conventions layered on top, both driven from Visualizers.jsx:
+   a "quiet" tier (-quiet-strong/-quiet-faint suffixes) for tree/graph
+   nodes that are worth noting but aren't this step's focus -- built from
+   an existing secondary token at reduced strength, never amber, so it
+   never competes with the one true "look here" color. And a shared
+   mount-in animation (viz-enter / the .pointer-chip keyframe below) that
+   plays automatically whenever React actually mounts a new DOM node for
+   something keyed by stable identity (a node id, a variable name, an
+   array index) -- since existing elements keep their identity across
+   steps and never remount, this alone is what makes a pointer's move or
+   a stack push visibly "arrive" instead of snapping in silently, with no
+   extra diffing code required. All of it -- like the app's global
+   prefers-reduced-motion rule in App.css -- collapses to an instant,
+   un-animated state for anyone who asked for reduced motion. */
 
 .viz-panels { display: flex; flex-direction: column; gap: 1rem; margin: 0.75rem 0; }
+@keyframes viz-enter {
+  from { opacity: 0; transform: translateY(-3px) scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes viz-chip-in {
+  0% { opacity: 0; transform: scale(0.7); box-shadow: 0 0 0 3px var(--amber-soft); }
+  60% { opacity: 1; transform: scale(1.05); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+}
 .viz-block {
   background: var(--s2);
   border: 1px solid var(--border);
@@ -37,6 +61,12 @@
   margin: 0 0.1rem 0.15rem 0;
   white-space: nowrap;
   font-family: var(--font-mono);
+  /* Plays once whenever this exact chip (keyed by variable name inside
+     whichever node/box it currently occupies) mounts fresh -- i.e.
+     exactly when a pointer's position changed, since a stationary
+     pointer's chip keeps the same DOM node across steps and never
+     replays this. See the top-of-file comment. */
+  animation: viz-chip-in 0.2s ease-out;
 }
 
 /* ---- 1. array / string / pointer / sliding window ------------------- */
@@ -52,8 +82,13 @@
   background: var(--s3);
   padding: 2px 4px;
   position: relative;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 .seq-box-in-window { background: var(--teal-soft); border-color: var(--teal-dim); }
+/* A value your code just wrote at this exact step. Takes priority over
+   the window tint above in the cascade below since both can legitimately
+   apply to the same box at once (a write inside the current window). */
+.seq-box-changed { background: var(--amber-soft); border-color: rgba(242, 177, 52, 0.55); }
 .seq-box-pointer-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; min-height: 14px; }
 .seq-box-value { padding: 0.25rem 0; font-size: 0.78rem; font-family: var(--font-code); white-space: pre; }
 .seq-box-index { font-size: 0.62rem; color: var(--text-faint); border-top: 1px solid var(--border); }
@@ -61,7 +96,7 @@
 /* ---- 2. linked lists / 4. trees (shared node styling) ----------------- */
 
 .ll-chain { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 0.1rem; }
-.ll-node-wrap { display: flex; flex-direction: column; align-items: center; }
+.ll-node-wrap { display: flex; flex-direction: column; align-items: center; animation: viz-enter 0.16s ease-out; }
 .ll-pointer-tags { display: flex; gap: 2px; min-height: 16px; }
 .ll-node {
   min-width: 42px;
@@ -75,9 +110,15 @@
   font-family: var(--font-code);
   font-size: 0.85rem;
   padding: 0.2rem 0.5rem;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 .ll-node-none { border-color: var(--border-strong); background: var(--s3); color: var(--text-faint); font-size: 0.72rem; }
 .ll-node-orphan { border-color: var(--caution); background: var(--caution-soft); }
+/* A node whose fields or .next your code just changed (or that didn't
+   exist a step ago) -- real object-identity diffing, see graphDiff in
+   Visualizers.jsx. Wins over -orphan/-none in the cascade since it's
+   declared after them and is always the more specific/current fact. */
+.ll-node-changed { border-color: var(--amber); background: var(--amber-soft); }
 .ll-arrow { color: var(--text-faint); margin: 0 0.35rem 0.4rem; font-size: 0.85rem; }
 .ll-arrow.ll-null { color: var(--text-faint); font-size: 0.72rem; }
 .ll-arrow.ll-cycle { color: var(--err); font-size: 0.72rem; }
@@ -85,7 +126,15 @@
 .tree-scroll { overflow-x: auto; padding-bottom: 0.4rem; }
 .tree-canvas { position: relative; }
 .tree-edges { position: absolute; top: 0; left: 0; pointer-events: none; }
-.tree-node-wrap { position: absolute; display: flex; flex-direction: column; align-items: center; width: 56px; }
+.tree-node-wrap {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 56px;
+  transition: left 0.12s ease, top 0.12s ease;
+  animation: viz-enter 0.16s ease-out;
+}
 .tree-pointer-tags { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; min-height: 14px; }
 .tree-node {
   min-width: 34px;
@@ -99,8 +148,25 @@
   font-family: var(--font-code);
   font-size: 0.8rem;
   z-index: 1;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
+/* Current focus (your code is directly pointing at this node right now)
+   or a node whose fields/refs just changed -- both read as "look here",
+   so they share the one amber treatment rather than needing two. */
+.tree-node-changed { border-color: var(--amber); background: var(--amber-soft); }
+/* Quieter than amber on purpose -- "worth noting, not this step's
+   focus": either sitting in a traversal queue right now, or referenced a
+   few steps ago. Built from --violet at reduced strength specifically
+   because trees' own baseline color is --sky, so a sky-based ring would
+   be invisible against a node's normal resting state. Two tiers only --
+   enough to read as "fading", not a confusing gradient. */
+.tree-node-quiet-strong { box-shadow: 0 0 0 2px var(--violet-soft); }
+.tree-node-quiet-faint { box-shadow: 0 0 0 2px rgba(138, 123, 255, 0.08); }
 .heap-node { border-radius: var(--radius-sm); border-color: var(--violet); background: var(--violet-soft); font-size: 0.72rem; padding: 0.1rem 0.3rem; }
+/* A heap slot whose value changed since this array last appeared --
+   push, pop, or a sift-up/down swap your code just made (see HeapView's
+   caption for what the trace can and can't show about *why*). */
+.heap-node-changed { border-color: var(--amber); background: var(--amber-soft); }
 
 /* ---- 3. call stack ------------------------------------------------- */
 
@@ -111,6 +177,12 @@
   border-radius: var(--radius-sm);
   background: var(--s3);
   padding: 0.45rem 0.65rem;
+  transition: background-color 0.12s ease, border-left-color 0.12s ease;
+  /* Frames are keyed by the step index of their "call" event, so this
+     only plays once, when a call genuinely pushes a new frame -- an
+     existing frame being promoted to "top" (or demoted) on the next step
+     keeps the same DOM node and just transitions the properties above. */
+  animation: viz-enter 0.16s ease-out;
 }
 /* The topmost card is the currently-active call -- the frame whose line
    is executing right now, so it earns the focus accent. */
@@ -136,8 +208,19 @@
   font-family: var(--font-code);
   font-size: 0.82rem;
   position: relative;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+  /* Keyed by the element's own position in the underlying array (see
+     StackQueueView), so this plays for a genuine push/enqueue -- the one
+     index that didn't exist a step ago -- without touching cells that
+     were already there. */
+  animation: viz-enter 0.16s ease-out;
 }
 .sq-cell-edge { border-color: var(--sky); background: var(--sky-soft); }
+/* Whatever changed in this collection since it last appeared in the
+   trace -- almost always the cell your code just pushed/enqueued.
+   Declared after -edge so it wins when a push lands exactly on the
+   top/front/back slot. */
+.sq-cell-changed { border-color: var(--amber); background: var(--amber-soft); }
 .sq-cell-label { position: absolute; top: -1.1rem; left: 0; right: 0; font-size: 0.6rem; color: var(--sky); text-align: center; font-family: var(--font-mono); }
 
 /* ---- 6. sorting -------------------------------------------------------- */
@@ -146,7 +229,7 @@
 .sort-bars { display: flex; align-items: flex-end; gap: 3px; height: 110px; }
 .sort-bar-wrap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
 .sort-bar { width: 16px; background: var(--sky); border-radius: 2px 2px 0 0; }
-@media (prefers-reduced-motion: no-preference) { .sort-bar { transition: height 0.15s ease; } }
+@media (prefers-reduced-motion: no-preference) { .sort-bar { transition: height 0.15s ease, background-color 0.15s ease; } }
 /* The bar(s) that changed value at this exact step -- the direct result
    of whatever swap/write your code just performed. */
 .sort-bar-changed .sort-bar { background: var(--amber); }
@@ -166,16 +249,31 @@
   font-family: var(--font-code);
   border-radius: 3px;
   border: 1px solid var(--border);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 .grid-cell-off { background: var(--s3); color: var(--text-faint); }
 .grid-cell-on { background: var(--ok-soft); color: var(--ok); }
+/* Cells your code has already visited -- either a real visited/seen local
+   (preferred) or, failing that, cells that have ever differed from this
+   grid's first captured value (the common in-place-marking pattern). A
+   border only, deliberately, so it layers over -on/-off's own background
+   without fighting it. --sky is unused elsewhere in this view, so there's
+   no ambiguity with the on/off coloring above. */
+.grid-cell-visited { box-shadow: inset 0 0 0 1.5px var(--sky); }
+/* Cells sitting in an actual queue/stack local right now (only detected
+   by common naming -- see frontierCells' own comment). Dashed so it
+   reads as "pending", not "done" like the visited marker above. */
+.grid-cell-frontier { border-style: dashed; border-color: var(--violet); }
 /* The current (row, col) cursor your code is tracking -- another literal
-   "you are here" pointer, same treatment as the trace scrubber's thumb. */
+   "you are here" pointer, same treatment as the trace scrubber's thumb.
+   Uses outline rather than box-shadow specifically so it can never be
+   visually confused with (or overridden by) the visited marker above --
+   a cell can legitimately be both at once. */
 .grid-cell-cursor { outline: 2px solid var(--amber); outline-offset: -2px; }
 
 .graph-canvas { position: relative; width: 300px; height: 300px; }
 .graph-edges { position: absolute; top: 0; left: 0; pointer-events: none; }
-.graph-node-wrap { position: absolute; display: flex; flex-direction: column; align-items: center; }
+.graph-node-wrap { position: absolute; display: flex; flex-direction: column; align-items: center; animation: viz-enter 0.16s ease-out; }
 .graph-pointer-tags { display: flex; gap: 2px; min-height: 14px; }
 .graph-node {
   width: 40px;
@@ -189,7 +287,17 @@
   font-family: var(--font-code);
   font-size: 0.78rem;
   z-index: 1;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
+/* Current focus or a node that just changed -- see the matching
+   .tree-node-changed comment above, same reasoning. */
+.graph-node-changed { border-color: var(--amber); background: var(--amber-soft); }
+/* Quiet tiers built from --sky at reduced strength: unlike trees, graph
+   nodes' own baseline color is --orchid, so sky reads as a clearly
+   distinct, secondary accent here rather than colliding with the node's
+   resting state. */
+.graph-node-quiet-strong { box-shadow: 0 0 0 2px var(--sky-soft); }
+.graph-node-quiet-faint { box-shadow: 0 0 0 2px rgba(95, 176, 230, 0.08); }
 
 /* ---- 9. DP tables -------------------------------------------------- */
 
@@ -206,7 +314,13 @@
   font-family: var(--font-code);
   font-size: 0.72rem;
   color: var(--text-dim);
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
 }
+/* Still at its initialization value -- your code hasn't computed this
+   subproblem yet. Opacity only (not a different background) so the
+   optional magnitude wash below still reads correctly once a cell
+   graduates out of this state. */
+.dp-cell-untouched { opacity: 0.45; }
 /* The subproblem your code just solved -- the cell(s) written at this
    exact step. */
 .dp-cell-changed { background: var(--amber-soft); border-color: rgba(242, 177, 52, 0.5); color: var(--amber); font-weight: 700; }

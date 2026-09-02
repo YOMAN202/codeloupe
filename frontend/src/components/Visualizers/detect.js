@@ -106,6 +106,46 @@ export function hasStringOrList(locals) {
   return Object.values(locals).some((v) => isPrimitiveList(v) || isDisplayableString(v));
 }
 
+// Which integer locals are plausibly array/string INDICES vs ordinary
+// numeric values (a target being searched for, a running count/sum,
+// a distance, a price...). The tracer only gives us a name and a value
+// per step -- no static analysis of how a variable is actually used in
+// the source -- so this is unavoidably a name-based heuristic, same as
+// the grid view's row/col detection just below in Visualizers.jsx. Kept
+// deliberately conservative and allow-list-based (default: NOT a
+// pointer) rather than "anything in bounds counts": a false negative
+// (a real pointer variable with an unusual name doesn't get a tag) is
+// far less misleading than a false positive (an ordinary value like
+// `target` or `count` gets drawn as if it were navigating the array).
+//
+// The base names below were checked against this app's own curated
+// reference solutions (backend/db/seed_problems.py) across two-pointer,
+// binary-search, sliding-window, and array/sorting problems, rather than
+// guessed -- e.g. `k` was deliberately EXCLUDED after checking: every
+// `k` in this codebase's reference solutions is a slice boundary or
+// problem parameter (e.g. "rotate by k"), never an index a value is
+// compared against, so allow-listing it would reintroduce exactly this
+// bug for "k-th largest" style problems. Same reasoning excluded `curr`/
+// `prev` (used for rolling DP totals, not array positions, in this
+// corpus) and generic single letters like `n`, `m`, `x`.
+const POINTER_BASE_NAMES = new Set([
+  "i", "j", "l", "r",
+  "left", "right", "lo", "hi", "low", "high",
+  "mid", "middle", "slow", "fast",
+  "read", "write", "start", "end",
+  "idx", "index", "pos", "ptr", "cursor",
+  "front", "back", "top", "bottom",
+]);
+
+// Strips a trailing numeric suffix so paired pointers like `left1`/`left2`
+// or `l1`/`r2` (seen in this app's own multi-pointer problems) still
+// match their base name.
+export function isLikelyPointerName(name) {
+  if (typeof name !== "string") return false;
+  const base = name.toLowerCase().replace(/\d+$/, "");
+  return POINTER_BASE_NAMES.has(base);
+}
+
 // One primary structural view per step, chosen by (in priority order):
 // an actual node-graph shape found in the data itself (tree/linked-list/
 // graph -- these are unambiguous regardless of problem metadata), then

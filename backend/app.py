@@ -21,7 +21,7 @@ from flask_cors import CORS
 from db.init_db import get_connection, ensure_db
 from execution.sandbox import run_code
 from execution.test_runner import run_against_tests, _extract_function_name
-from execution.tracer import trace_code
+from execution.tracer import trace_code, DEFAULT_TIMEOUT_SECONDS as DEFAULT_TRACE_TIMEOUT
 from logic.revision import compute_next_schedule
 from logic.analysis import estimate_complexity, generate_hint_from_code
 from logic.curriculum_graph import all_prerequisite_blocks
@@ -237,7 +237,8 @@ def get_problem(slug):
     result["concept_lessons"] = _related_concept_lessons(conn, [problem["topic"]])
     conn.close()
     result["visible_test_cases"] = [
-        {"args": json.loads(t["input_args_json"]), "expected": json.loads(t["expected_output_json"])}
+        {"args": json.loads(t["input_args_json"]), "expected": json.loads(t["expected_output_json"]),
+         "label": t["label"]}
         for t in visible
     ]
     return jsonify(result)
@@ -596,8 +597,16 @@ def log_attempt():
     current_index = existing["interval_index"] if existing else -1  # -1 so first pass -> index 0
     new_index, next_due, result_label = compute_next_schedule(passed, is_independent, max(current_index, 0))
     if existing:
+        # source is unconditionally reset to 'auto' here -- this is the ONE
+        # place a manually-added ('source'='manual') row gets touched by a
+        # normal attempt. Revisiting/solving a manually-added problem is
+        # treated as "the manual add did its job," handing the row back to
+        # the automatic ladder (interval_index/next_due_date/last_result
+        # above are computed exactly as they always have been -- this does
+        # not change the scheduling math at all, only who "owns" the row
+        # going forward). A no-op for rows that were already 'auto'.
         conn.execute(
-            "UPDATE revision_schedule SET last_attempt_id=?, next_due_date=?, interval_index=?, last_result=? WHERE problem_id=?",
+            "UPDATE revision_schedule SET last_attempt_id=?, next_due_date=?, interval_index=?, last_result=?, source='auto' WHERE problem_id=?",
             (attempt_id, next_due, new_index, result_label, problem["id"]),
         )
     else:
@@ -610,6 +619,105 @@ def log_attempt():
     conn.close()
     return jsonify({"attempt_id": attempt_id, "is_independent": is_independent,
                      "next_due_date": next_due, "result": result_label, "mistake": mistake_out})
+
+
+# ------------------------------------------------------- manual revision --
+# Lets the learner opt a problem into the SAME revision_schedule table the
+# automatic ladder above uses, rather than a second parallel system. A
+# manual add either creates a fresh row (never-attempted problem) or, if
+# log_attempt already created one from past attempts, just pulls its
+# next_due_date forward to today -- interval_index/last_result/
+# last_attempt_id are left completely alone, so no ladder progress is
+# lost. The 'manual' tag is temporary: the next time the learner actually
+# revisits the problem through the normal Run Tests -> log_attempt flow
+# (pass OR fail -- same trigger as every other ladder update), log_attempt
+# resets source back to 'auto' itself, so the automatic ladder resumes
+# owning the row and the Problem Workspace button reverts to "Add to
+# revision". See log_attempt's UPDATE above.
+
+def _revision_row_json(row):
+    if row is None:
+        return {"in_revision": False, "source": None, "next_due_date": None,
+                 "interval_index": None, "last_result": None}
+    return {"in_revision": row["source"] == "manual", "source": row["source"],
+            "next_due_date": row["next_due_date"], "interval_index": row["interval_index"],
+            "last_result": row["last_result"]}
+
+
+@app.route("/api/problems/<slug>/revision", methods=["GET"])
+def get_revision_status(slug):
+    """Tells the frontend whether THIS problem is currently manually
+    scheduled (source='manual'), so the Problem Workspace header can
+    render "Add to revision" vs. "Remove from revision" correctly as soon
+    as the problem loads, without guessing from other state."""
+    conn = get_connection()
+    problem = conn.execute("SELECT id FROM problems WHERE slug = ?", (slug,)).fetchone()
+    if problem is None:
+        conn.close()
+        return jsonify({"error": f"No problem '{slug}'"}), 404
+    row = conn.execute(
+        "SELECT next_due_date, interval_index, last_result, source FROM revision_schedule WHERE problem_id = ?",
+        (problem["id"],),
+    ).fetchone()
+    conn.close()
+    return jsonify(_revision_row_json(row))
+
+
+@app.route("/api/problems/<slug>/revision", methods=["POST"])
+def add_manual_revision(slug):
+    conn = get_connection()
+    problem = conn.execute("SELECT id FROM problems WHERE slug = ?", (slug,)).fetchone()
+    if problem is None:
+        conn.close()
+        return jsonify({"error": f"No problem '{slug}'"}), 404
+
+    today = __import__("datetime").date.today().isoformat()
+    existing = conn.execute(
+        "SELECT id FROM revision_schedule WHERE problem_id = ?", (problem["id"],)
+    ).fetchone()
+    if existing:
+        # Already has a schedule row (auto, from a past attempt, or already
+        # manual) -- just bring it due today. interval_index/last_result/
+        # last_attempt_id are untouched on purpose.
+        conn.execute(
+            "UPDATE revision_schedule SET next_due_date = ?, source = 'manual' WHERE problem_id = ?",
+            (today, problem["id"]),
+        )
+    else:
+        # Never attempted: a fresh row with no ladder history yet.
+        # last_result stays NULL -- the Dashboard renders that as "added
+        # manually" rather than "last: None" (see Dashboard.jsx).
+        conn.execute(
+            """INSERT INTO revision_schedule
+               (problem_id, last_attempt_id, next_due_date, interval_index, last_result, source)
+               VALUES (?, NULL, ?, 0, NULL, 'manual')""",
+            (problem["id"], today),
+        )
+    conn.commit()
+    row = conn.execute(
+        "SELECT next_due_date, interval_index, last_result, source FROM revision_schedule WHERE problem_id = ?",
+        (problem["id"],),
+    ).fetchone()
+    conn.close()
+    return jsonify(_revision_row_json(row))
+
+
+@app.route("/api/problems/<slug>/revision", methods=["DELETE"])
+def remove_manual_revision(slug):
+    """Removes the problem's revision_schedule row entirely -- whatever
+    ladder position or manual flag it had. Attempt history (the `attempts`
+    table) and any logged mistakes are untouched; solving the problem
+    again afterward starts a brand new schedule the normal way, via
+    log_attempt."""
+    conn = get_connection()
+    problem = conn.execute("SELECT id FROM problems WHERE slug = ?", (slug,)).fetchone()
+    if problem is None:
+        conn.close()
+        return jsonify({"error": f"No problem '{slug}'"}), 404
+    conn.execute("DELETE FROM revision_schedule WHERE problem_id = ?", (problem["id"],))
+    conn.commit()
+    conn.close()
+    return jsonify(_revision_row_json(None))
 
 
 # ---------------------------------------------------------- mistake journal --
@@ -649,6 +757,36 @@ def update_mistake(mistake_id):
     conn.commit()
     conn.close()
     return jsonify({"id": mistake_id, "category": new_category, "confidence": new_confidence})
+
+
+@app.route("/api/mistakes/<int:mistake_id>", methods=["DELETE"])
+def delete_mistake(mistake_id):
+    """Removes exactly one mistake-journal entry, permanently.
+
+    Deliberately narrow: this deletes only the `mistakes` row (by its own
+    primary key -- there is no way to hit any row but the intended one).
+    `attempts` is a completely separate table (mistakes.attempt_id is a
+    UNIQUE reference INTO it, not the other way around) and is never
+    touched here, so the learner's full submission/attempt history --
+    what the Problem Workspace's History tab and is_independent-based
+    stats read -- is unaffected. Every downstream number that depends on
+    `mistakes` (mistake_journal's counts above, and the dashboard's
+    top_weaknesses/pattern_weaknesses/recurring_mistakes in /api/progress)
+    is computed live with a fresh SQL query on every request, never
+    cached/materialized -- so it reflects a deletion automatically on the
+    very next fetch, with no other bookkeeping needed here."""
+    conn = get_connection()
+    existing = conn.execute(
+        "SELECT m.id, p.title FROM mistakes m JOIN problems p ON m.problem_id = p.id WHERE m.id = ?",
+        (mistake_id,),
+    ).fetchone()
+    if existing is None:
+        conn.close()
+        return jsonify({"error": f"No mistake {mistake_id}"}), 404
+    conn.execute("DELETE FROM mistakes WHERE id = ?", (mistake_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"deleted": True, "id": mistake_id, "title": existing["title"]})
 
 
 @app.route("/api/mistakes/journal", methods=["GET"])
@@ -1017,6 +1155,10 @@ def trace():
     if not isinstance(code, str) or not code.strip():
         return jsonify({"error": "Request body must include non-empty 'code'"}), 400
     result = trace_code(code)
+    # Nothing is appended after the submitted code on this endpoint, so
+    # every real trace step already falls within it -- see source_line_count's
+    # docstring on trace_problem() below for what this field is actually for.
+    result["source_line_count"] = code.rstrip().count("\n") + 1
     return jsonify(result)
 
 
@@ -1041,6 +1183,22 @@ def trace_problem(slug):
     custom_args = payload.get("custom_args")
     if not isinstance(code, str) or not code.strip():
         return jsonify({"error": "Request body must include non-empty 'code'"}), 400
+
+    # Optional, and only ever able to make this request MORE conservative
+    # than the default -- an explicit "Trace my code" click still gets the
+    # full DEFAULT_TIMEOUT budget below. This exists for the live-preview
+    # panel (see ProblemWorkspace.jsx): a background trace fired automatically
+    # while the learner is mid-typing should give up much sooner than 8s if
+    # their current, possibly-broken-mid-edit code hangs, rather than
+    # tying up this single-threaded dev server for the full budget on every
+    # debounce tick. A caller can only ever LOWER the timeout, never raise
+    # it past DEFAULT_TIMEOUT -- so this can't be used to weaken the
+    # existing execution limit, only to opt into a stricter one.
+    requested_timeout = payload.get("timeout")
+    if isinstance(requested_timeout, (int, float)) and not isinstance(requested_timeout, bool) and 0 < requested_timeout <= DEFAULT_TRACE_TIMEOUT:
+        trace_timeout = requested_timeout
+    else:
+        trace_timeout = DEFAULT_TRACE_TIMEOUT
 
     conn = get_connection()
     problem = conn.execute(
@@ -1075,13 +1233,26 @@ def trace_problem(slug):
     # repr(), not json.dumps(): JSON's true/false/null aren't valid Python
     # syntax -- the exact same class of bug the grading harness already
     # hit once and fixed the same way (see test_runner.py).
-    augmented_code = code.rstrip() + f"\n\n{fn_name}(*{args!r})\n"
+    visible_source = code.rstrip()
+    augmented_code = visible_source + f"\n\n{fn_name}(*{args!r})\n"
 
-    result = trace_code(augmented_code)
+    result = trace_code(augmented_code, timeout=trace_timeout)
     result["traced_test_case_index"] = idx
     result["traced_test_case_args"] = args
     result["traced_test_case_count"] = test_case_count
     result["traced_custom"] = isinstance(custom_args, list)
+    # The learner's editor only ever shows `code` -- the line we just
+    # appended above (the call into their function using this test case's
+    # args) is real Python that really executes, but it exists nowhere the
+    # learner can see. Rather than have the frontend guess at an offset,
+    # tell it exactly where the visible source ends: any trace step whose
+    # `line` is beyond this count belongs to that invisible appended call
+    # (or, for line 0's initial module "call" event, predates any line at
+    # all), and the UI should label it as such instead of showing a line
+    # number that doesn't exist in the editor. This is an exact boundary
+    # computed from the same `visible_source` string that was compiled --
+    # not a guessed/hardcoded offset.
+    result["source_line_count"] = visible_source.count("\n") + 1
     return jsonify(result)
 
 

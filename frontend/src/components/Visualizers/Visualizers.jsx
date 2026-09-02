@@ -1,12 +1,28 @@
 import "./visualizers.css";
 import { collectNodeGraph } from "./nodeGraph";
-import { colorForName, detectPrimaryView, isPrimitiveList, isNumericList, isBoolOrNumericList, isGridOfNumbers, isDisplayableString } from "./detect";
+import { colorForName, detectPrimaryView, isPrimitiveList, isNumericList, isBoolOrNumericList, isGridOfNumbers, isDisplayableString, isLikelyPointerName } from "./detect";
+import { formatValue } from "../../utils/format";
 
 // Codeloupe's core promise, restated for every view in this file: render
 // what the learner's OWN code actually did at this exact step -- correct
 // or not -- never a canned animation of the "right" algorithm. Every
 // component here reads straight from the captured trace snapshot; none
 // of them know what the "correct" answer looks like.
+//
+// Visual-clarity conventions (see visualizers.css's own top-of-file
+// comment for the full color rule): amber stays reserved for "the direct
+// result of / focus of the CURRENT step" everywhere below -- a written
+// array cell, a node whose fields just changed, the node a plain pointer
+// currently references, a just-pushed stack cell. Anything "worth noting
+// but not the current step's focus" (a BFS/DFS node in the frontier, a
+// node your code pointed at a few steps ago, a grid cell visited earlier)
+// gets a quieter tint built from an existing secondary token instead, so
+// it never competes with amber for attention. Pointer "movement" is shown
+// for free by giving `.pointer-chip` a brief mount animation (see the
+// CSS) -- since every chip is keyed by variable name inside whichever
+// node/box it currently occupies, React itself unmounts+remounts it
+// whenever a pointer moves, so the animation plays exactly when and only
+// when a pointer's position actually changed, with no extra diffing.
 
 function Caption({ children }) {
   return <p className="viz-caption">{children}</p>;
@@ -25,34 +41,144 @@ function findPreviousValue(steps, index, name) {
   return undefined;
 }
 
+// Array/object element equality, not just `===`. Every trace step is its
+// own fresh JSON.parse, so two structurally-identical values (a heap's
+// (distance, node) tuple, a locals entry that's itself a small list) are
+// never the same object reference even when nothing actually changed --
+// `===` alone would flag them as "changed" on literally every step.
+// Primitives short-circuit on the `===` check first, so this stays just
+// as cheap as a plain `!==` for the number/string/boolean case every
+// caller other than HeapView actually uses.
+function valuesEqual(a, b) {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) return formatValue(a) === formatValue(b);
+  return false;
+}
+
 function diffIndices(prevArr, currArr) {
   if (!Array.isArray(prevArr) || !Array.isArray(currArr)) return new Set();
   const changed = new Set();
   const len = Math.max(prevArr.length, currArr.length);
   for (let i = 0; i < len; i++) {
-    if (prevArr[i] !== currArr[i]) changed.add(i);
+    if (!valuesEqual(prevArr[i], currArr[i])) changed.add(i);
   }
   return changed;
 }
 
+// ---- shared: node-graph diffing (linked lists / trees / graphs) --------
+// Mirrors findPreviousValue's heuristic above, but for the id-keyed
+// node/edge graph collectNodeGraph builds from locals, so these views can
+// highlight "which node did my code just touch" the same way array/DP/
+// sorting views highlight "which index changed" -- reusing real object
+// identity (__id__ from tracer.py) rather than guessing from position.
+
+// The most recent step with real per-line locals before `index` -- "call"
+// steps always carry empty locals and "return" steps carry none at all
+// (see tracer.py), so this has to skip past those, the same way
+// findPreviousValue skips past steps that don't mention a given name.
+function mostRecentLineIndex(steps, index, maxBack = 300) {
+  const start = Math.max(0, index - maxBack);
+  for (let i = index - 1; i >= start; i--) {
+    if (steps[i].event === "line") return i;
+  }
+  return -1;
+}
+
+function previousGraph(steps, index) {
+  const i = mostRecentLineIndex(steps, index);
+  return i >= 0 ? collectNodeGraph(steps[i].locals) : null;
+}
+
+// Node ids whose fields/refs differ from the same id's fields one step
+// ago ("changed"), plus ids that didn't exist a step ago at all ("new").
+// Comparing by id -- real object identity -- is what makes this reliable
+// even when a node gets reached via a different variable name than
+// before (e.g. "prev" now points at what "curr" pointed at last step).
+function graphDiff(prevGraph, currGraph) {
+  const changed = new Set();
+  const isNew = new Set();
+  if (!prevGraph) return { changed, isNew };
+  for (const [id, node] of currGraph.nodes) {
+    const prevNode = prevGraph.nodes.get(id);
+    if (!prevNode) {
+      isNew.add(id);
+      continue;
+    }
+    const refKeys = new Set([...Object.keys(node.fieldRefs), ...Object.keys(prevNode.fieldRefs)]);
+    const refsDiffer = [...refKeys].some((k) => (node.fieldRefs[k] ?? null) !== (prevNode.fieldRefs[k] ?? null));
+    const fieldKeys = new Set([...Object.keys(node.fields), ...Object.keys(prevNode.fields)]);
+    const fieldsDiffer = [...fieldKeys].some((k) => formatValue(node.fields[k]) !== formatValue(prevNode.fields[k]));
+    const neighborsDiffer = formatValue(node.neighborIds) !== formatValue(prevNode.neighborIds);
+    if (refsDiffer || fieldsDiffer || neighborsDiffer) changed.add(id);
+  }
+  return { changed, isNew };
+}
+
+// Best-effort "recently referenced" trail: walks backward from `index`
+// (bounded, same spirit as findPreviousValue) recording how many steps
+// ago each node id was pointed at by a plain, single-variable root --
+// i.e. actually dereferenced by name, not just sitting in an unexamined
+// queue/list. This is NOT a claim about true traversal order -- just
+// "your code looked at this recently" -- so older hits fade rather than
+// staying permanently marked, and it never overrides the current step's
+// amber focus.
+function recencyMap(steps, index, window = 30) {
+  const map = new Map();
+  const start = Math.max(0, index - window);
+  for (let i = index - 1; i >= start; i--) {
+    const s = steps[i];
+    if (s.event !== "line") continue;
+    const g = collectNodeGraph(s.locals);
+    for (const r of g.roots) {
+      if (r.id != null && !r.name.includes("[") && !map.has(r.id)) map.set(r.id, index - i);
+    }
+  }
+  return map;
+}
+
+// Classifies one node id into a quiet-highlight tier once it's already
+// been excluded from the amber "current/changed" treatment -- "strong"
+// covers both "in the frontier right now" (a BFS/DFS queue local,
+// expanded into indexed roots by collectNodeGraph itself -- see its own
+// comment) and "referenced within the last ~8 steps"; "faint" covers the
+// rest of the recency window. Kept to two tiers deliberately -- enough to
+// read as "fading", not enough to turn into a confusing gradient.
+function quietTier(id, frontierIds, recency) {
+  if (frontierIds.has(id)) return "strong";
+  if (recency.has(id)) return recency.get(id) <= 8 ? "strong" : "faint";
+  return null;
+}
+
 /* ============================== 1. ARRAYS / STRINGS / POINTERS / SLIDING WINDOW ============================== */
 
-export function ArrayPointerView({ locals, topic, pattern }) {
+export function ArrayPointerView({ locals, topic, pattern, steps, index }) {
   const sequences = Object.entries(locals).filter(([, v]) => isPrimitiveList(v) || isDisplayableString(v));
   if (sequences.length === 0) return null;
 
-  const intVars = Object.entries(locals).filter(([, v]) => Number.isInteger(v));
+  // Only integer locals whose NAME looks like an index/pointer (left,
+  // right, mid, i, j, ...) are ever drawn as pointers -- see
+  // isLikelyPointerName in detect.js for exactly which names qualify and
+  // why. Being in-bounds is necessary but not sufficient: an ordinary
+  // value like `target` or `count` can easily fall inside [0, len) by
+  // coincidence (e.g. searching for 0 in a 7-element array) without
+  // being a position the code is tracking at all.
+  const intVars = Object.entries(locals).filter(([name, v]) => Number.isInteger(v) && isLikelyPointerName(name));
   const windowEligible = topic === "sliding-window" || topic === "two-pointer" || /window|two.pointer/.test(pattern || "");
 
   return (
     <div className="viz-block">
       <Caption>
-        Your array/string state right now, with any integer variable that's currently a valid index
-        shown as a labeled pointer underneath it{windowEligible ? " — the shaded band shows the span between your outermost pointers, i.e. the current window." : "."}
+        Your array/string state right now, with index-like variables (left/right, lo/hi, mid, i/j,
+        slow/fast, and similar) shown as a labeled pointer underneath the position they currently
+        point to{windowEligible ? " — the shaded band shows the span between your outermost pointers, i.e. the current window." : "."}{" "}
+        Amber marks a value your code just wrote at this exact step.
       </Caption>
       {sequences.map(([name, raw]) => {
         const isStr = typeof raw === "string";
         const arr = isStr ? raw.split("") : raw;
+        const prevRaw = findPreviousValue(steps, index, name);
+        const prevArr = prevRaw == null ? undefined : typeof prevRaw === "string" ? prevRaw.split("") : prevRaw;
+        const changed = diffIndices(prevArr, arr);
         const pointers = intVars.filter(([, v]) => v >= 0 && v < arr.length);
         const windowRange =
           windowEligible && pointers.length >= 2
@@ -68,7 +194,10 @@ export function ArrayPointerView({ locals, topic, pattern }) {
                 const inWindow = windowRange && i >= windowRange[0] && i <= windowRange[1];
                 const here = pointers.filter(([, v]) => v === i);
                 return (
-                  <div key={i} className={`seq-box ${inWindow ? "seq-box-in-window" : ""}`}>
+                  <div
+                    key={i}
+                    className={`seq-box ${inWindow ? "seq-box-in-window" : ""} ${changed.has(i) ? "seq-box-changed" : ""}`}
+                  >
                     {here.length > 0 && (
                       <div className="seq-box-pointer-tags">
                         {here.map(([pname]) => (
@@ -93,9 +222,11 @@ export function ArrayPointerView({ locals, topic, pattern }) {
 
 /* ============================== 2. LINKED LISTS ============================== */
 
-export function LinkedListView({ graph }) {
+export function LinkedListView({ graph, steps, index }) {
   const { nodes, roots } = graph;
   if (nodes.size === 0) return null;
+
+  const { changed, isNew } = graphDiff(previousGraph(steps, index), graph);
 
   // Build a display chain by following .next from whichever root looks
   // most like a starting point ("head" if present, else the first root
@@ -133,12 +264,14 @@ export function LinkedListView({ graph }) {
       <Caption>
         Each box is one node your code is actually pointing at right now (matched by real object
         identity, not just value) — labeled tags show which of your variables point where. Arrows
-        follow each node's real <code>.next</code>.
+        follow each node's real <code>.next</code>. Amber marks a node whose fields or{" "}
+        <code>.next</code> your code just changed.
       </Caption>
       <div className="ll-chain">
         {chain.map((id, i) => {
           const node = nodes.get(id);
           const pointers = pointersAt(id);
+          const isChanged = changed.has(id) || isNew.has(id);
           return (
             <div className="ll-node-wrap" key={id}>
               {pointers.length > 0 && (
@@ -150,7 +283,7 @@ export function LinkedListView({ graph }) {
                   ))}
                 </div>
               )}
-              <div className="ll-node">{String(primaryField(node))}</div>
+              <div className={`ll-node ${isChanged ? "ll-node-changed" : ""}`}>{String(primaryField(node))}</div>
               {i < chain.length - 1 ? (
                 <span className="ll-arrow">&rarr;</span>
               ) : cycleAt != null ? (
@@ -190,6 +323,7 @@ export function LinkedListView({ graph }) {
             {orphans.map((id) => {
               const node = nodes.get(id);
               const pointers = pointersAt(id);
+              const isChanged = changed.has(id) || isNew.has(id);
               return (
                 <div className="ll-node-wrap" key={id}>
                   {pointers.length > 0 && (
@@ -201,7 +335,9 @@ export function LinkedListView({ graph }) {
                       ))}
                     </div>
                   )}
-                  <div className="ll-node ll-node-orphan">{String(primaryField(node))}</div>
+                  <div className={`ll-node ll-node-orphan ${isChanged ? "ll-node-changed" : ""}`}>
+                    {String(primaryField(node))}
+                  </div>
                 </div>
               );
             })}
@@ -259,13 +395,13 @@ export function CallStackView({ steps, index }) {
               <div className="call-frame-locals">
                 {Object.entries(frame.locals).map(([k, v]) => (
                   <span key={k} className="call-frame-local">
-                    {k}=<code>{JSON.stringify(v)}</code>
+                    {k}=<code>{formatValue(v)}</code>
                   </span>
                 ))}
               </div>
             )}
             {frame.justReturned !== undefined && (
-              <div className="call-frame-return">returning &rarr; <code>{JSON.stringify(frame.justReturned)}</code></div>
+              <div className="call-frame-return">returning &rarr; <code>{formatValue(frame.justReturned)}</code></div>
             )}
           </div>
         ))}
@@ -276,11 +412,16 @@ export function CallStackView({ steps, index }) {
 
 /* ============================== 4. TREES ============================== */
 
-export function TreeView({ graph }) {
+export function TreeView({ graph, steps, index }) {
   const { nodes, roots } = graph;
   if (nodes.size === 0) return null;
   const rootEntry = roots.find((r) => r.id != null);
   if (!rootEntry) return null;
+
+  const { changed, isNew } = graphDiff(previousGraph(steps, index), graph);
+  const recency = recencyMap(steps, index);
+  const currentIds = new Set(roots.filter((r) => r.id != null && !r.name.includes("[")).map((r) => r.id));
+  const frontierIds = new Set(roots.filter((r) => r.id != null && r.name.includes("[")).map((r) => r.id));
 
   const positions = new Map();
   const edges = [];
@@ -333,7 +474,9 @@ export function TreeView({ graph }) {
     <div className="viz-block">
       <Caption>
         Your tree's real shape and values right now, laid out left-to-right in-order. Colored tags
-        show which variable is currently pointing at which node.
+        show which variable is currently pointing at which node — amber is the node your code just
+        changed or is directly pointing at this step; a fainter ring means your code referenced that
+        node recently or it's sitting in a traversal queue right now.
       </Caption>
       <div className="tree-scroll">
         <div className="tree-canvas" style={{ width, height: height + 40 }}>
@@ -358,6 +501,15 @@ export function TreeView({ graph }) {
           {[...positions.entries()].map(([id, pos]) => {
             const node = nodes.get(id);
             const pointers = pointersAt(id);
+            const isFocus = changed.has(id) || isNew.has(id) || currentIds.has(id);
+            const tier = isFocus ? null : quietTier(id, frontierIds, recency);
+            const nodeClass = isFocus
+              ? "tree-node-changed"
+              : tier === "strong"
+              ? "tree-node-quiet-strong"
+              : tier === "faint"
+              ? "tree-node-quiet-faint"
+              : "";
             return (
               <div
                 key={id}
@@ -373,7 +525,7 @@ export function TreeView({ graph }) {
                     ))}
                   </div>
                 )}
-                <div className="tree-node">{String(primaryField(node))}</div>
+                <div className={`tree-node ${nodeClass}`}>{String(primaryField(node))}</div>
               </div>
             );
           })}
@@ -391,7 +543,7 @@ export function TreeView({ graph }) {
 
 /* ============================== 5. STACKS / QUEUES ============================== */
 
-export function StackQueueView({ locals, mode }) {
+export function StackQueueView({ locals, mode, steps, index }) {
   const entries = Object.entries(locals).filter(([, v]) => isPrimitiveList(v));
   if (entries.length === 0) return null;
   return (
@@ -399,27 +551,38 @@ export function StackQueueView({ locals, mode }) {
       <Caption>
         {mode === "stack"
           ? "Rendered as a stack — the last element is the top, exactly what .pop() would remove next."
-          : "Rendered as a queue — the first element is the front, exactly what would be dequeued next."}
+          : "Rendered as a queue — the first element is the front, exactly what would be dequeued next."}{" "}
+        Amber marks whatever changed here since this collection last appeared in the trace — your
+        most recent push/enqueue.
       </Caption>
-      {entries.map(([name, arr]) => (
-        <div key={name} className={`sq-view sq-${mode}`}>
-          <div className="seq-label">{name}</div>
-          <div className={mode === "stack" ? "sq-stack" : "sq-queue"}>
-            {(mode === "stack" ? [...arr].reverse() : arr).map((val, i) => {
-              const isEdge = mode === "stack" ? i === 0 : i === 0 || i === arr.length - 1;
-              const edgeLabel =
-                mode === "stack" && i === 0 ? "top" : mode === "queue" && i === 0 ? "front" : mode === "queue" && i === arr.length - 1 ? "back" : null;
-              return (
-                <div key={i} className={`sq-cell ${isEdge ? "sq-cell-edge" : ""}`}>
-                  {edgeLabel && <div className="sq-cell-label">{edgeLabel}</div>}
-                  <div className="sq-cell-value">{String(val)}</div>
-                </div>
-              );
-            })}
-            {arr.length === 0 && <span className="muted small">(empty)</span>}
+      {entries.map(([name, arr]) => {
+        const prev = findPreviousValue(steps, index, name);
+        const changed = diffIndices(prev, arr);
+        const display = mode === "stack" ? [...arr].reverse() : arr;
+        return (
+          <div key={name} className={`sq-view sq-${mode}`}>
+            <div className="seq-label">{name}</div>
+            <div className={mode === "stack" ? "sq-stack" : "sq-queue"}>
+              {display.map((val, i) => {
+                const originalIndex = mode === "stack" ? arr.length - 1 - i : i;
+                const isEdge = mode === "stack" ? i === 0 : i === 0 || i === arr.length - 1;
+                const edgeLabel =
+                  mode === "stack" && i === 0 ? "top" : mode === "queue" && i === 0 ? "front" : mode === "queue" && i === arr.length - 1 ? "back" : null;
+                return (
+                  <div
+                    key={originalIndex}
+                    className={`sq-cell ${isEdge ? "sq-cell-edge" : ""} ${changed.has(originalIndex) ? "sq-cell-changed" : ""}`}
+                  >
+                    {edgeLabel && <div className="sq-cell-label">{edgeLabel}</div>}
+                    <div className="sq-cell-value">{String(val)}</div>
+                  </div>
+                );
+              })}
+              {arr.length === 0 && <span className="muted small">(empty)</span>}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -463,7 +626,79 @@ export function SortingView({ locals, steps, index }) {
 
 /* ============================== 7. GRAPHS (grid + node) ============================== */
 
-export function GridGraphView({ locals }) {
+// Real trace data, preferred over any heuristic when it's present: a
+// local literally named visited/seen/explored, shaped either like this
+// grid (a same-size boolean/number grid) or like a list of [row, col]
+// pairs.
+function explicitVisitedCells(locals, grid) {
+  const rows = grid.length;
+  const cols = grid[0]?.length ?? 0;
+  for (const [name, v] of Object.entries(locals)) {
+    if (!/^(visited|seen|explored)$/i.test(name)) continue;
+    if (Array.isArray(v) && v.length === rows && v.every((row) => Array.isArray(row) && row.length === cols)) {
+      const set = new Set();
+      v.forEach((row, r) => row.forEach((cell, c) => {
+        if (cell === true || cell === 1) set.add(`${r},${c}`);
+      }));
+      return set;
+    }
+    if (Array.isArray(v) && v.length > 0 && v.every((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isInteger))) {
+      return new Set(v.map(([r, c]) => `${r},${c}`));
+    }
+  }
+  return null;
+}
+
+// Fallback when there's no explicit visited/seen local: cells that have
+// ever differed from this grid's very first captured value, up through
+// the current step. Covers the common "mark visited by mutating the grid
+// in place" pattern (flood fill, number of islands, rotting oranges)
+// without needing a dedicated visited structure. Best-effort, same spirit
+// as findPreviousValue -- not a claim about exactly when each cell changed.
+function everChangedCells(steps, index, name) {
+  const set = new Set();
+  let initial;
+  for (let i = 0; i <= index; i++) {
+    const locals = steps[i].locals;
+    if (locals && Object.prototype.hasOwnProperty.call(locals, name)) {
+      initial = locals[name];
+      break;
+    }
+  }
+  const current = steps[index].locals?.[name];
+  if (!Array.isArray(initial) || !Array.isArray(current)) return set;
+  current.forEach((row, r) => {
+    const initRow = Array.isArray(initial[r]) ? initial[r] : [];
+    row.forEach((cell, c) => {
+      if (initRow[c] !== cell) set.add(`${r},${c}`);
+    });
+  });
+  return set;
+}
+
+// A queue/stack/frontier-named local holding [row, col] pairs, within
+// this grid's bounds -- real local data, but only discoverable by common
+// naming since nothing in the trace structurally marks "this is the
+// frontier" the way object identity marks node pointers.
+function frontierCells(locals, grid) {
+  const rows = grid.length;
+  const cols = grid[0]?.length ?? 0;
+  const inBounds = (r, c) => Number.isInteger(r) && Number.isInteger(c) && r >= 0 && r < rows && c >= 0 && c < cols;
+  for (const [name, v] of Object.entries(locals)) {
+    if (!/^(queue|q|dq|deque|frontier|stack|to_visit|pending|next_level)$/i.test(name)) continue;
+    if (
+      Array.isArray(v) &&
+      v.length > 0 &&
+      v.length <= rows * cols &&
+      v.every((p) => Array.isArray(p) && p.length === 2 && inBounds(p[0], p[1]))
+    ) {
+      return new Set(v.map(([r, c]) => `${r},${c}`));
+    }
+  }
+  return new Set();
+}
+
+export function GridGraphView({ locals, steps, index }) {
   const entries = Object.entries(locals).filter(([, v]) => isGridOfNumbers(v));
   if (entries.length === 0) return null;
   // A pair of int locals (row, col) is common in grid-DFS/BFS problems --
@@ -472,12 +707,15 @@ export function GridGraphView({ locals }) {
   return (
     <div className="viz-block">
       <Caption>
-        Your grid's actual current values. If your code tracks a current (row, col) position, it's
-        outlined below.
+        Your grid's actual current values. The current (row, col) position your code is tracking is
+        outlined in amber; cells your code has already visited are shaded, and cells sitting in a
+        traversal queue (when one exists in your code) are marked with a dashed border.
       </Caption>
       {entries.map(([name, grid]) => {
         const rowVar = intPairs.find(([n]) => /^(r|row|i)$/i.test(n));
         const colVar = intPairs.find(([n]) => /^(c|col|j)$/i.test(n));
+        const visited = explicitVisitedCells(locals, grid) ?? everChangedCells(steps, index, name);
+        const frontier = frontierCells(locals, grid);
         return (
           <div key={name} className="grid-view">
             <div className="seq-label">{name}</div>
@@ -486,6 +724,9 @@ export function GridGraphView({ locals }) {
                 <div key={r} className="grid-row">
                   {row.map((cell, c) => {
                     const isCursor = rowVar && colVar && rowVar[1] === r && colVar[1] === c;
+                    const key = `${r},${c}`;
+                    const isVisited = visited.has(key);
+                    const isFrontier = frontier.has(key);
                     const truthy =
                       cell === 1 ||
                       cell === true ||
@@ -493,7 +734,7 @@ export function GridGraphView({ locals }) {
                     return (
                       <div
                         key={c}
-                        className={`grid-cell ${truthy ? "grid-cell-on" : "grid-cell-off"} ${isCursor ? "grid-cell-cursor" : ""}`}
+                        className={`grid-cell ${truthy ? "grid-cell-on" : "grid-cell-off"} ${isVisited ? "grid-cell-visited" : ""} ${isFrontier ? "grid-cell-frontier" : ""} ${isCursor ? "grid-cell-cursor" : ""}`}
                         title={String(cell)}
                       >
                         {String(cell)}
@@ -510,7 +751,7 @@ export function GridGraphView({ locals }) {
   );
 }
 
-export function GraphNodeView({ graph }) {
+export function GraphNodeView({ graph, steps, index }) {
   const { nodes, roots } = graph;
   if (nodes.size === 0) return null;
   const ids = [...nodes.keys()];
@@ -542,11 +783,19 @@ export function GraphNodeView({ graph }) {
     const key = keys.find((k) => k === "val" || k === "value") || keys[0];
     return key ? node.fields[key] : "";
   }
+
+  const { changed, isNew } = graphDiff(previousGraph(steps, index), graph);
+  const recency = recencyMap(steps, index);
+  const currentIds = new Set(roots.filter((r) => r.id != null && !r.name.includes("[")).map((r) => r.id));
+  const frontierIds = new Set(roots.filter((r) => r.id != null && r.name.includes("[")).map((r) => r.id));
+
   return (
     <div className="viz-block">
       <Caption>
         Every node your code currently references and its real neighbor connections. Colored tags
-        show which variable points at which node.
+        show which variable points at which node — amber is the node your code just changed or is
+        directly pointing at this step; a fainter ring means it's in a traversal queue right now or
+        was referenced a few steps ago.
       </Caption>
       <div className="graph-canvas">
         <svg width={300} height={300} className="graph-edges">
@@ -560,6 +809,15 @@ export function GraphNodeView({ graph }) {
           const pos = positions.get(id);
           const node = nodes.get(id);
           const pointers = pointersAt(id);
+          const isFocus = changed.has(id) || isNew.has(id) || currentIds.has(id);
+          const tier = isFocus ? null : quietTier(id, frontierIds, recency);
+          const nodeClass = isFocus
+            ? "graph-node-changed"
+            : tier === "strong"
+            ? "graph-node-quiet-strong"
+            : tier === "faint"
+            ? "graph-node-quiet-faint"
+            : "";
           return (
             <div key={id} className="graph-node-wrap" style={{ left: pos.x - 20, top: pos.y - 20 }}>
               {pointers.length > 0 && (
@@ -571,7 +829,7 @@ export function GraphNodeView({ graph }) {
                   ))}
                 </div>
               )}
-              <div className="graph-node">{String(primaryField(node))}</div>
+              <div className={`graph-node ${nodeClass}`}>{String(primaryField(node))}</div>
             </div>
           );
         })}
@@ -582,7 +840,7 @@ export function GraphNodeView({ graph }) {
 
 /* ============================== 8. HEAPS ============================== */
 
-export function HeapView({ locals }) {
+export function HeapView({ locals, steps, index }) {
   const entries = Object.entries(locals).filter(
     ([, v]) => isNumericList(v) || (Array.isArray(v) && v.length > 0 && v.length <= 63 && v.every((x) => Array.isArray(x) || typeof x === "number"))
   );
@@ -598,9 +856,15 @@ export function HeapView({ locals }) {
       <Caption>
         Your list rendered as a binary heap tree (index <code>i</code>'s children live at{" "}
         <code>2i+1</code>/<code>2i+2</code> — exactly how Python's <code>heapq</code> stores it). This
-        reflects the array's actual current order, heap-valid or not.
+        reflects the array's actual current order, heap-valid or not. Amber marks a slot whose value
+        changed since this array last appeared — a sift-up/down swap, push, or pop your code just
+        made. <code>heapq</code>'s own comparisons happen inside library code this tracer doesn't
+        capture, so individual "comparing these two" steps aren't available — only the resulting
+        array state is.
       </Caption>
       {entries.map(([name, arr]) => {
+        const prev = findPreviousValue(steps, index, name);
+        const changed = diffIndices(prev, arr);
         const CELL_W = 64;
         const CELL_H = 60;
         const depthOf = (i) => Math.floor(Math.log2(i + 1));
@@ -638,7 +902,7 @@ export function HeapView({ locals }) {
                 </svg>
                 {arr.map((v, i) => (
                   <div key={i} className="tree-node-wrap" style={{ left: positions[i].x - 24, top: positions[i].y }}>
-                    <div className="tree-node heap-node">{label(v)}</div>
+                    <div className={`tree-node heap-node ${changed.has(i) ? "heap-node-changed" : ""}`}>{label(v)}</div>
                   </div>
                 ))}
               </div>
@@ -652,18 +916,74 @@ export function HeapView({ locals }) {
 
 /* ============================== 9. DYNAMIC PROGRAMMING TABLES ============================== */
 
+// Every index/cell that has ever differed between two consecutive
+// appearances of `name` up through `index` -- i.e. every subproblem
+// that's actually been computed so far, as opposed to still sitting at
+// its initialization value. Reuses diffIndices (the same helper the
+// per-step "just changed" highlight uses) repeatedly across the table's
+// whole history instead of a new comparison mechanism.
+function everComputedCells(steps, index, name) {
+  const result = new Set();
+  let prevVal;
+  let havePrev = false;
+  for (let i = 0; i <= index; i++) {
+    const locals = steps[i].locals;
+    if (!locals || !Object.prototype.hasOwnProperty.call(locals, name)) continue;
+    const val = locals[name];
+    if (havePrev) {
+      if (Array.isArray(val) && Array.isArray(val[0])) {
+        val.forEach((row, r) => {
+          const prevRow = Array.isArray(prevVal) ? prevVal[r] : undefined;
+          diffIndices(prevRow, row).forEach((c) => result.add(`${r},${c}`));
+        });
+      } else {
+        diffIndices(prevVal, val).forEach((i2) => result.add(`${i2}`));
+      }
+    }
+    prevVal = val;
+    havePrev = true;
+  }
+  return result;
+}
+
+function flattenNumeric(table) {
+  const out = [];
+  const walk = (v) => {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (typeof v === "number") out.push(v);
+  };
+  walk(table);
+  return out;
+}
+
+// Secondary, subtle magnitude cue for numeric (non-boolean) tables only --
+// reuses --sky's own literal RGB (see App.css's --sky token) at a capped,
+// low alpha so it can scale continuously with value while never coming
+// close to affecting the (unchanged) text contrast. Boolean tables never
+// get this -- there's no meaningful magnitude to shade.
+function magnitudeStyle(cell, maxAbs) {
+  if (typeof cell !== "number" || maxAbs <= 0) return undefined;
+  const alpha = Math.min(0.22, (Math.abs(cell) / maxAbs) * 0.22);
+  return alpha > 0.02 ? { backgroundColor: `rgba(95, 176, 230, ${alpha.toFixed(2)})` } : undefined;
+}
+
 export function DPTableView({ locals, steps, index }) {
   const entries = Object.entries(locals).filter(([, v]) => isBoolOrNumericList(v) || isGridOfNumbers(v));
   if (entries.length === 0) return null;
   return (
     <div className="viz-block">
       <Caption>
-        Your DP table's real values right now. The cell(s) that changed since the last time this
-        table appeared in the trace are highlighted — that's the subproblem your code just solved.
+        Your DP table's real values right now. Amber is the cell(s) that changed since the last time
+        this table appeared in the trace — the subproblem your code just solved. Cells that haven't
+        been computed yet (still at their initial value) are faded; a faint blue wash on already-
+        computed numeric cells is a secondary hint of relative magnitude, not the main signal.
       </Caption>
       {entries.map(([name, table]) => {
         const prev = findPreviousValue(steps, index, name);
+        const everComputed = everComputedCells(steps, index, name);
         const is2D = Array.isArray(table[0]);
+        const isBool = typeof (is2D ? table[0]?.[0] : table[0]) === "boolean";
+        const maxAbs = isBool ? 0 : Math.max(1, ...flattenNumeric(table).map(Math.abs));
         return (
           <div key={name} className="dp-view">
             <div className="seq-label">{name}</div>
@@ -674,25 +994,43 @@ export function DPTableView({ locals, steps, index }) {
                   const changed = diffIndices(prevRow, row);
                   return (
                     <div key={r} className="grid-row">
-                      {row.map((cell, c) => (
-                        <div key={c} className={`dp-cell ${changed.has(c) ? "dp-cell-changed" : ""}`}>
-                          {typeof cell === "boolean" ? (cell ? "T" : "F") : cell}
-                        </div>
-                      ))}
+                      {row.map((cell, c) => {
+                        const isChanged = changed.has(c);
+                        const isComputed = everComputed.has(`${r},${c}`) || isChanged;
+                        const style = !isBool && !isChanged ? magnitudeStyle(cell, maxAbs) : undefined;
+                        return (
+                          <div
+                            key={c}
+                            className={`dp-cell ${isChanged ? "dp-cell-changed" : isComputed ? "" : "dp-cell-untouched"}`}
+                            style={style}
+                          >
+                            {typeof cell === "boolean" ? (cell ? "T" : "F") : cell}
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
               </div>
             ) : (
               <div className="grid-row">
-                {table.map((cell, i) => {
-                  const changed = diffIndices(prev, table).has(i);
-                  return (
-                    <div key={i} className={`dp-cell ${changed ? "dp-cell-changed" : ""}`}>
-                      {typeof cell === "boolean" ? (cell ? "T" : "F") : cell}
-                    </div>
-                  );
-                })}
+                {(() => {
+                  const changedSet = diffIndices(prev, table);
+                  return table.map((cell, i) => {
+                    const changed = changedSet.has(i);
+                    const isComputed = everComputed.has(`${i}`) || changed;
+                    const style = !isBool && !changed ? magnitudeStyle(cell, maxAbs) : undefined;
+                    return (
+                      <div
+                        key={i}
+                        className={`dp-cell ${changed ? "dp-cell-changed" : isComputed ? "" : "dp-cell-untouched"}`}
+                        style={style}
+                      >
+                        {typeof cell === "boolean" ? (cell ? "T" : "F") : cell}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             )}
           </div>
@@ -736,15 +1074,15 @@ export default function SpecializedVisualization({ problem, steps, index }) {
   const primary = detectPrimaryView(problem, locals, graph.kind);
 
   let primaryPanel = null;
-  if (primary === "tree") primaryPanel = <TreeView graph={graph} />;
-  else if (primary === "list") primaryPanel = <LinkedListView graph={graph} />;
-  else if (primary === "graph") primaryPanel = <GraphNodeView graph={graph} />;
+  if (primary === "tree") primaryPanel = <TreeView graph={graph} steps={steps} index={index} />;
+  else if (primary === "list") primaryPanel = <LinkedListView graph={graph} steps={steps} index={index} />;
+  else if (primary === "graph") primaryPanel = <GraphNodeView graph={graph} steps={steps} index={index} />;
   else if (primary === "dp") primaryPanel = <DPTableView locals={locals} steps={steps} index={index} />;
-  else if (primary === "heap") primaryPanel = <HeapView locals={locals} />;
+  else if (primary === "heap") primaryPanel = <HeapView locals={locals} steps={steps} index={index} />;
   else if (primary === "sorting") primaryPanel = <SortingView locals={locals} steps={steps} index={index} />;
-  else if (primary === "grid-graph") primaryPanel = <GridGraphView locals={locals} />;
-  else if (primary === "stack" || primary === "queue") primaryPanel = <StackQueueView locals={locals} mode={primary} />;
-  else if (primary === "array") primaryPanel = <ArrayPointerView locals={locals} topic={topic} pattern={pattern} />;
+  else if (primary === "grid-graph") primaryPanel = <GridGraphView locals={locals} steps={steps} index={index} />;
+  else if (primary === "stack" || primary === "queue") primaryPanel = <StackQueueView locals={locals} mode={primary} steps={steps} index={index} />;
+  else if (primary === "array") primaryPanel = <ArrayPointerView locals={locals} topic={topic} pattern={pattern} steps={steps} index={index} />;
 
   const showCallStack = hasRecursion(steps);
 

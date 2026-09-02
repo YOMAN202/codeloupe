@@ -126,7 +126,15 @@ CREATE TABLE IF NOT EXISTS revision_schedule (
     last_attempt_id INTEGER REFERENCES attempts(id),
     next_due_date TEXT NOT NULL,       -- ISO date
     interval_index INTEGER NOT NULL DEFAULT 0,  -- position in the ladder: 0,1,2,3,4
-    last_result TEXT                    -- 'independent' | 'assisted' | 'failed'
+    last_result TEXT,                   -- 'independent' | 'assisted' | 'failed' | NULL (never attempted)
+    -- 'auto' rows are scheduled purely by log_attempt's ladder logic;
+    -- 'manual' means the learner explicitly added it via "Add to revision"
+    -- (see app.py's add_manual_revision) and it's due today regardless of
+    -- ladder position. The tag is temporary -- the next attempt logged for
+    -- this problem (pass or fail) resets source back to 'auto' as part of
+    -- log_attempt's normal UPDATE, handing the row back to the automatic
+    -- ladder. See log_attempt's revision-scheduling comment in app.py.
+    source TEXT NOT NULL DEFAULT 'auto'
 );
 
 -- Mistake journal: one row per FAILED attempt (never for a pass), created

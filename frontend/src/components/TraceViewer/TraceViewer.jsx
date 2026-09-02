@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import SpecializedVisualization from "../Visualizers/Visualizers";
 import { diffLocals } from "../../utils/compare";
+import { formatValue } from "../../utils/format";
 
 // Renders a captured execution trace (see backend/execution/tracer.py) as a
 // step-through debugger: current line, locals, call depth, play/pause/
@@ -27,8 +28,25 @@ const STATUS_BANNER = {
   crashed: { tone: "error", label: "Execution didn't complete", detail: null },
 };
 
+// A trace step's `line` only means something to the learner when it falls
+// within the source they can actually see in the editor. Two cases don't:
+// (1) line 0 -- CPython reports this for the very first "call" event of the
+// top-level module frame, before any real line has executed, on every
+// single trace regardless of endpoint; (2) for /api/problems/<slug>/trace
+// specifically, anything past `sourceLineCount` belongs to the test-case
+// call Codeloupe appends after the learner's own code so their function
+// actually gets invoked -- real execution, but code the learner never
+// typed or sees. `sourceLineCount` is absent (not 0) on endpoints that
+// never append anything, so the bounds check simply never fires there.
+function isSyntheticLine(line, sourceLineCount) {
+  if (line == null || line < 1) return true;
+  return sourceLineCount != null && line > sourceLineCount;
+}
+
 function TraceStatusBanner({ trace, onJumpToFailure, atFailure }) {
   const meta = STATUS_BANNER[trace.status] || STATUS_BANNER.crashed;
+  const errorLineIsSynthetic =
+    trace.error?.line != null && isSyntheticLine(trace.error.line, trace.source_line_count);
   return (
     <div className={`trace-status-banner trace-status-${meta.tone}`}>
       <span className="trace-status-label">{meta.label}</span>
@@ -36,7 +54,16 @@ function TraceStatusBanner({ trace, onJumpToFailure, atFailure }) {
         <>
           <span className="trace-status-error-detail">
             <code>{trace.error.type}</code>: {trace.error.message}
-            {trace.error.line != null && <> (line {trace.error.line})</>}
+            {trace.error.line != null && (
+              <>
+                {" "}
+                (
+                {errorLineIsSynthetic
+                  ? "while calling your function with the test input, not a line in your submitted code"
+                  : `line ${trace.error.line}`}
+                )
+              </>
+            )}
           </span>
           {!atFailure && (
             <button className="chip chip-small" onClick={onJumpToFailure}>
@@ -69,7 +96,7 @@ function TraceStatusBanner({ trace, onJumpToFailure, atFailure }) {
 // claim), then reveals a plain structural diff of what actually changed
 // so they can judge for themselves. Fully self-contained: it only reads
 // the already-fetched steps array and never affects normal stepping.
-function PredictPanel({ steps, index }) {
+function PredictPanel({ steps, index, sourceLineCount }) {
   const [guess, setGuess] = useState("");
   const [revealed, setRevealed] = useState(false);
 
@@ -87,6 +114,7 @@ function PredictPanel({ steps, index }) {
     );
   }
   const changes = diffLocals(steps[index].locals, nextStep.locals);
+  const nextIsSynthetic = isSyntheticLine(nextStep.line, sourceLineCount);
 
   return (
     <div className="predict-panel">
@@ -112,9 +140,16 @@ function PredictPanel({ steps, index }) {
             <strong>Your prediction:</strong> {guess.trim() || "(left blank)"}
           </p>
           <p className="muted small">
-            <strong>What actually happened</strong> — next is a <code>{nextStep.event}</code> at line{" "}
-            {nextStep.line}
-            {nextStep.function ? <> in <code>{nextStep.function}</code></> : null}:
+            <strong>What actually happened</strong> — next is a <code>{nextStep.event}</code>{" "}
+            {nextIsSynthetic ? (
+              "(test setup, not a line in your code)"
+            ) : (
+              <>
+                at line {nextStep.line}
+                {nextStep.function ? <> in <code>{nextStep.function}</code></> : null}
+              </>
+            )}
+            :
           </p>
           {changes.length === 0 ? (
             <p className="muted small">No local variables changed at that step.</p>
@@ -122,8 +157,8 @@ function PredictPanel({ steps, index }) {
             <ul className="predict-diff">
               {changes.map((c) => (
                 <li key={c.name}>
-                  <code>{c.name}</code>: {c.isNew ? <em>new</em> : JSON.stringify(c.before)} &rarr;{" "}
-                  {JSON.stringify(c.after)}
+                  <code>{c.name}</code>: {c.isNew ? <em>new</em> : formatValue(c.before)} &rarr;{" "}
+                  {formatValue(c.after)}
                 </li>
               ))}
             </ul>
@@ -229,7 +264,7 @@ export default function TraceViewer({ trace, problem, focusEnd }) {
         </button>
       </div>
 
-      {predictMode && <PredictPanel steps={steps} index={index} />}
+      {predictMode && <PredictPanel steps={steps} index={index} sourceLineCount={trace.source_line_count} />}
 
       <input
         type="range"
@@ -245,23 +280,49 @@ export default function TraceViewer({ trace, problem, focusEnd }) {
         aria-label={`Trace step ${index + 1} of ${steps.length}`}
       />
 
-      <div className={`trace-step-info ${atFailure && trace.status === "runtime_error" ? "trace-step-failure" : ""}`}>
-        <span className={`trace-event trace-event-${step.event}`}>{step.event}</span>
-        <span>
-          line <strong>{step.line}</strong>
-        </span>
-        <span>
-          in <strong>{step.function}</strong>
-        </span>
-        <span>call depth {"  ".repeat(0)}{"|".repeat(Math.min(step.call_depth, 15))} ({step.call_depth})</span>
-        {atFailure && trace.status === "runtime_error" && (
-          <span className="trace-failure-tag">&#9888; execution stopped here</span>
-        )}
-      </div>
+      {(() => {
+        const synthetic = isSyntheticLine(step.line, trace.source_line_count);
+        // Two synthetic module-frame events get a dedicated, friendly label
+        // instead of just hiding the line number: the very first "call"
+        // event (CPython reports line 0 here, before any real line has
+        // run -- this is the module frame itself being entered, on every
+        // trace) reads naturally as "Program started"; the final "return"
+        // (execution finished) is not really "returning" anything a
+        // learner wrote, it's the whole program completing.
+        const isProgramStart = synthetic && step.event === "call" && step.function === "<module>" && step.line < 1;
+        const isProgramCompletion = synthetic && step.event === "return" && step.function === "<module>";
+        return (
+          <div className={`trace-step-info ${atFailure && trace.status === "runtime_error" ? "trace-step-failure" : ""}`}>
+            {isProgramStart ? (
+              <span className="trace-event trace-event-call">Program started</span>
+            ) : isProgramCompletion ? (
+              <span className="trace-event trace-event-return">Program completed</span>
+            ) : (
+              <>
+                <span className={`trace-event trace-event-${step.event}`}>{step.event}</span>
+                {synthetic ? (
+                  <span className="muted small">test setup — not a line in your code</span>
+                ) : (
+                  <span>
+                    line <strong>{step.line}</strong>
+                  </span>
+                )}
+                <span>
+                  in <strong>{step.function}</strong>
+                </span>
+              </>
+            )}
+            <span>call depth {"  ".repeat(0)}{"|".repeat(Math.min(step.call_depth, 15))} ({step.call_depth})</span>
+            {atFailure && trace.status === "runtime_error" && (
+              <span className="trace-failure-tag">&#9888; execution stopped here</span>
+            )}
+          </div>
+        );
+      })()}
 
-      {step.event === "return" && (
+      {step.event === "return" && step.function !== "<module>" && (
         <p className="muted">
-          returns: <code>{JSON.stringify(step.return_value)}</code>
+          returns: <code>{formatValue(step.return_value)}</code>
         </p>
       )}
 
@@ -273,7 +334,7 @@ export default function TraceViewer({ trace, problem, focusEnd }) {
               {Object.entries(step.locals).map(([k, v]) => (
                 <tr key={k}>
                   <td className="locals-key">{k}</td>
-                  <td className="locals-value">{JSON.stringify(v)}</td>
+                  <td className="locals-value">{formatValue(v)}</td>
                 </tr>
               ))}
             </tbody>

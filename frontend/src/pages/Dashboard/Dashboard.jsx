@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchProgress, fetchPracticeSession } from "../../api/client";
+import { fetchProgress, fetchPracticeSession, removeFromRevision } from "../../api/client";
 
 const SESSION_KIND_LABEL = {
   revision: "Revision",
@@ -26,6 +26,19 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [session, setSession] = useState(null);
 
+  // Revision-removal flow -- deliberately the same shape as the Mistake
+  // Journal's remove flow (removingId/deletingId/deleteError/deletedNotice
+  // there; -Slug here since revision rows are keyed by problem slug, not a
+  // numeric id) rather than a new pattern, per the instruction to reuse
+  // existing removal logic/UX instead of inventing a second inconsistent
+  // one. `removingSlug` is which item (if any) currently shows the inline
+  // confirm prompt in place of its normal row; `deletingSlug` is which one
+  // has a request actually in flight.
+  const [removingSlug, setRemovingSlug] = useState(null);
+  const [deletingSlug, setDeletingSlug] = useState(null);
+  const [deleteError, setDeleteError] = useState(null); // { slug, message }
+  const [deletedNotice, setDeletedNotice] = useState(null);
+
   useEffect(() => {
     fetchProgress()
       .then(setProgress)
@@ -42,6 +55,39 @@ export default function Dashboard() {
 
   const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
 
+  // This reuses the exact same backend call/route the Problem Workspace's
+  // "Remove from revision" button already uses (DELETE
+  // /api/problems/<slug>/revision -- see api/client.js and app.py's
+  // remove_manual_revision) rather than adding a second endpoint. That
+  // handler deletes the problem's revision_schedule row outright, whatever
+  // its source ('auto' from the normal ladder or 'manual') -- it never
+  // touches `attempts` or logged mistakes, and solving the problem again
+  // later starts a brand new schedule the normal way via log_attempt. So
+  // removing one item here can never disable future automatic revisions
+  // for that problem, and never affects any other problem's schedule.
+  async function handleRemoveRevision(item) {
+    setDeletingSlug(item.slug);
+    setDeleteError(null);
+    try {
+      await removeFromRevision(item.slug);
+      setProgress((p) => ({
+        ...p,
+        problems_due_for_revision: p.problems_due_for_revision.filter((r) => r.slug !== item.slug),
+      }));
+      setRemovingSlug(null);
+      setDeletedNotice(`Removed "${item.title}" from your revision schedule.`);
+    } catch (e) {
+      // Deliberately does NOT remove the item from `progress` -- a failed
+      // removal must leave the schedule (and the UI) exactly as it was,
+      // never a falsely-removed-looking state.
+      setDeleteError({ slug: item.slug, message: e.message });
+    } finally {
+      setDeletingSlug(null);
+    }
+  }
+
+  const dueCount = progress.problems_due_for_revision.length;
+
   return (
     <div className="page">
       <div className="page-header">
@@ -49,35 +95,49 @@ export default function Dashboard() {
         <p className="muted">Where you actually stand -- no points, no streak badges, just data.</p>
       </div>
 
-      {(progress.resume_lesson || progress.recommended_next_lesson) && (
-        <div className="callout-row">
-          {progress.resume_lesson && (
-            <Link to={`/lessons/${progress.resume_lesson.day}`} className="callout callout-resume">
-              <strong>Resume</strong>
-              <span>
-                Day {progress.resume_lesson.day}: {progress.resume_lesson.title}
-              </span>
-            </Link>
-          )}
-          {progress.recommended_next_lesson && (
-            <Link
-              to={`/lessons/${progress.recommended_next_lesson.day}`}
-              className="callout callout-next"
-            >
-              <strong>Recommended next</strong>
-              <span>
-                Day {progress.recommended_next_lesson.day}: {progress.recommended_next_lesson.title}
-              </span>
-            </Link>
-          )}
-          {progress.problems_due_for_revision?.length > 0 && (
-            <Link to="#due-for-revision" className="callout callout-revision">
-              <strong>{progress.problems_due_for_revision.length} due for revision</strong>
-              <span>See below</span>
-            </Link>
-          )}
-        </div>
-      )}
+      <div className="callout-row">
+        {progress.resume_lesson && (
+          <Link to={`/lessons/${progress.resume_lesson.day}`} className="callout callout-resume">
+            <strong>Resume</strong>
+            <span>
+              Day {progress.resume_lesson.day}: {progress.resume_lesson.title}
+            </span>
+          </Link>
+        )}
+        {progress.recommended_next_lesson && (
+          <Link
+            to={`/lessons/${progress.recommended_next_lesson.day}`}
+            className="callout callout-next"
+          >
+            <strong>Recommended next</strong>
+            <span>
+              Day {progress.recommended_next_lesson.day}: {progress.recommended_next_lesson.title}
+            </span>
+          </Link>
+        )}
+        {/* Always rendered, even at zero -- a revision count that vanishes
+            when it hits 0 reads as missing/broken data rather than "you're
+            caught up". The empty-state modifier class swaps the usual amber
+            (attention-needed) accent for a neutral one below, so "0 due"
+            reads as calm and intentional instead of a false alarm.
+            A plain button, not a <Link>, on purpose -- this app runs under
+            HashRouter (see main.jsx), which already owns the URL's "#" for
+            routing, so a Link/anchor pointing at "#due-for-revision" fights
+            the router instead of scrolling. A button with its own handler
+            sidesteps that entirely, and gets Enter/Space activation and
+            the site's existing :focus-visible ring for free just by being
+            a real <button>. */}
+        <button
+          type="button"
+          className={`callout callout-revision callout-button${dueCount === 0 ? " callout-revision-empty" : ""}`}
+          onClick={() =>
+            document.getElementById("due-for-revision")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+        >
+          <strong>{dueCount} due for revision</strong>
+          <span>See below</span>
+        </button>
+      </div>
 
       {session?.items?.length > 0 && (
         <section className="practice-session">
@@ -229,19 +289,71 @@ export default function Dashboard() {
         )}
 
         <section className="lesson-section" id="due-for-revision">
-          <h3>Due for revision</h3>
-          {progress.problems_due_for_revision.length === 0 ? (
-            <p className="muted">Nothing due right now.</p>
+          <h3>Due for revision ({dueCount})</h3>
+          {deletedNotice && <p className="success small">{deletedNotice}</p>}
+          {dueCount === 0 ? (
+            <p className="muted">0 due for revision -- you're caught up right now.</p>
           ) : (
             <ul className="problem-list">
-              {progress.problems_due_for_revision.map((p) => (
-                <li key={p.slug}>
-                  <Link to={`/problems/${p.slug}`}>{p.title}</Link>{" "}
-                  <span className="muted small">
-                    ({p.topic}, due {p.next_due_date}, last: {p.last_result})
-                  </span>
-                </li>
-              ))}
+              {progress.problems_due_for_revision.map((p) =>
+                removingSlug === p.slug ? (
+                  <li key={p.slug} className="mistake-remove-confirm">
+                    <p className="mistake-remove-confirm-question">
+                      Remove &ldquo;{p.title}&rdquo; from your revision schedule?
+                    </p>
+                    <p className="muted small">
+                      This only removes this scheduled revision. It won't delete the problem,
+                      your attempt history, or your solutions -- and future revisions can still be
+                      scheduled for it automatically the next time you attempt it.
+                    </p>
+                    {deleteError?.slug === p.slug && <p className="error small">{deleteError.message}</p>}
+                    <div className="hint-buttons">
+                      <button
+                        type="button"
+                        className="chip chip-small"
+                        onClick={() => setRemovingSlug(null)}
+                        disabled={deletingSlug === p.slug}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="chip chip-small chip-danger"
+                        onClick={() => handleRemoveRevision(p)}
+                        disabled={deletingSlug === p.slug}
+                      >
+                        {deletingSlug === p.slug ? "Removing..." : "Remove from revision"}
+                      </button>
+                    </div>
+                  </li>
+                ) : (
+                  <li key={p.slug}>
+                    <div className="attempt-history-row">
+                      <span>
+                        <Link to={`/problems/${p.slug}`}>{p.title}</Link>{" "}
+                        <span className="muted small">
+                          ({p.topic}, due {p.next_due_date}, last: {p.last_result || "added manually"})
+                        </span>
+                      </span>
+                      <span className="attempt-history-row-actions">
+                        <button
+                          type="button"
+                          className="mistake-remove-btn"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setDeletedNotice(null);
+                            setRemovingSlug(p.slug);
+                          }}
+                          aria-label={`Remove "${p.title}" from revision`}
+                          title="Remove from revision"
+                        >
+                          <span aria-hidden="true">&#10005;</span>
+                        </button>
+                      </span>
+                    </div>
+                  </li>
+                )
+              )}
             </ul>
           )}
         </section>

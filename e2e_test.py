@@ -138,7 +138,11 @@ def reverse_list(values):
         check("Hint 1 content revealed", page.locator(".hint-text").count() > 0)
 
         # 9. Trace execution of own code
-        page.get_by_role("button", name="Trace").click()
+        # exact=True: the Live Preview panel's "Open in full Trace ->" button
+        # also matches a non-exact substring search for "Trace", making this
+        # ambiguous once that button exists (see also line ~241 below, which
+        # already used exact=True for the same reason).
+        page.get_by_role("button", name="Trace", exact=True).click()
         page.wait_for_timeout(200)
         page.get_by_role("button", name="Trace my code").click()
         page.wait_for_selector(".trace-step-info", timeout=15000)

@@ -114,11 +114,19 @@ def _seed_problems(conn):
         )
         problem_id = cur.lastrowid
 
-        for args, expected in zip(p["test_inputs"], expected_outputs):
+        # test_labels is optional and, when present, must be the same length
+        # as test_inputs (entries may be None for a case that doesn't need
+        # one) -- it's a short human-readable tag like "single element" or
+        # "duplicates with negative numbers", surfaced by get_problem() as
+        # part of each visible test case so the frontend's "Trace against"
+        # picker can show something more scannable than raw JSON args once
+        # a problem has more than a couple of cases.
+        labels = p.get("test_labels") or [None] * len(p["test_inputs"])
+        for args, expected, label in zip(p["test_inputs"], expected_outputs, labels):
             conn.execute(
                 """INSERT INTO test_cases (problem_id, input_args_json, expected_output_json, is_hidden, label)
                    VALUES (?,?,?,?,?)""",
-                (problem_id, json.dumps(list(args)), json.dumps(expected), 0, None),
+                (problem_id, json.dumps(list(args)), json.dumps(expected), 0, label),
             )
 
         for rung, content in enumerate(p["hints"], start=1):
@@ -195,15 +203,36 @@ def init_db():
           f"{concept_count} concept lessons.")
 
 
+def _migrate_schema(conn):
+    """Additive, idempotent migrations for databases created before a given
+    column existed -- run on EVERY startup (not just fresh installs) so an
+    existing learner's traceviz.db picks up new columns without ever being
+    dropped/recreated. Deliberately tiny and column-by-column rather than a
+    real migration framework (see the module docstring on why that's out of
+    scope for a single-user tool) -- extend this, never init_db()'s
+    DROP/CREATE path, when a new column needs to reach existing installs."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(revision_schedule)").fetchall()}
+    if "source" not in cols:
+        conn.execute("ALTER TABLE revision_schedule ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'")
+        conn.commit()
+
+
 def ensure_db():
     """Safe to call on every app startup: initializes the database ONLY if
     it doesn't exist yet. Never wipes an existing database, so a learner's
     attempts/revision_schedule/streak history survives closing and
     reopening the app. Use `python3 db/init_db.py` directly (init_db())
     when you deliberately want a full reset (e.g. after editing the
-    curriculum/problem seed data)."""
+    curriculum/problem seed data). Runs _migrate_schema either way, since
+    a brand-new db and an existing one both need to end up with the same
+    columns -- schema.sql covers the former, the migration covers the
+    latter."""
     if not os.path.exists(DB_PATH):
         init_db()
+    else:
+        conn = get_connection()
+        _migrate_schema(conn)
+        conn.close()
 
 
 if __name__ == "__main__":

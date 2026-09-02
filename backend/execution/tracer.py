@@ -49,6 +49,11 @@ import textwrap
 from execution.sandbox import run_code
 
 MAX_STEPS = 2000
+# Named (not just a bare "8" default in the signature below) so callers that
+# need to reason about it -- e.g. app.py clamping a caller-supplied timeout
+# for the live-preview panel so it can only ever be LOWERED, never raised --
+# have a single source of truth instead of a second hardcoded "8".
+DEFAULT_TIMEOUT_SECONDS = 8
 
 _TRACER_HARNESS = textwrap.dedent('''
     import sys, json as __tv_json, types as __tv_types, traceback as __tv_traceback, collections as __tv_collections
@@ -219,7 +224,7 @@ _TRACER_HARNESS = textwrap.dedent('''
 ''')
 
 
-def trace_code(user_code: str, timeout: int = 8) -> dict:
+def trace_code(user_code: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
     harness = _TRACER_HARNESS.format(max_steps=MAX_STEPS, user_code=user_code)
     exec_result = run_code(harness, timeout=timeout)
     stdout = exec_result["stdout"]
