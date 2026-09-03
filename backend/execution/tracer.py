@@ -224,9 +224,16 @@ _TRACER_HARNESS = textwrap.dedent('''
 ''')
 
 
-def trace_code(user_code: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
+def trace_code(user_code: str, timeout: int = DEFAULT_TIMEOUT_SECONDS, stdin: str | None = None) -> dict:
+    # `stdin` is forwarded as-is to the sandboxed subprocess running the
+    # harness below -- the harness just execs the learner's code in-process
+    # (see _TRACER_HARNESS), so input()/sys.stdin calls inside the traced
+    # code read from the SAME real stdin pipe run_code() connects for
+    # ordinary (non-traced) execution. No harness changes needed for this:
+    # stdin is a subprocess-level pipe, orthogonal to the sys.settrace
+    # instrumentation already wrapping the exec() call.
     harness = _TRACER_HARNESS.format(max_steps=MAX_STEPS, user_code=user_code)
-    exec_result = run_code(harness, timeout=timeout)
+    exec_result = run_code(harness, timeout=timeout, stdin=stdin)
     stdout = exec_result["stdout"]
 
     if "__TRACEVIZ_TRACE_START__" in stdout and "__TRACEVIZ_TRACE_END__" in stdout:

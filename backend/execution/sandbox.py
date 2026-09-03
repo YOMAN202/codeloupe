@@ -14,7 +14,20 @@ import os
 import subprocess
 import sys
 import tempfile
-PYTHON_EXECUTABLE = "/home/AkshatMishra/.virtualenvs/codeloupe-env/bin/python"
+
+# On this project's actual PythonAnywhere deployment, sys.executable (inside
+# the WSGI worker process) does not resolve to the project's own virtualenv
+# interpreter, so submissions silently ran under the wrong Python. The fix
+# is this hardcoded path to that venv's interpreter -- but hardcoding one
+# specific account's absolute path means it doesn't exist on any OTHER
+# machine (this sandbox, local dev, CI, a future host), where sys.executable
+# is already correct. Falling back to sys.executable whenever the hardcoded
+# path isn't actually there keeps today's PythonAnywhere behavior byte-for-
+# byte unchanged while not breaking every other environment this same file
+# also has to run in.
+_PYTHONANYWHERE_VENV_PYTHON = "/home/AkshatMishra/.virtualenvs/codeloupe-env/bin/python"
+PYTHON_EXECUTABLE = _PYTHONANYWHERE_VENV_PYTHON if os.path.exists(_PYTHONANYWHERE_VENV_PYTHON) else sys.executable
+
 if os.name == "posix":
     import signal
 
@@ -95,9 +108,22 @@ def _kill_process_group(proc, use_process_group):
         pass  # already gone, or we can't signal it -- nothing more to do
 
 
-def run_code(code: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
+def run_code(code: str, timeout: int = DEFAULT_TIMEOUT_SECONDS, stdin: str | None = None) -> dict:
     """
     Run `code` in an isolated subprocess and capture stdout/stderr.
+
+    `stdin`, if given, is written to the child's real stdin and then closed
+    (via Popen(stdin=PIPE) + communicate(input=...)) -- this is what makes
+    ordinary `input()` / `sys.stdin.readline()` / `sys.stdin.read()` work at
+    all. Before this, stdin was never connected to a pipe, so the child
+    inherited this (Flask) process's own stdin -- not a terminal, already
+    closed/non-interactive -- and any `input()` call failed immediately with
+    EOFError regardless of what the learner typed. `stdin=None` (the
+    default, used by every caller that doesn't pass one -- test_runner.py's
+    function-call grading has no concept of stdin at all) is normalized to
+    "" below: an immediately-closed, empty stdin, which is exactly correct
+    for code that never calls input() and produces an honest EOFError (not
+    a hang) for code that does but wasn't given any.
 
     Returns a dict: { stdout, stderr, exit_code, timed_out }
     """
@@ -115,6 +141,7 @@ def run_code(code: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
         proc = subprocess.Popen(
             [PYTHON_EXECUTABLE, script_path],
             cwd=tmpdir,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -123,7 +150,12 @@ def run_code(code: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
             start_new_session=use_process_group,
         )
         try:
-            stdout, stderr = proc.communicate(timeout=timeout)
+            # communicate(input=...) writes the given text to stdin then
+            # closes it -- closing is what lets a program that reads
+            # everything (sys.stdin.read(), or simply calling input() more
+            # times than lines were given) see a clean EOF instead of
+            # hanging forever waiting for more input that will never come.
+            stdout, stderr = proc.communicate(input=stdin or "", timeout=timeout)
             if proc.returncode is not None and proc.returncode < 0:
                 # Negative returncode means the process was killed by a
                 # signal (e.g. SIGKILL from our own CPU/memory rlimit, or
@@ -132,6 +164,16 @@ def run_code(code: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
                     "\n[traceviz] Process was terminated (likely hit the "
                     f"{DEFAULT_TIMEOUT_SECONDS}s CPU or "
                     f"{DEFAULT_MEMORY_LIMIT_BYTES // (1024*1024)}MB memory limit)."
+                )
+            if proc.returncode not in (None, 0) and "EOFError" in stderr:
+                # Purely-additive annotation (mirrors the signal-kill note
+                # above) -- the standard traceback already names the exact
+                # line, this just gives the learner-facing reason in plain
+                # language instead of leaving them to interpret "EOFError:
+                # EOF when reading a line" on their own.
+                stderr += (
+                    "\n[traceviz] Your program tried to read more input (via input() or "
+                    "sys.stdin) than was provided in the Input box."
                 )
             return {
                 "stdout": stdout,

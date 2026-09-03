@@ -181,5 +181,5 @@ export const fetchMistakeJournal = () => get("/mistakes/journal");
 export const fetchPracticeSession = () => get("/practice-session");
 
 // ---- plain run / trace (scratchpad + trace visualizer) -----------------
-export const runCode = (code) => send("POST", "/run", { code });
-export const traceCode = (code) => send("POST", "/trace", { code });
+export const runCode = (code, stdin = "") => send("POST", "/run", { code, stdin });
+export const traceCode = (code, stdin = "") => send("POST", "/trace", { code, stdin });

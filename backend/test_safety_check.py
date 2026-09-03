@@ -93,7 +93,14 @@ UNSAFE_SAMPLES = [
     ("networking: socket", "import socket\ns = socket.socket()\n"),
     ("networking: urllib", "import urllib.request\nurllib.request.urlopen('http://evil.example.com')\n"),
     ("networking: http.client", "import http.client\n"),
-    ("dangerous import: sys", "import sys\nprint(sys.modules)\n"),
+    ("dangerous attribute: sys.modules (import sys itself is now allowed -- see Part 3)",
+     "import sys\nprint(sys.modules)\n"),
+    ("dangerous attribute: sys.modules used as an os-denylist bypass (the exact live exploit verified during the stdin/sys audit)",
+     "import sys\nos_mod = sys.modules['os']\nprint(os_mod.listdir('.'))\n"),
+    ("dangerous attribute: sys._getframe", "import sys\nf = sys._getframe()\nprint(f.f_globals)\n"),
+    ("dangerous attribute: sys._current_frames", "import sys\nprint(sys._current_frames())\n"),
+    ("dangerous attribute: sys.settrace", "import sys\nsys.settrace(lambda *a: None)\n"),
+    ("dangerous attribute: sys.setprofile", "import sys\nsys.setprofile(lambda *a: None)\n"),
     ("dangerous import: importlib", "import importlib\nimportlib.import_module('os')\n"),
     ("dangerous import: pickle", "import pickle\npickle.loads(b'')\n"),
     ("dangerous import: ctypes", "import ctypes\n"),
@@ -145,6 +152,11 @@ SAFE_SAMPLES = [
     ("dynamic method dispatch via getattr with a non-literal/ordinary name "
      "(the exact shape of Codeloupe's own design-circular-queue problem)",
      "class Q:\n    def push(self, x): return x\n    def pop(self): return None\nq = Q()\nfor op, arg in [('push', 1), ('pop', None)]:\n    method = getattr(q, op)\n    method(arg) if arg is not None else method()\n"),
+    ("plain `import sys` with ordinary, harmless usage (stdin boilerplate) -- "
+     "the exact pattern this audit added support for",
+     "import sys\ninput = sys.stdin.readline\nn = int(input())\nprint(n * 2)\n"),
+    ("sys.stdin.read() (whole-input form)", "import sys\ndata = sys.stdin.read()\nprint(data.strip())\n"),
+    ("other harmless sys.* attributes", "import sys\nprint(sys.version_info, sys.maxsize)\nsys.setrecursionlimit(3000)\n"),
 ]
 
 for label, code in SAFE_SAMPLES:

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import CodeEditor from "../../components/Editor/CodeEditor";
 import TraceViewer from "../../components/TraceViewer/TraceViewer";
+import StdinInput from "../../components/StdinInput/StdinInput";
 import { runCode, traceCode } from "../../api/client";
 
 const DEFAULT_CODE = "# Free scratchpad -- try exercises here, or trace any snippet.\n";
 
 export default function Scratchpad() {
   const [code, setCode] = useState(DEFAULT_CODE);
+  const [stdin, setStdin] = useState("");
   const [output, setOutput] = useState(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState(null);
@@ -18,12 +20,17 @@ export default function Scratchpad() {
   // never something a first-time visitor is dropped into.
   const [viewMode, setViewMode] = useState("stacked");
 
+  // Run and Trace intentionally read the SAME `stdin` state -- one Input
+  // box feeds whichever action the learner clicks, so a program that reads
+  // input() sees identical input whether you Run it or step through it in
+  // Trace. Switching the Output/Trace tab never touches this state, so
+  // stdin survives that switch too (nothing to lose).
   async function handleRun() {
     setRunning(true);
     setError(null);
     setOutput(null);
     try {
-      setOutput(await runCode(code));
+      setOutput(await runCode(code, stdin));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -36,7 +43,7 @@ export default function Scratchpad() {
     setError(null);
     setTrace(null);
     try {
-      setTrace(await traceCode(code));
+      setTrace(await traceCode(code, stdin));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -101,9 +108,8 @@ export default function Scratchpad() {
 
       <div className={`scratchpad-columns ${viewMode === "split" ? "scratchpad-columns-split" : "scratchpad-columns-stacked"}`}>
         <div className="scratchpad-editor-column">
-          {/* bubbleScroll: lets the page scroll normally when the cursor is
-              over the editor -- see CodeEditor.jsx's comment on the prop. */}
-          <CodeEditor value={code} onChange={setCode} bubbleScroll />
+          <CodeEditor value={code} onChange={setCode} />
+          <StdinInput value={stdin} onChange={setStdin} />
         </div>
 
         <div className="scratchpad-trace-column" ref={traceSectionRef}>

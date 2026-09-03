@@ -90,7 +90,13 @@ _DENYLISTED_MODULES = {
     "xmlrpc": "network access (the 'xmlrpc' module)",
     "requests": "network access (the 'requests' module)",
     "httpx": "network access (the 'httpx' module)",
-    "sys": "interpreter/reflection access (the 'sys' module)",
+    # NOT denylisted: 'sys' is allowed (see the bottom of _DENYLISTED_ATTRS
+    # below for why this is still safe) specifically so ordinary stdin
+    # boilerplate -- `import sys; input = sys.stdin.readline` -- works, the
+    # same as it would in any normal Python script. sys.stdin/stdout/argv/
+    # exit/etc are all ordinary, harmless things real code legitimately
+    # touches; only the small set of genuinely dangerous sys.* primitives
+    # (frame/module-table introspection) are blocked, individually, below.
     "importlib": "dynamic import/reflection (the 'importlib' module)",
     "runpy": "dynamic code execution (the 'runpy' module)",
     "pkgutil": "import-system introspection (the 'pkgutil' module)",
@@ -156,7 +162,33 @@ _DENYLISTED_ATTRS = {
     "__loader__": "reaches the module import machinery",
     "__spec__": "reaches the module import machinery",
     "__dict__": "reaches an object's/class's/module's raw namespace dict",
+    # The specific sys.* primitives that matter now that 'sys' itself is
+    # allowed (see _DENYLISTED_MODULES above). Each of these is a distinct,
+    # verified way to reach the same dangerous territory this filter exists
+    # to block, WITHOUT ever writing the name of a denylisted module:
+    "modules": (
+        "reaches sys.modules, a live table of every already-imported module "
+        "-- including 'os', which is always present in sys.modules at "
+        "interpreter startup whether or not the submission itself imports "
+        "it, making sys.modules['os'] a functional bypass of the 'os' "
+        "denylist above"
+    ),
+    "_getframe": "reaches a live call-stack frame (and, through it, arbitrary globals/locals) directly",
+    "_current_frames": "reaches every thread's live call-stack frames directly",
+    "settrace": "installs a trace hook, which can intercept or interfere with every line of code that runs afterward",
+    "setprofile": "installs a profile hook, which can intercept or interfere with every function call afterward",
+    "breakpointhook": "the same interactive-debugger entry point as the denylisted breakpoint() builtin",
 }
+# "modules" above is the one non-dunder entry in this dict (everything else
+# is a __dunder__ that's essentially never a real attribute name in
+# ordinary code) -- worth calling out explicitly because a bare word is a
+# little more likely to collide with an unrelated, legitimate attribute
+# than a dunder is. For this app's domain (algorithm/DSA solutions --
+# arrays, linked lists, trees, graphs, heaps, DP), a custom class
+# genuinely needing an attribute literally named `.modules` is not a
+# realistic collision; if that ever changes, narrow this to only fire when
+# the object being accessed is provably the 'sys' module (e.g. `Name(id="sys")`)
+# rather than any object.
 
 
 def find_safety_violation(code: str) -> str | None:

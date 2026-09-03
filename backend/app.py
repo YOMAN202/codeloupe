@@ -1352,7 +1352,17 @@ def run():
     code = payload.get("code", "")
     if not isinstance(code, str) or not code.strip():
         return jsonify({"error": "Request body must include non-empty 'code'"}), 400
-    result = run_code(code)
+    # Optional stdin for free-form Scratchpad execution (e.g. code that
+    # calls input()/sys.stdin.readline()). Not part of the safety-checked
+    # "code" field -- it's plain data fed to the subprocess's stdin pipe,
+    # never parsed or executed -- and MAX_CONTENT_LENGTH above already caps
+    # the whole request body (code + stdin together), so no separate size
+    # check is needed here. A non-string value (bad client) is treated as
+    # no stdin rather than erroring the whole request.
+    stdin = payload.get("stdin", "")
+    if not isinstance(stdin, str):
+        stdin = ""
+    result = run_code(code, stdin=stdin)
     return jsonify(result)
 
 
@@ -1364,7 +1374,10 @@ def trace():
     code = payload.get("code", "")
     if not isinstance(code, str) or not code.strip():
         return jsonify({"error": "Request body must include non-empty 'code'"}), 400
-    result = trace_code(code)
+    stdin = payload.get("stdin", "")
+    if not isinstance(stdin, str):
+        stdin = ""
+    result = trace_code(code, stdin=stdin)
     # Nothing is appended after the submitted code on this endpoint, so
     # every real trace step already falls within it -- see source_line_count's
     # docstring on trace_problem() below for what this field is actually for.

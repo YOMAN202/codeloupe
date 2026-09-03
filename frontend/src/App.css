@@ -1002,6 +1002,37 @@ code:not(pre code) {
   .scratchpad-columns-split .scratchpad-trace-column { flex: 1; }
 }
 
+/* Stdin box: sits directly under the editor in both layouts (its own
+   column, so it never has to fight the editor's flex sizing). Styled to
+   read as a sibling of the editor rather than a form field bolted on --
+   same dark surface/border/radius tokens as .code-editor-wrap and
+   .output-panel, same monospace font as the code itself since the values
+   typed here are literally what a program reads as its input lines. */
+.scratchpad-editor-column { display: flex; flex-direction: column; gap: 0.6rem; }
+.stdin-input { display: flex; flex-direction: column; gap: 0.3rem; }
+.stdin-input-label {
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.stdin-input-hint { text-transform: none; letter-spacing: normal; }
+.stdin-input-textarea {
+  background: var(--s1);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.7rem;
+  font-family: var(--font-code);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 3.4rem;
+}
+.stdin-input-textarea:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; border-color: var(--teal); }
+.stdin-input-textarea::placeholder { color: var(--text-faint); }
+
 /* Bottom padding on the page itself (not on .main-content globally --
    this stays scoped to Scratchpad) reserves room equal to the fixed
    ribbon's own height plus a little breathing space, so scrolling all the

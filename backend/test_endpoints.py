@@ -249,6 +249,45 @@ check("  trace captures return events with return_value", any(s["event"] == "ret
 r = requests.post(f"{BASE}/api/run", json={"code": "print('hello traceviz')"})
 check("POST /api/run -> 200, stdout has output", r.status_code == 200 and "hello traceviz" in r.json().get("stdout", ""), r.json())
 
+# ---- stdin support (live, full request/response contract) --------------
+# Pure-function-level coverage of the same behavior lives in
+# test_stdin_execution.py; these hit the actual HTTP endpoints so the
+# request payload shape (the new "stdin" field) and response are verified
+# end-to-end, not just the underlying run_code()/trace_code() functions.
+r = requests.post(f"{BASE}/api/run", json={"code": "n = int(input())\nprint(n * 2)", "stdin": "21\n"})
+check("POST /api/run with stdin -> input() reads it correctly", r.status_code == 200 and r.json().get("stdout", "").strip() == "42", r.json())
+
+r = requests.post(f"{BASE}/api/run", json={"code": "n = int(input())\nprint(n)"})
+d = r.json()
+check("POST /api/run with NO stdin field + input() -> honest EOFError, not a hang/crash",
+      r.status_code == 200 and "EOFError" in d.get("stderr", ""), d)
+
+r = requests.post(f"{BASE}/api/run", json={
+    "code": "import sys\ninput = sys.stdin.readline\nn = int(input())\nprint(n + 1)",
+    "stdin": "10\n",
+})
+check("POST /api/run with `import sys; input = sys.stdin.readline` boilerplate -> allowed and works",
+      r.status_code == 200 and r.json().get("stdout", "").strip() == "11", r.json())
+
+r = requests.post(f"{BASE}/api/trace", json={
+    "code": "import sys\ninput = sys.stdin.readline\nn = int(input())\nprint(n + 1)",
+    "stdin": "10\n",
+})
+tr2 = r.json()
+check("POST /api/trace with same sys+stdin boilerplate -> traces successfully",
+      r.status_code == 200 and tr2.get("status") == "completed", tr2)
+
+r = requests.post(f"{BASE}/api/trace", json={"code": "a = input()\nb = input()\nprint(a + b)", "stdin": "foo\nbar\n"})
+tr3 = r.json()
+check("POST /api/trace with multiple input() calls during multiline stdin -> completes",
+      r.status_code == 200 and tr3.get("status") == "completed", tr3)
+
+r = requests.post(f"{BASE}/api/run", json={"code": "import os\nos.listdir('.')", "stdin": "irrelevant\n"})
+check("POST /api/run -- dangerous import (os) still rejected even with stdin present", r.status_code == 400, r.json())
+
+r = requests.post(f"{BASE}/api/run", json={"code": "import sys\nprint(sys.modules['os'])", "stdin": ""})
+check("POST /api/run -- sys.modules os-bypass attempt still rejected", r.status_code == 400, r.json())
+
 print()
 if failures:
     print(f"{len(failures)} FAILURE(S):")
