@@ -1009,7 +1009,45 @@ code:not(pre code) {
    .output-panel, same monospace font as the code itself since the values
    typed here are literally what a program reads as its input lines. */
 .scratchpad-editor-column { display: flex; flex-direction: column; gap: 0.6rem; }
-.stdin-input { display: flex; flex-direction: column; gap: 0.3rem; }
+
+/* Root cause of a real, confirmed bug: .code-editor-wrap's fixed 640px
+   height (sized for a comfortable 20-50 line solution on a TALL screen)
+   left no room at all for the stdin box below it on an ordinary laptop
+   viewport -- on a 1366x768 display (browser chrome included, ~700px of
+   actual usable height), the editor alone consumes the entire viewport, so
+   the stdin box renders completely below the fold. Worse: at the specific,
+   very ordinary scroll position a real user lands on scrolling down to
+   find it, the box's own on-screen position coincides with the fixed
+   .scratchpad-ribbon's band -- confirmed via document.elementFromPoint()
+   at the stdin box's center returning the ribbon's own div, not the
+   textarea, meaning a real click there is silently swallowed by the
+   ribbon and never reaches the textarea at all (exactly reproducing
+   "stdin sent as ''" despite the state wiring itself being correct).
+   clamp() keeps the editor at its original 640px on tall screens (nothing
+   changes there) while letting it shrink on shorter ones, so the stdin box
+   -- and the Output/Trace tabs below it -- always have real, visible room
+   without the learner needing to hunt for them below an editor that's
+   claimed the entire viewport. Scoped to Scratchpad specifically (not the
+   base .code-editor-wrap rule) so the Problem Workspace's own editor,
+   which has no such stdin box below it, is completely unaffected. */
+.scratchpad-editor-column .code-editor-wrap { height: clamp(280px, 52vh, 640px); }
+
+.stdin-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  /* Matches .scratchpad-ribbon's own max rendered height (see that rule
+     and .scratchpad-page's padding-bottom, which this mirrors) -- makes
+     any BROWSER-INITIATED scroll into this element (Tab-key keyboard
+     navigation, a future "jump to input" affordance, screen-reader
+     navigation) land with real clearance above the fixed ribbon instead
+     of just inside its band. This is a real gap the ribbon has always
+     had -- the "Jump to Trace" comment elsewhere in this file referenced
+     a scroll-margin-bottom on the trace column that was never actually
+     added; this both fixes it here and is the reusable pattern for
+     applying the same fix there. */
+  scroll-margin-bottom: 6rem;
+}
 .stdin-input-label {
   color: var(--text-faint);
   font-size: 0.78rem;
@@ -1052,6 +1090,18 @@ code:not(pre code) {
   background: var(--s1);
   border-top: 1px solid var(--border);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
+  /* Defense in depth, on top of the height fix above: a `position: fixed`
+     bar always covers a fixed BAND of the viewport, no matter what page
+     content a user has scrolled underneath it -- confirmed (via
+     elementFromPoint at a real scroll position) that this div was
+     silently swallowing clicks meant for the stdin textarea beneath it.
+     pointer-events: none here makes the ribbon's own background/padding
+     fully click-through, so anything rendered under it is always
+     reachable; re-enabling pointer-events: auto on .scratchpad-ribbon-inner
+     (below) restores normal clicking for the actual Run/Trace/jump
+     buttons inside it, which is everything a learner ever needs to click
+     on the ribbon itself. */
+  pointer-events: none;
 }
 .scratchpad-ribbon-inner {
   max-width: 1440px;
@@ -1067,6 +1117,13 @@ code:not(pre code) {
      introducing a new layout mechanism just for this one bar. */
   padding-left: calc(228px + 2.2rem);
 }
+/* pointer-events: auto goes on the two actual interactive groups, NOT on
+   .scratchpad-ribbon-inner itself -- that div's own padding (including its
+   large padding-left, which exists purely to line content up with
+   main-content and covers real page content underneath it) would
+   otherwise still swallow clicks aimed at whatever's rendered beneath it,
+   defeating the click-through fix on .scratchpad-ribbon above. */
+.scratchpad-ribbon-actions, .scratchpad-jump-btn { pointer-events: auto; }
 .sidebar-is-collapsed .scratchpad-ribbon-inner { padding-left: calc(64px + 2.2rem); }
 
 .scratchpad-ribbon-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
@@ -1119,6 +1176,13 @@ code:not(pre code) {
      a bit taller, so the page needs a little more reserved bottom space
      to still fully clear it. */
   .scratchpad-page { padding-bottom: 7.5rem; }
+  /* The mobile ribbon is taller (two stacked rows) than desktop's single
+     row, so it needs a smaller editor (more headroom before the stdin box
+     collides with it) and a larger scroll-margin-bottom to match -- same
+     fix as the desktop-scoped rule above, tuned for this ribbon's actual
+     height here instead of reusing the desktop numbers. */
+  .scratchpad-editor-column .code-editor-wrap { height: clamp(240px, 42vh, 420px); }
+  .stdin-input { scroll-margin-bottom: 8.5rem; }
 }
 
 .run-button {
