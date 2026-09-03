@@ -28,9 +28,23 @@ export function renderInlineCode(text) {
   });
 }
 
+// The same "one non-empty line = one item" split MultilineText itself uses
+// below, pulled out standalone so anything that needs to address an
+// individual line (not just render the whole block) can share the exact
+// same rule rather than re-implementing it. Used by LessonDetail.jsx (to
+// give each line of a day's exercises_markdown its own "Try in Scratchpad"
+// link) and Scratchpad.jsx (to pick the matching line back out by that
+// same 0-based index) -- both read the SAME canonical exercises_markdown
+// field the lesson API already returns, so this never duplicates content,
+// only the parsing rule.
+export function splitNonEmptyLines(text) {
+  if (!text) return [];
+  return text.split("\n").filter((l) => l.trim().length > 0);
+}
+
 export default function MultilineText({ text, className = "" }) {
   if (!text) return null;
-  const lines = text.split("\n").filter((l) => l.trim().length > 0);
+  const lines = splitNonEmptyLines(text);
 
   const blocks = [];
   let currentList = null;

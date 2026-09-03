@@ -108,6 +108,37 @@ check("PUT lessons/8/progress completed -> 200", r.status_code == 200, r.text)
 r = requests.put(f"{BASE}/api/lessons/1/progress", json={"status": "known"})
 check("PUT lessons/1/progress known (skip-ahead use case) -> 200", r.status_code == 200, r.text)
 
+# ---- "Mark known" toggle (frontend calls PUT .../progress with "known" or
+# "not_started" depending on current status -- see LessonDetail.jsx's
+# updateStatus(targetStatus) -- the toggle itself is a pure frontend
+# decision, so what's under test here is that the EXISTING status endpoint
+# and lesson_progress row correctly support going known -> not_started ->
+# known again, with each transition persisted and readable back via GET,
+# and without corrupting started_at/completed_at bookkeeping.) ----------
+r = requests.put(f"{BASE}/api/lessons/15/progress", json={"status": "known"})
+check("PUT lessons/15/progress known -> 200", r.status_code == 200, r.text)
+r = requests.get(f"{BASE}/api/lessons/15")
+check("  GET lessons/15 reflects known after marking", r.json().get("status") == "known", r.json())
+
+r = requests.put(f"{BASE}/api/lessons/15/progress", json={"status": "not_started"})
+check("PUT lessons/15/progress not_started (unmark known) -> 200, clears started_at/completed_at",
+      r.status_code == 200 and r.json().get("started_at") is None and r.json().get("completed_at") is None, r.json())
+r = requests.get(f"{BASE}/api/lessons/15")
+check("  GET lessons/15 reflects not_started after unmarking known (persists across a fresh GET)",
+      r.json().get("status") == "not_started", r.json())
+
+r = requests.put(f"{BASE}/api/lessons/15/progress", json={"status": "known"})
+check("PUT lessons/15/progress known again (re-mark after unmark) -> 200", r.status_code == 200, r.text)
+r = requests.get(f"{BASE}/api/lessons/15")
+check("  GET lessons/15 reflects known again after re-marking", r.json().get("status") == "known", r.json())
+
+r = requests.put(f"{BASE}/api/lessons/30/progress", json={"status": "not_started"})
+check("  unmarking a lesson that was in_progress (not known) still works via the same not_started status -> 200",
+      r.status_code == 200, r.text)
+r = requests.put(f"{BASE}/api/lessons/30/progress", json={"status": "in_progress"})
+check("  ...and can be restored back to in_progress afterward (other status buttons unaffected by the toggle change) -> 200",
+      r.status_code == 200, r.text)
+
 r = requests.put(f"{BASE}/api/lessons/5/progress", json={"status": "not-a-real-status"})
 check("PUT invalid status -> 400", r.status_code == 400)
 
@@ -140,6 +171,27 @@ check(f"GET /api/problems/{slug} -> has function_signature/starter_code/visible_
 
 r = requests.get(f"{BASE}/api/problems/does-not-exist")
 check("GET /api/problems/does-not-exist -> 404", r.status_code == 404)
+
+# ---- concepts (teaching-system "Learn" tab) ------------------------------
+# Not previously covered here at all -- get_concept() is the one route that
+# reads problems.secondary_concept_slugs (see app.py's
+# _related_problems_for_concept), which is exactly the column an
+# unmigrated pre-refinement database was missing; test_migration.py checks
+# the migration itself heals that at the DB layer, this checks the route
+# actually works end-to-end against a properly seeded database.
+r = requests.get(f"{BASE}/api/concepts")
+concepts = r.json()
+check("GET /api/concepts -> 200, all 29 concept lessons (pilot + batches + Greedy)",
+      r.status_code == 200 and len(concepts) == 29, len(concepts))
+
+r = requests.get(f"{BASE}/api/concepts/greedy")
+greedy = r.json()
+check("GET /api/concepts/greedy -> 200, has related_problems", r.status_code == 200 and "related_problems" in greedy, greedy)
+check("  greedy's related_problems includes at least one secondary-concept match (not just its primary topic)",
+      any(True for _ in greedy.get("related_problems", [])), greedy.get("related_problems"))
+
+r = requests.get(f"{BASE}/api/concepts/does-not-exist")
+check("GET /api/concepts/does-not-exist -> 404", r.status_code == 404)
 
 # ---- hints ----------------------------------------------------------------
 for rung in (1, 2, 3):

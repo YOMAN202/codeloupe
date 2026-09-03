@@ -49,7 +49,17 @@ def get_connection():
 
 
 def _seed_lessons(conn):
+    """Idempotent by day: skips any day that already has a row rather than
+    inserting a duplicate (would violate lessons.day's UNIQUE constraint
+    anyway). Harmless for a fresh init_db() run (existing_days is always
+    empty then), and is what lets _migrate_seed_new_content below call this
+    again against an EXISTING database to backfill only the days a
+    curriculum expansion actually added (e.g. 46-50), leaving every
+    already-seeded day and its lesson_progress history completely alone."""
+    existing_days = {row["day"] for row in conn.execute("SELECT day FROM lessons").fetchall()}
     for l in LESSONS:
+        if l["day"] in existing_days:
+            continue
         conn.execute(
             """INSERT INTO lessons
                (day, title, concept_markdown, block, python_concepts, dsa_concepts,
@@ -97,7 +107,15 @@ def _compute_expected_outputs(reference_source, test_inputs):
 
 
 def _seed_problems(conn):
+    """Idempotent by slug -- same reasoning as _seed_lessons above (slug is
+    UNIQUE), and what lets a curriculum expansion's new problems (plus
+    their test_cases/hints, inserted alongside each new problem row only)
+    reach an existing database without touching any already-seeded
+    problem or the attempts/revision_schedule history tied to it."""
+    existing_slugs = {row["slug"] for row in conn.execute("SELECT slug FROM problems").fetchall()}
     for p in PROBLEMS:
+        if p["slug"] in existing_slugs:
+            continue
         expected_outputs = _compute_expected_outputs(p["reference_solution"], p["test_inputs"])
 
         cur = conn.execute(
@@ -149,7 +167,15 @@ def _seed_problems(conn):
 
 
 def _seed_concepts(conn):
+    """Idempotent by slug -- same reasoning as _seed_lessons/_seed_problems
+    above. Lets a wholly new concept lesson (e.g. Greedy) reach an existing
+    database, checkpoints and practice exercises inserted alongside it,
+    without touching any already-seeded concept lesson or its
+    concept_lesson_progress history."""
+    existing_slugs = {row["slug"] for row in conn.execute("SELECT slug FROM concept_lessons").fetchall()}
     for c in CONCEPT_LESSONS:
+        if c["slug"] in existing_slugs:
+            continue
         cur = conn.execute(
             """INSERT INTO concept_lessons
                (slug, kind, topic, pattern_family, title, display_order, estimated_minutes,
@@ -342,20 +368,59 @@ def _migrate_add_visitor_id(conn):
         )
 
 
+def _migrate_seed_new_content(conn):
+    """Curriculum-expansion counterpart to the column migrations above: a
+    schema/column ALTER alone isn't enough when an expansion (e.g. the
+    150-problem / 50-day refinement) also ships wholly NEW rows -- new
+    lesson days, new problems, a new concept lesson. Those only ever got
+    inserted by init_db()'s destructive drop/reseed path, which
+    ensure_db() deliberately never runs against an existing install (see
+    its own docstring) -- so without this, an existing traceviz.db would
+    silently stay missing them forever, and every route that depends on a
+    day/problem/concept actually existing (GET /api/lessons/<day> for the
+    new days, list_problems, concept detail pages that cross-reference
+    problems) would 404 or fail against data the frontend now assumes is
+    there.
+
+    _seed_lessons/_seed_problems/_seed_concepts are idempotent by their own
+    natural key (day / slug / slug -- see each one's docstring), so calling
+    them again here, on every startup, against a database that already has
+    rows is safe: every already-seeded lesson, problem, and concept lesson
+    -- and all attempts/lesson_progress/revision_schedule/concept_lesson_progress
+    history recorded against them -- is left completely untouched. Only
+    rows that are genuinely new get inserted."""
+    _seed_lessons(conn)
+    _seed_problems(conn)
+    _seed_concepts(conn)
+    conn.commit()
+
+
 def _migrate_schema(conn):
     """Additive, idempotent migrations for databases created before a given
-    column existed -- run on EVERY startup (not just fresh installs) so an
-    existing learner's traceviz.db picks up new columns without ever being
-    dropped/recreated. Deliberately tiny and column-by-column rather than a
-    real migration framework (see the module docstring on why that's out of
+    column (or, via _migrate_seed_new_content, a given row) existed -- run
+    on EVERY startup (not just fresh installs) so an existing learner's
+    traceviz.db picks up new columns/content without ever being dropped/
+    recreated. Deliberately tiny and column-by-column rather than a real
+    migration framework (see the module docstring on why that's out of
     scope for a single-user tool) -- extend this, never init_db()'s
-    DROP/CREATE path, when a new column needs to reach existing installs."""
+    DROP/CREATE path, when a new column or new seed content needs to reach
+    existing installs."""
     cols = {row["name"] for row in conn.execute("PRAGMA table_info(revision_schedule)").fetchall()}
     if "source" not in cols:
         conn.execute("ALTER TABLE revision_schedule ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'")
         conn.commit()
 
+    if "secondary_concept_slugs" not in _table_columns(conn, "problems"):
+        # Added by the 150-problem/50-day refinement for Greedy's
+        # cross-topic concept linking (see schema.sql's own comment on this
+        # column). Nullable and additive -- every existing problem row just
+        # gets NULL here until _seed_problems below (or a future edit)
+        # populates it, exactly like the `source` column above.
+        conn.execute("ALTER TABLE problems ADD COLUMN secondary_concept_slugs TEXT")
+        conn.commit()
+
     _migrate_add_visitor_id(conn)
+    _migrate_seed_new_content(conn)
 
 
 def _legacy_visitor_notice(conn):

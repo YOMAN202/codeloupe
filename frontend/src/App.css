@@ -696,6 +696,25 @@ code:not(pre code) {
 
 .lesson-nav-buttons { display: flex; justify-content: space-between; margin-top: 1.6rem; gap: 0.75rem; flex-wrap: wrap; }
 
+/* A day's exercises_markdown drills, each with its own per-exercise
+   "Try in Scratchpad" link (see LessonDetail.jsx) -- same row treatment
+   as .problem-row above, just list-semantic (<ol>) since these are a
+   sequence of drills rather than an unordered set of problems. */
+.exercise-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.exercise-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.85rem;
+}
+.exercise-list-item-text { color: var(--text); min-width: 0; }
+.exercise-try-link { white-space: nowrap; font-size: 0.85rem; }
+
 /* ---- teaching system: concept lessons, walkthroughs, checkpoints ------ */
 
 /* "When should I use this?" is the pattern-recognition section -- the part
@@ -754,7 +773,21 @@ code:not(pre code) {
 
 /* ---- problem browser (responsive row list, not a table) --------------- */
 
-.problem-list-rows { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; }
+/* Six columns (title/topic/pattern/difficulty/priority/time) at their
+   natural content width can genuinely exceed the available desktop width
+   once the sidebar + main-content padding are accounted for -- 1fr/auto
+   grid tracks have an implicit min-width floor of their own content
+   (nothing here forces a shrink below a badge's or a nowrap time value's
+   own width). Without a scroll boundary somewhere, that overflow used to
+   escape .problem-list-rows entirely and widen the whole page (a genuine
+   page-level horizontal scrollbar, or content simply rendering past the
+   viewport edge depending on browser) rather than staying contained to
+   the table -- this element is that boundary: rows/header scroll
+   sideways together, WITHIN the Problem Bank region, whenever their
+   combined natural width is wider than what's actually available. On
+   wide-enough viewports nothing scrolls at all; every column stays fully
+   visible either way, never hidden or shortened. */
+.problem-list-rows { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; overflow-x: auto; }
 .problem-list-row {
   display: grid;
   grid-template-columns: 1.8fr 1fr 1fr auto auto auto;
@@ -765,14 +798,15 @@ code:not(pre code) {
   border-radius: var(--radius);
   padding: 0.65rem 1rem;
   color: var(--text);
+  min-width: max-content;
 }
 .problem-list-row:hover { background: var(--s2); border-color: var(--border-strong); text-decoration: none; }
 .problem-list-row-title { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
 .problem-list-row-title span:first-child { color: var(--text); font-weight: 500; }
 .problem-list-row:hover .problem-list-row-title span:first-child { color: var(--teal); }
 .problem-list-row-meta { color: var(--text-faint); font-size: 0.74rem; }
-.problem-list-row-topic { color: var(--text-dim); font-size: 0.85rem; }
-.problem-list-row-pattern { color: var(--text-faint); font-size: 0.8rem; }
+.problem-list-row-topic { color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; }
+.problem-list-row-pattern { color: var(--text-faint); font-size: 0.8rem; white-space: nowrap; }
 .problem-list-row-time { color: var(--text-faint); font-size: 0.8rem; font-family: var(--font-mono); text-align: right; white-space: nowrap; }
 .problem-list-header {
   display: grid;
@@ -784,12 +818,14 @@ code:not(pre code) {
   font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  min-width: max-content;
 }
 
 @media (max-width: 760px) {
-  .problem-list-row, .problem-list-header { grid-template-columns: 1fr; }
+  .problem-list-row, .problem-list-header { grid-template-columns: 1fr; min-width: 0; }
   .problem-list-header { display: none; }
   .problem-list-row-time { text-align: left; }
+  .problem-list-row-topic, .problem-list-row-pattern { white-space: normal; }
 }
 
 /* ---- problem workspace --------------------------------------------------- */
@@ -994,6 +1030,19 @@ code:not(pre code) {
   margin-bottom: 0.75rem;
 }
 .scratchpad-context-banner p { margin: 0; }
+.scratchpad-context-banner-body { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; flex: 1; }
+/* The exact selected drill's text (see LessonDetail.jsx's per-exercise
+   "Try in Scratchpad" links) -- set apart from the plain "From Day N..."
+   context line above it so the actual question reads as the point of the
+   banner, not just more muted metadata. */
+.scratchpad-context-exercise {
+  color: var(--text);
+  font-weight: 500;
+  background: var(--s1);
+  border-left: 3px solid var(--teal);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+}
 .scratchpad-context-dismiss {
   background: none;
   border: none;

@@ -58,6 +58,7 @@ run() {
 
 # ---- backend-only checks (no browser) -----------------------------------
 run "backend smoke tests (test_endpoints.py)"              "(cd backend && python3 test_endpoints.py)"
+run "DB migration path (test_migration.py)"                "(cd backend && python3 test_migration.py)"
 run "live grading verification (verify_all_live.py)"       "(cd backend && python3 verify_all_live.py)"
 run "approach-comparison baselines (verify_approach_baselines.py)" "(cd backend && python3 verify_approach_baselines.py)"
 
@@ -69,6 +70,7 @@ run "visualizers, all 9 kinds (e2e_visualizers_test.py)"    "python3 e2e_visuali
 run "mistake journal / revision / practice (e2e_mistake_journal_test.py)" "python3 e2e_mistake_journal_test.py"
 run "approach comparison (e2e_approach_comparison_test.py)" "python3 e2e_approach_comparison_test.py"
 run "teaching system (e2e_teaching_test.py)"                "python3 e2e_teaching_test.py"
+run "production-fix verification (e2e_production_fixes_test.py)" "python3 e2e_production_fixes_test.py"
 
 # Leave a pristine, freshly seeded DB behind rather than whatever state
 # the last suite left it in.

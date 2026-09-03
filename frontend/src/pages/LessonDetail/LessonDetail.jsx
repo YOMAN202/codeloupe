@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { fetchLesson, setLessonProgress } from "../../api/client";
 import { StatusBadge, DifficultyBadge } from "../../components/Badges/Badges";
-import MultilineText, { renderInlineCode } from "../../components/MultilineText/MultilineText";
+import MultilineText, { renderInlineCode, splitNonEmptyLines } from "../../components/MultilineText/MultilineText";
 
 // A prediction question is usually one plain sentence ("How many times
 // does `for i in range(5):` run?"), but a few (e.g. Day 1) are a short
@@ -68,16 +68,30 @@ export default function LessonDetail() {
       </div>
 
       <div className="status-controls">
-        {["in_progress", "completed", "known", "skipped"].map((s) => (
-          <button
-            key={s}
-            className={`chip ${lesson.status === s ? "chip-active" : ""}`}
-            disabled={savingStatus}
-            onClick={() => updateStatus(s)}
-          >
-            Mark {s.replace("_", " ")}
-          </button>
-        ))}
+        {["in_progress", "completed", "known", "skipped"].map((s) => {
+          // "known" is the one status with a real toggle-off: clicking it
+          // again while already known should remove the known status
+          // rather than just re-saving the same value (see updateStatus's
+          // targetStatus below). The other three stay one-way "mark X"
+          // buttons, same as before -- "not_started" has no dedicated
+          // button and is reached only by unmarking known, exactly like
+          // it always could be reached via the status API.
+          const isActive = lesson.status === s;
+          const isKnownToggle = s === "known";
+          const label = isKnownToggle && isActive ? "Unmark known" : `Mark ${s.replace("_", " ")}`;
+          const targetStatus = isKnownToggle && isActive ? "not_started" : s;
+          return (
+            <button
+              key={s}
+              className={`chip ${isActive ? "chip-active" : ""}`}
+              disabled={savingStatus}
+              aria-pressed={isKnownToggle ? isActive : undefined}
+              onClick={() => updateStatus(targetStatus)}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {lesson.recommended_prerequisites?.length > 0 && (
@@ -147,10 +161,25 @@ export default function LessonDetail() {
 
       <section className="lesson-section">
         <h3>Exercises</h3>
-        <MultilineText text={lesson.exercises_markdown} />
-        <p className="muted">
-          Try these in the <Link to={`/scratchpad?from=lesson&day=${day}`}>scratchpad</Link> first.
-        </p>
+        {/* Each drill is its own list item with its own "Try in Scratchpad"
+            link carrying &exercise=<index> -- exercises_markdown has no
+            problem row / stable id of its own (see schema.sql), so the
+            0-based position among this day's non-empty lines is the
+            identifier, computed the SAME way MultilineText itself splits
+            this field for display (splitNonEmptyLines), never a second
+            parse of it. Scratchpad re-derives the exact line from that
+            index against the canonical lesson.exercises_markdown it
+            already fetches -- the text itself is never duplicated here. */}
+        <ol className="exercise-list">
+          {splitNonEmptyLines(lesson.exercises_markdown).map((line, i) => (
+            <li key={i} className="exercise-list-item">
+              <span className="exercise-list-item-text">{renderInlineCode(line)}</span>
+              <Link to={`/scratchpad?from=lesson&day=${day}&exercise=${i}`} className="exercise-try-link">
+                Try in Scratchpad
+              </Link>
+            </li>
+          ))}
+        </ol>
       </section>
 
       {lesson.must_explain && (

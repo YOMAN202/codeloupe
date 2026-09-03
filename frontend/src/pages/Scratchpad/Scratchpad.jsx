@@ -4,6 +4,7 @@ import CodeEditor from "../../components/Editor/CodeEditor";
 import TraceViewer from "../../components/TraceViewer/TraceViewer";
 import StdinInput from "../../components/StdinInput/StdinInput";
 import { runCode, traceCode, fetchLesson, fetchConcept } from "../../api/client";
+import { splitNonEmptyLines } from "../../components/MultilineText/MultilineText";
 
 const DEFAULT_CODE = "# Free scratchpad -- try exercises here, or trace any snippet.\n";
 
@@ -25,25 +26,54 @@ function useScratchpadContext(code, setCode) {
     const from = searchParams.get("from");
     if (!from) return;
     setDismissed(false);
+    // Clear any banner left over from a PREVIOUS context (a different day,
+    // exercise, or concept exercise) before the new one has finished
+    // fetching -- without this, dismissing one exercise's banner and then
+    // following a link to a different one would briefly re-show the old
+    // (now-dismissed) banner's stale text the instant `dismissed` flips
+    // back to false, until the new fetch resolves a moment later. Never
+    // shows a WRONG exercise's context, only a brief empty gap.
+    setBanner(null);
 
     let cancelled = false;
 
     if (from === "lesson") {
       const day = searchParams.get("day");
       if (!day) return;
+      // &exercise=<index> is optional -- absent for the existing day-only
+      // links (the generic day-level handoff, or any old bookmarked URL),
+      // present when a specific drill's own "Try in Scratchpad" link was
+      // clicked (see LessonDetail.jsx). Index is this day's 0-based
+      // position among exercises_markdown's non-empty lines, using the
+      // exact same split MultilineText itself renders with
+      // (splitNonEmptyLines) -- so this re-derives the specific exercise
+      // text from the SAME canonical field LessonDetail already showed,
+      // rather than duplicating any exercise text in this file.
+      const exerciseParam = searchParams.get("exercise");
       fetchLesson(day)
         .then((lesson) => {
           if (cancelled) return;
+          let exerciseText = null;
+          if (exerciseParam !== null) {
+            const lines = splitNonEmptyLines(lesson.exercises_markdown);
+            const idx = Number(exerciseParam);
+            if (Number.isInteger(idx) && lines[idx] !== undefined) {
+              exerciseText = lines[idx];
+            }
+          }
           setBanner({
             kind: "lesson",
             day: lesson.day,
             title: lesson.title,
             exercises_markdown: lesson.exercises_markdown,
+            exerciseText,
             problems: lesson.problems || [],
           });
           // No single starter_code to prefill here -- a day can carry
-          // several problems, each with its own starter code, so this
-          // context is banner-only (never touches `code`).
+          // several problems (and exercises_markdown drills have no
+          // starter_code of their own at all), so this context is
+          // banner-only (never touches `code`) whether or not a specific
+          // exercise was selected.
         })
         .catch(() => {
           /* Best-effort context -- a failed lookup just means no banner,
@@ -170,28 +200,35 @@ export default function Scratchpad() {
 
       {banner && (
         <div className="scratchpad-context-banner" role="note">
-          {banner.kind === "lesson" && (
-            <p className="muted small">
-              From <Link to={`/lessons/${banner.day}`}>Day {banner.day}: {banner.title}</Link>
-              {banner.problems.length > 0 && (
-                <>
-                  {" "}-- that day's problems:{" "}
-                  {banner.problems.map((p, i) => (
-                    <span key={p.slug}>
-                      {i > 0 && ", "}
-                      <Link to={`/problems/${p.slug}`}>{p.title}</Link>
-                    </span>
-                  ))}
-                </>
-              )}
-            </p>
-          )}
-          {banner.kind === "concept-exercise" && (
-            <p className="muted small">
-              Exercise from <Link to={`/learn/${banner.conceptSlug}`}>{banner.conceptTitle}</Link>
-              {banner.prompt_markdown && <> -- {banner.prompt_markdown}</>}
-            </p>
-          )}
+          <div className="scratchpad-context-banner-body">
+            {banner.kind === "lesson" && (
+              <>
+                <p className="muted small">
+                  From <Link to={`/lessons/${banner.day}`}>Day {banner.day}: {banner.title}</Link>
+                  {banner.problems.length > 0 && (
+                    <>
+                      {" "}-- that day's problems:{" "}
+                      {banner.problems.map((p, i) => (
+                        <span key={p.slug}>
+                          {i > 0 && ", "}
+                          <Link to={`/problems/${p.slug}`}>{p.title}</Link>
+                        </span>
+                      ))}
+                    </>
+                  )}
+                </p>
+                {banner.exerciseText && (
+                  <p className="scratchpad-context-exercise">{banner.exerciseText}</p>
+                )}
+              </>
+            )}
+            {banner.kind === "concept-exercise" && (
+              <p className="muted small">
+                Exercise from <Link to={`/learn/${banner.conceptSlug}`}>{banner.conceptTitle}</Link>
+                {banner.prompt_markdown && <> -- {banner.prompt_markdown}</>}
+              </p>
+            )}
+          </div>
           <button type="button" className="scratchpad-context-dismiss" onClick={dismissBanner} aria-label="Dismiss">
             &times;
           </button>
