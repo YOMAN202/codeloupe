@@ -1,6 +1,6 @@
 # Days 1-7 Study Guide — Python Fundamentals
 
-Theory, examples, questions, and full solutions for Week 1 of the curriculum (`docs/45-day-curriculum.md`). Day 8 onward returns to the interactive teaching loop and the full hint ladder, since that's where real DSA problems start — this guide covers only the from-zero Python fundamentals.
+Theory, examples, questions, and full solutions for Week 1 of the curriculum (`docs/50-day-curriculum.md`). Day 8 onward returns to the interactive teaching loop and the full hint ladder, since that's where real DSA problems start — this guide covers only the from-zero Python fundamentals.
 
 ---
 
@@ -525,4 +525,4 @@ Before Day 8, you should be able to explain, unaided, in your own words: what a 
 
 ## What changes starting Day 8
 
-Two things revert from "read at your own pace" back to the original design: the interactive teaching loop (concept → example → prediction → exercise → feedback, one step at a time) resumes, and the full hint ladder applies to every problem with no direct-solution shortcut (see `docs/learning-philosophy.md`'s amendment log for exactly what changed and why). Day 8 is arrays/prefix-sums, the start of Block 2 in `docs/45-day-curriculum.md`.
+Two things revert from "read at your own pace" back to the original design: the interactive teaching loop (concept → example → prediction → exercise → feedback, one step at a time) resumes, and the full hint ladder applies to every problem with no direct-solution shortcut (see `docs/learning-philosophy.md`'s amendment log for exactly what changed and why). Day 8 is arrays/prefix-sums, the start of Block 2 in `docs/50-day-curriculum.md`.

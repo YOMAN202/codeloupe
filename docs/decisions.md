@@ -20,7 +20,7 @@ This document exists so the project can be shown on a resume/GitHub honestly —
 
 **Excessive gamification.** No points, badges, streak rewards, or leaderboards, per your explicit instruction. The dashboard's only job is showing you the truth about where you're weak.
 
-**Advanced DSA topics beyond the 45-day scope** (segment/Fenwick trees, tries, union-find, Bellman-Ford/Floyd-Warshall/MST, bitmask/digit DP, advanced string algorithms). These are genuinely good topics — just not ones a placement-focused beginner needs inside 45 days, per the curriculum's stated priority of depth over breadth (see `45-day-curriculum.md`'s coverage summary).
+**Advanced DSA topics beyond the 45-day scope** (segment/Fenwick trees, tries, union-find, Bellman-Ford/Floyd-Warshall/MST, bitmask/digit DP, advanced string algorithms). These are genuinely good topics — just not ones a placement-focused beginner needs inside 45 days, per the curriculum's stated priority of depth over breadth (see `50-day-curriculum.md`'s coverage summary).
 
 ## Honest framing of the complexity estimator
 

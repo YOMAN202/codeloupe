@@ -425,23 +425,53 @@ def _resolve_concept_prereqs(conn, prerequisite_slugs, visitor_id):
 
 
 def _related_problems_for_concept(conn, concept):
-    """Problems this concept lesson applies to -- topic match, narrowed to
-    a specific pattern family when the lesson targets one (most
-    'pattern'-kind lessons will; both pilot lessons happen to leave
-    pattern_family NULL and cover a whole topic instead, per
-    seed_concepts.py). Core-tier problems sort first so a learner coming
-    from a lesson sees the curriculum's own curated entry point before
-    the extended/advanced pool."""
+    """Problems this concept lesson applies to -- a primary-topic match
+    (narrowed to a specific pattern family when the lesson targets one;
+    most 'pattern'-kind lessons will), PLUS any problem that names this
+    concept's slug in its own secondary_concept_slugs.
+
+    The second half is what lets a problem whose PRIMARY topic is
+    correctly something else still surface under a concept it genuinely
+    demonstrates -- e.g. jump-game stays topic='arrays' (that's still its
+    right primary classification) but lists 'greedy' as a secondary
+    concept, so the Greedy lesson can dynamically surface it without
+    reclassifying the problem or hardcoding its slug here. Same
+    comma-separated-slug convention already used by related_problem_slugs
+    and concept_lessons.prerequisite_slugs elsewhere in this schema --
+    see schema.sql's problems.secondary_concept_slugs comment. Works for
+    any future concept the same way: tag the problem, not the lesson.
+
+    Core-tier problems sort first so a learner coming from a lesson sees
+    the curriculum's own curated entry point before the extended/advanced
+    pool; a primary-topic match with a day set sorts ahead of a
+    secondary-concept match without one, same as the day-ordering used
+    everywhere else."""
+    concept_slug, concept_topic, concept_family = concept["slug"], concept["topic"], concept["pattern_family"]
     rows = conn.execute(
-        """SELECT slug, title, difficulty, pattern, path_tier, day FROM problems
-           WHERE topic = ?
-           ORDER BY CASE path_tier WHEN 'core' THEN 0 WHEN 'extended' THEN 1 ELSE 2 END, day, id""",
-        (concept["topic"],),
+        "SELECT id, slug, title, difficulty, pattern, path_tier, day, topic, secondary_concept_slugs FROM problems"
     ).fetchall()
-    result = [dict(r) for r in rows]
-    if concept["pattern_family"]:
-        result = [r for r in result if pattern_family_for(concept["topic"], r["pattern"]) == concept["pattern_family"]]
-    return result[:12]
+
+    matched = []
+    for row in rows:
+        d = dict(row)
+        is_primary = d["topic"] == concept_topic
+        if is_primary and concept_family and pattern_family_for(concept_topic, d["pattern"]) != concept_family:
+            is_primary = False
+        secondary_slugs = [s.strip() for s in (d["secondary_concept_slugs"] or "").split(",") if s.strip()]
+        is_secondary = concept_slug in secondary_slugs
+        if is_primary or is_secondary:
+            matched.append(d)
+
+    matched.sort(key=lambda d: (
+        {"core": 0, "extended": 1}.get(d["path_tier"], 2),
+        d["day"] if d["day"] is not None else 10**9,
+        d["id"],
+    ))
+    for d in matched:
+        d.pop("id", None)
+        d.pop("topic", None)
+        d.pop("secondary_concept_slugs", None)
+    return matched[:12]
 
 
 @app.route("/api/concepts", methods=["GET"])

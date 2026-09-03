@@ -64,6 +64,14 @@
   --heart: #ff5c8a;
   --heart-soft: rgba(255, 92, 138, 0.12);
 
+  /* The 4th difficulty tier, above Hard -- deliberately its own hue
+     rather than a darker --err, so "Complex" reads as "further along
+     the same ladder" instead of "more wrong/more severe" (--err/--heart
+     are both pink-red and already mean error/danger elsewhere; --violet
+     and --orchid are already spoken for by path_tier badges). */
+  --complex: #c2409e;
+  --complex-soft: rgba(194, 64, 158, 0.14);
+
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
@@ -485,6 +493,7 @@ select:focus-visible,
 .difficulty-Easy { background: var(--ok-soft); color: var(--ok); }
 .difficulty-Medium { background: var(--caution-soft); color: var(--caution); }
 .difficulty-Hard { background: var(--err-soft); color: var(--err); }
+.difficulty-Complex { background: var(--complex-soft); color: var(--complex); }
 
 .tier-core { background: var(--violet-soft); color: var(--violet); }
 .tier-extended { background: var(--sky-soft); color: var(--sky); }
@@ -533,6 +542,15 @@ select:focus-visible,
   margin: 0.75rem 0;
 }
 .filter-row label { color: var(--text-faint); font-size: 0.78rem; margin-right: 0.4rem; }
+.problem-sort-select {
+  background: var(--s2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.45rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+}
 
 /* ---- callouts (curriculum resume / dashboard "start here") ----------- */
 
@@ -959,6 +977,34 @@ code:not(pre code) {
    overloading those classes with scratchpad-only concerns or fighting
    their existing rules with overrides. Separate classes keep the two
    pages' CSS independently readable and change-safe. */
+
+/* Read-only "Try in Scratchpad" context banner (see Scratchpad.jsx's
+   useScratchpadContext) -- deliberately placed OUTSIDE .scratchpad-columns
+   so it never participates in that container's height-critical Split-mode
+   flex math (see the .scratchpad-page-split rules below). */
+.scratchpad-context-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+  background: var(--s2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.75rem;
+}
+.scratchpad-context-banner p { margin: 0; }
+.scratchpad-context-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  flex: 0 0 auto;
+}
+.scratchpad-context-dismiss:hover { color: var(--text); }
 
 .scratchpad-toolbar {
   display: flex;

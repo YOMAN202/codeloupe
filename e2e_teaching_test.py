@@ -71,7 +71,7 @@ def main():
         page.goto(f"{BASE}/#/learn")
         page.wait_for_selector("text=Learn", timeout=10000)
         cards = page.locator(".lesson-card")
-        check("Learn hub lists all twenty-eight concept lessons (pilot + batches 1-11, the full expansion)", cards.count() == 28)
+        check("Learn hub lists all twenty-nine concept lessons (pilot + batches 1-11 + Greedy, the full expansion)", cards.count() == 29)
         check("Learn hub groups by topic (arrays, two pointer, strings, hashing, sliding window, linked lists, stacks, queues, recursion, binary search, sorting, trees, heaps, graphs, dynamic programming)",
               page.locator("text=two pointer").count() > 0
               and page.locator("h3", has_text="arrays").count() > 0
@@ -690,8 +690,8 @@ def main():
         check("final frame's caption bridges to the next two lessons' grid representation",
               "adjacency list" in page.locator(".concept-walkthrough-caption").inner_text().lower())
         problem_rows = page.locator(".problem-list .problem-row")
-        check("graphs (pattern_family unset) shows all 9 topic='graphs' curated problems",
-              problem_rows.count() == 9)
+        check("graphs (pattern_family unset) shows all 11 topic='graphs' curated problems",
+              problem_rows.count() == 11)
 
         # ---- batch 10: graph-bfs lesson (grid BFS via GridGraphView, no ------
         # adapter needed, same as HeapView) ------------------------------------
@@ -762,8 +762,8 @@ def main():
               "s=0" in page.locator(".concept-walkthrough-caption").inner_text().lower()
               and "a=3" in page.locator(".concept-walkthrough-caption").inner_text().lower())
         problem_rows = page.locator(".problem-list .problem-row")
-        check("graph-shortest-paths (pattern_family='Graph shortest paths') narrows to 4 problems",
-              problem_rows.count() == 4)
+        check("graph-shortest-paths (pattern_family='Graph shortest paths') narrows to 5 problems",
+              problem_rows.count() == 5)
         checkpoint_choice = page.get_by_role("button", name=re.compile("Plain BFS is enough and simpler"))
         check("graph-shortest-paths has a choose_pattern checkpoint about BFS vs Dijkstra",
               checkpoint_choice.count() > 0)
@@ -808,8 +808,8 @@ def main():
         check("final frame's caption confirms fib(2) was recomputed 10 separate times by naive recursion",
               "10 separate times" in page.locator(".concept-walkthrough-caption").inner_text().lower())
         problem_rows = page.locator(".problem-list .problem-row")
-        check("dynamic-programming (pattern_family unset) shows all 10 topic='dynamic-programming' curated problems",
-              problem_rows.count() == 10)
+        check("dynamic-programming (pattern_family unset) shows all 12 topic='dynamic-programming' curated problems",
+              problem_rows.count() == 12)
 
         # ---- batch 11: dp-1d lesson (House Robber's skip-or-take recurrence, --
         # covering both Day 40 and Day 41 -- they share one lesson since both
@@ -838,8 +838,8 @@ def main():
         check("correct choice gets positive feedback styling",
               "checkpoint-correct" in (checkpoint_choice.get_attribute("class") or ""))
         problem_rows = page.locator(".problem-list .problem-row")
-        check("dp-1d (pattern_family='1D dynamic programming') narrows to 5 problems",
-              problem_rows.count() == 5)
+        check("dp-1d (pattern_family='1D dynamic programming') narrows to 6 problems",
+              problem_rows.count() == 6)
 
         # ---- batch 11: dp-2d lesson (Unique Paths on a 2D grid, DPTableView's --
         # is2D branch) ------------------------------------------------------------
@@ -864,8 +864,8 @@ def main():
         check("revealed checkpoint explanation renders",
               page.locator(".checkpoint-explanation").first.inner_text().strip() != "")
         problem_rows = page.locator(".problem-list .problem-row")
-        check("dp-2d (pattern_family='2D dynamic programming') narrows to 3 problems",
-              problem_rows.count() == 3)
+        check("dp-2d (pattern_family='2D dynamic programming') narrows to 4 problems",
+              problem_rows.count() == 4)
 
         # ---- integration: days 39-42 all link to all three DP lessons ----------
         for day in (39, 40, 41, 42):

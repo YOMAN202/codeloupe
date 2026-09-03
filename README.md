@@ -4,7 +4,7 @@ Codeloupe is a DSA learning environment built around one idea: you don't underst
 
 **Learn a concept → write your own code → run it → understand why it failed → trace what your actual code did, line by line → see it visualized → review your mistakes later → revise.**
 
-A full 45-day Python + DSA curriculum, 109 curated interview-style problems, 28 concept lessons, and a code tracer built on `sys.settrace` that traces the code *you* submitted, bugs and all, sit behind that loop.
+A full 50-day Python + DSA curriculum, 150 curated interview-style problems (Easy/Medium/Hard/Complex, across 16 topics including Greedy), 29 concept lessons, and a code tracer built on `sys.settrace` that traces the code *you* submitted, bugs and all, sit behind that loop.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Codeloupe dashboard" width="800">
@@ -14,7 +14,7 @@ A full 45-day Python + DSA curriculum, 109 curated interview-style problems, 28 
 
 Most learning platforms fall into one of two camps: static content (videos, articles, no code) or a plain judge (submit code, get pass/fail, no explanation). Codeloupe tries to be the thing in between:
 
-- **A full curriculum, not a problem dump.** 45 days, Core/Extended/Advanced tiers, prerequisite tracking, and 28 concept lessons that teach *why* a pattern works before you're asked to apply it.
+- **A full curriculum, not a problem dump.** 50 days, Core/Extended/Advanced tiers, prerequisite tracking, and 29 concept lessons that teach *why* a pattern works before you're asked to apply it.
 - **Traces your actual code, not a canned animation.** The trace visualizer runs *your* submitted solution under `sys.settrace` and replays its real execution, including when it's wrong. Most "algorithm visualizers" animate a known-correct reference implementation; Codeloupe's traces the thing you actually wrote, so a bug shows up as a bug in the visualization too, not as a generic failure message.
 - **Topic-specific visualizations, not one generic view.** Arrays get pointer/window views, linked lists and trees get node-graph views, graphs get grid or adjacency views, heaps get tree-heap views, DP problems get table views with cell-level diff highlighting. The same rendering components are reused for both the curated concept-lesson walkthroughs and real trace output, so the visual language stays consistent everywhere in the app.
 - **Live Preview, not just on-demand tracing.** As you type in the editor, a debounced live trace of your code updates automatically in the background, no need to click anything first to see it start executing. One click ("Open in full Trace") promotes that exact trace into the full Trace view, scrolled straight to it.
@@ -28,7 +28,7 @@ Most learning platforms fall into one of two camps: static content (videos, arti
   <img src="docs/screenshots/learn-hub.png" alt="Learn hub with 28 concept lessons grouped by topic" width="800">
 </p>
 
-**1. Learn:** Browse the Learn hub (28 concept lessons across every topic in the curriculum), then open one: read what it is, why it matters, how to recognize it, and a step-by-through worked example, answer inline checkpoints, try a practice exercise.
+**1. Learn:** Browse the Learn hub (29 concept lessons across every topic in the curriculum, including Greedy), then open one: read what it is, why it matters, how to recognize it, and a step-by-through worked example, answer inline checkpoints, try a practice exercise.
 
 <p align="center">
   <img src="docs/screenshots/concept-lesson.png" alt="Concept lesson with interactive walkthrough" width="800">
@@ -77,9 +77,9 @@ See [`docs/architecture.md`](docs/architecture.md) for the full breakdown: syste
 
 ## Features
 
-- 45-day curriculum (Core/Extended/Advanced problem tiers, prerequisite tracking, resume/recommended-next)
-- 28 concept lessons (what/why/recognize/intuition, an interactive worked-example walkthrough, inline checkpoints, a practice exercise) across every topic the curriculum covers
-- 109 curated, interview-style problems with visible test cases, edge-case notes, and constraints
+- 50-day curriculum (Core/Extended/Advanced problem tiers, prerequisite tracking, resume/recommended-next)
+- 29 concept lessons (what/why/recognize/intuition, an interactive worked-example walkthrough, inline checkpoints, a practice exercise) across every topic the curriculum covers, including Greedy
+- 150 curated, interview-style problems (Easy/Medium/Hard/Complex) with visible test cases, edge-case notes, and constraints
 - A Monaco-based code editor with a real Python sandbox behind "Run tests"
 - Live Preview: an automatic, debounced trace of your code as you type, one click away from the full Trace view
 - Step-by-step execution tracing of your own submitted code (correct or buggy), including a predict-mode
@@ -145,7 +145,7 @@ The build is a static site with no server-side rendering; see `docs/architecture
 
 - [`docs/architecture.md`](docs/architecture.md): system architecture, trace pipeline, visualizer design, deployment
 - [`docs/decisions.md`](docs/decisions.md): the honest log of every scope/architecture decision and why it was made
-- [`docs/45-day-curriculum.md`](docs/45-day-curriculum.md): the full day-by-day curriculum
+- [`docs/50-day-curriculum.md`](docs/50-day-curriculum.md): the full day-by-day curriculum
 - [`docs/learning-philosophy.md`](docs/learning-philosophy.md): the pedagogical rules the content follows
 - [`docs/problem-roadmap.md`](docs/problem-roadmap.md): the curated problem set's structure and coverage
 

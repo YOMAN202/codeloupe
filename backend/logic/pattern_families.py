@@ -57,6 +57,12 @@ _RULES = [
     (lambda t, p: t == "dynamic-programming" and "1d" in p, "1D dynamic programming"),
     (lambda t, p: t == "dynamic-programming" and "2d" in p, "2D dynamic programming"),
     (lambda t, p: t == "dynamic-programming", "Dynamic programming"),
+    # New 16th topic (see docs/50-day-curriculum.md's Greedy addition).
+    # Every problem seeded with topic="greedy" lands in one family
+    # regardless of its specific pattern text -- there's no sub-family
+    # split the way two-pointer/DP get, since the curriculum only needs
+    # one Greedy concept lesson to cover Easy through Complex.
+    (lambda t, p: t == "greedy", "Greedy"),
 ]
 
 

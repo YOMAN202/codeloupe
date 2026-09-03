@@ -177,7 +177,7 @@ function App() {
                 code<span className="accent">loupe</span>
               </span>
             </div>
-            <p className="brand-tagline">Your DSA companion</p>
+            <p className="brand-tagline">Your Python DSA companion</p>
           </div>
           {/* Hidden on the existing mobile layout (see App.css) -- that
               layout has no collapse concept and this control shouldn't

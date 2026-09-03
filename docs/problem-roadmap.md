@@ -14,11 +14,11 @@ Each problem in the database is one record with the following fields:
 - `brute_force_approach`, `optimal_approach` (short text descriptions, used in post-solve review, not shown up front)
 - `test_cases` (curated edge cases) plus a `generator` spec (how to produce randomized stress-test inputs, and what brute-force reference function to compare against, per `PART 7` of your brief)
 - `related_problems` (ids), `prerequisites` (ids or topic names — used to decide what's unlocked when)
-- `curriculum_day` (which day in `45-day-curriculum.md` this problem belongs to)
+- `curriculum_day` (which day in `50-day-curriculum.md` this problem belongs to)
 
 ## Starter problem set (curated, not exhaustive)
 
-The full per-day list already lives in `45-day-curriculum.md` (field 6 of every day) — this section is the aggregate view plus counts, so the database's initial seed size is concrete rather than open-ended, per your instruction to start curated and expand later.
+The full per-day list already lives in `50-day-curriculum.md` (field 6 of every day) — this section is the aggregate view plus counts, so the database's initial seed size is concrete rather than open-ended, per your instruction to start curated and expand later.
 
 | Block | Days | Topics | Approx. problem count |
 |---|---|---|---|

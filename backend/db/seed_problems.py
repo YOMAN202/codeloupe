@@ -134,6 +134,7 @@ PROBLEMS = [
                 "left, right = 0, len(numbers)-1; while left<right: compute sum; if equal return [left+1, right+1] (1-indexed!); if too small, left+=1; else right-=1."]),
 
     dict(slug="max-area-container", title="Container With Most Water", day=14, topic="two-pointer", pattern="same-direction greedy two-pointer", difficulty="Medium", interview_priority="Core", estimated_solve_minutes=25, progression_stage="variation", canonical_reference="LeetCode 11: Container With Most Water",
+         secondary_concept_slugs="greedy",
          description="Given an array `height` where height[i] is the height of a vertical line at position i, find two lines that together with the x-axis form a container holding the most water. Return the maximum area.",
          constraints="2 <= len(height) <= 10^5; 0 <= height[i] <= 10^4.",
          function_signature="def max_area(height):",
@@ -1616,7 +1617,7 @@ PROBLEMS = [
     dict(
          slug='jump-game',
          title='Jump Game',
-         day=None,
+         day=8,
          topic='arrays',
          pattern='greedy reachability',
          difficulty='Medium',
@@ -1624,7 +1625,8 @@ PROBLEMS = [
          estimated_solve_minutes=20,
          progression_stage='variation',
          canonical_reference='LeetCode 55: Jump Game',
-         path_tier='extended',
+         path_tier='core',  # promoted from extended -- approved expansion, see deliverables/EXPANSION_PLAN.md
+         secondary_concept_slugs='greedy',
          description='Given an array where nums[i] is the maximum jump length from index i, starting at index 0, return True if you can reach the last index.',
          constraints='1 <= len(nums) <= 10^4.',
          function_signature='def can_jump(nums):',
@@ -2188,6 +2190,7 @@ PROBLEMS = [
          day=None,
          topic='two-pointer',
          pattern='greedy two-pointer pairing',
+         secondary_concept_slugs='greedy',
          difficulty='Medium',
          interview_priority='Important',
          estimated_solve_minutes=18,
@@ -2496,6 +2499,7 @@ PROBLEMS = [
          day=None,
          topic='heaps',
          pattern='greedy simulation with a max-heap and cooldown queue',
+         secondary_concept_slugs='greedy',
          difficulty='Medium',
          interview_priority='Important',
          estimated_solve_minutes=30,
@@ -2718,4 +2722,14 @@ PROBLEMS = [
         ),
 ]
 
+# Approved 150-problem expansion (Sept 2026) -- see seed_problems_expansion.py
+# and deliverables/EXPANSION_PLAN.md for the coverage-matrix rationale behind
+# these 41 additions. Kept in a separate module and concatenated here (rather
+# than hand-merged into the list above) so the addition stays independently
+# reviewable and diffable from the original 109.
+from seed_problems_expansion import NEW_PROBLEMS as _NEW_PROBLEMS  # noqa: E402
+
+PROBLEMS = PROBLEMS + _NEW_PROBLEMS
+
 assert len({p["slug"] for p in PROBLEMS}) == len(PROBLEMS), "Duplicate problem slugs"
+assert len(PROBLEMS) == 150, f"Expected exactly 150 problems after the approved expansion, got {len(PROBLEMS)}"

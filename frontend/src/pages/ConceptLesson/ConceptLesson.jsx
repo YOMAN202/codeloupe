@@ -8,7 +8,7 @@ import Checkpoint from "../../components/Checkpoint/Checkpoint";
 
 const KIND_LABEL = { topic: "Topic", pattern: "Pattern" };
 
-function PracticeExercise({ exercise, index }) {
+function PracticeExercise({ exercise, index, conceptSlug }) {
   const [revealed, setRevealed] = useState(false);
   return (
     <div className="lesson-section practice-exercise">
@@ -16,7 +16,11 @@ function PracticeExercise({ exercise, index }) {
       <p>{renderInlineCode(exercise.prompt_markdown)}</p>
       {exercise.starter_code && <pre className="code-block">{exercise.starter_code}</pre>}
       <p className="muted small">
-        Try it in the <Link to="/scratchpad">scratchpad</Link> first, then check your approach here.
+        Try it in the{" "}
+        <Link to={`/scratchpad?from=concept-exercise&concept=${conceptSlug}&id=${exercise.id}`}>
+          scratchpad
+        </Link>{" "}
+        first, then check your approach here.
       </p>
       {!revealed ? (
         <button className="chip" onClick={() => setRevealed(true)}>
@@ -170,7 +174,7 @@ export default function ConceptLesson() {
         <section className="lesson-section">
           <h3>Practice before a full problem</h3>
           {concept.practice_exercises.map((ex, i) => (
-            <PracticeExercise key={ex.id} exercise={ex} index={i} />
+            <PracticeExercise key={ex.id} exercise={ex} index={i} conceptSlug={slug} />
           ))}
         </section>
       )}

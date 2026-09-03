@@ -149,7 +149,7 @@ export default function LessonDetail() {
         <h3>Exercises</h3>
         <MultilineText text={lesson.exercises_markdown} />
         <p className="muted">
-          Try these in the <Link to="/scratchpad">scratchpad</Link> first.
+          Try these in the <Link to={`/scratchpad?from=lesson&day=${day}`}>scratchpad</Link> first.
         </p>
       </section>
 
@@ -185,7 +185,7 @@ export default function LessonDetail() {
         <button className="chip" onClick={() => navigate(`/lessons/${Number(day) - 1}`)} disabled={Number(day) <= 1}>
           &larr; Day {Number(day) - 1}
         </button>
-        <button className="chip" onClick={() => navigate(`/lessons/${Number(day) + 1}`)} disabled={Number(day) >= 45}>
+        <button className="chip" onClick={() => navigate(`/lessons/${Number(day) + 1}`)} disabled={Number(day) >= 50}>
           Day {Number(day) + 1} &rarr;
         </button>
       </div>

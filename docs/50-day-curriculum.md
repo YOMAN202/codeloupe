@@ -1,8 +1,10 @@
-# Codeloupe — 45-Day Python + DSA Curriculum
+# Codeloupe — 50-Day Python + DSA Curriculum
 
 **Starting point:** zero Python, zero DSA except basic Big-O intuition.
 **Target:** independently solve placement-level DSA problems in Python and explain the solution out loud.
-**Pace:** ~3.5-4 hours/day, 45 consecutive days.
+**Pace:** ~3-4 hours/day, 50 consecutive days.
+
+> **Status note (Sept 2026 expansion):** this doc was originally written and shipped as a 45-day/109-problem plan; it's now updated in place for the approved 45→50 day / 109→150 problem expansion (see `deliverables/EXPANSION_PLAN.md` for the full rationale). Renamed from `45-day-curriculum.md` for the same reason. Days 1-42 are content-identical to the original plan — nothing about the first 42 days changed. Days 43-50 (Block 7, was Days 43-45) are new/rewritten. See "Canonical curriculum vs. the Problem Bank pool" below for how the 150-problem bank relates to this day-by-day sequence.
 
 ## How to read each day
 
@@ -13,7 +15,7 @@ Every day lists exactly the 12 fields you asked for, in order:
 4. Visual concept — what the trace visualizer / diagram should show you (built progressively as the app is built; usable as a paper-sketch even before the tool exists)
 5. Coding exercises — small warm-ups before the named problems
 6. Recommended problems
-7. Difficulty (relative to a beginner's Day N, not absolute LeetCode difficulty)
+7. Difficulty (relative to a beginner's Day N, not absolute LeetCode difficulty — see the difficulty-labels note below for how this relates to the shipped product's actual Easy/Medium/Hard/Complex field)
 8. Number of problems
 9. What you must be able to explain before moving on — your own daily "exit ticket"
 10. Common beginner mistakes — the specific bugs to watch for
@@ -22,9 +24,15 @@ Every day lists exactly the 12 fields you asked for, in order:
 
 **On revision (field 11):** each day gets a lightweight revision item — a 5-10 minute recall of the previous day's core idea, restated in your own words or by re-solving one small exercise from memory. Every block (roughly weekly) ends in a dedicated checkpoint/review day covering the whole block. This manual rule is intentionally simple; once the app's progress tracker (see `problem-roadmap.md` and `learning-philosophy.md`) has real performance data on you, it takes over with the adaptive 1-day/3-day/7-day/14-day schedule from `PART 10` of your brief — a fixed manual schedule can't do that well because it doesn't know yet what *you* actually struggle with, and that personalization is the entire point of the tracker.
 
-**On difficulty labels:** Beginner-Easy < Easy < Easy-Medium < Medium < Medium-Hard, calibrated to where you are in the curriculum, not to LeetCode's absolute scale — a "Medium" on Day 20 and a "Medium" on Day 40 are not the same in absolute terms, but both should feel like a fair stretch at that point in your journey.
+**On difficulty labels:** Beginner-Easy < Easy < Easy-Medium < Medium < Medium-Hard, calibrated to where you are in the curriculum, not to LeetCode's absolute scale — a "Medium" on Day 20 and a "Medium" on Day 40 are not the same in absolute terms, but both should feel like a fair stretch at that point in your journey. **This is a relative, narrative label describing how a day's problems feel at that point in the plan — it is a separate thing from the shipped product's `problems.difficulty` database field**, which is a fixed, four-level scale used for real filtering/sorting/badges in the app: **Easy / Medium / Hard / Complex**, the same for every problem regardless of curriculum day. Complex is the newest of those four (added alongside the 109→150 expansion) — a genuine step above Hard, reserved for problems that are hard even by Advanced-tier standards; it is a difficulty level, not a topic or category, and every one of the app's 16 topics (including Greedy) has at least one Complex-difficulty problem.
 
 **Topic-order note:** your brief listed two pointers/sliding window before sorting/binary search, but also grouped days 17-24 as "sorting, binary search, recursion, two pointers, sliding window." I resolved this by teaching two pointers and sliding window inside the Days 8-16 block (right after hashing, since they're array/string patterns and build directly on hashing's "have I seen this before" intuition), so Days 17-24 is purely sorting → binary search → recursion. This keeps every day building on the *immediately preceding* day rather than skipping around.
+
+**Greedy note:** Greedy was added as the product's 16th topic in the same expansion that added the Complex difficulty. It does not get its own dedicated day-block the way two-pointer/sliding-window do — it's taught as a cross-curriculum pattern instead, via its own concept lesson (Learn hub) covering local-vs-global choice, recognition signals, and the exchange-argument intuition for *why* a greedy choice is safe. Some greedy-flavored problems already sit inside the day sequence below under their original topic (Day 8's Jump Game is an `arrays` problem that also demonstrates greedy reachability; Day 14's Container With Most Water similarly demonstrates greedy two-pointer reasoning under `two-pointer`) — their primary topic is deliberately unchanged, since that's still where they best teach their *day's* lesson, but the app's Greedy concept lesson surfaces them too as worked cross-topic examples. The rest of the Greedy-topic problem pool (Assign Cookies, Jump Game II, Gas Station, Partition Labels, Candy, Course Schedule III — spanning Easy through Complex) lives in the Problem Bank pool; see the canonical-vs-pool section below.
+
+## Canonical curriculum vs. the Problem Bank pool
+
+This document describes the day-by-day **teaching sequence** — what's introduced, in what order, and why. The shipped Problem Bank is larger than that sequence: **150 total problems**, of which a **day-tied subset** (currently 82 problems across Days 8-49) is what this doc walks through below, either as `path_tier='core'` (required for "Core Path" completion — Easy/Medium only, by design; see `decisions.md`) or as a specific day's *recommended, optional* pick from the Extended/Advanced pool (Days 44-49's mock-interview and advanced-practice problems — see Block 7 below). The remaining problems are **pool-only**: `path_tier='extended'` or `'advanced'`, `day=NULL`, browsable any time from the Problem Bank, never required, and never counted toward Core Path completion regardless of whether a day recommends one of their pool-mates. A problem having a day set is a "this is a good fit for that point in the plan" signal, not a completion requirement — only `path_tier='core'` gates Core Path completion.
 
 ---
 
@@ -640,52 +648,126 @@ Every day lists exactly the 12 fields you asked for, in order:
 
 ---
 
-## Block 7 — Days 43-45: Revision + Mock Interviews
+## Block 7 — Days 43-50: Revision & Mock Interviews
+
+**Rewritten for the 45→50 day expansion.** The original plan's Block 7 was 3 days (43-45: one revision day, one double mock-interview day, one final mock+wrapup day). The approved expansion stretches the same idea across 8 days, with two changes worth naming explicitly: (1) there is no "Mock Interview Mode" feature in the shipped product — every "mock interview" below means *using the existing Problem Workspace yourself*, under a self-set timer, with hints deliberately not opened until time is up, exactly like any other problem attempt; and (2) Days 44-49 each now point to a **specific, curated set of recommended problems** (pulled from the Extended/Advanced pool, `path_tier` unchanged, so none of them count toward or are required for Core Path completion) rather than only a vague "pick something" — chosen so the new Hard/Complex-difficulty problems from the 150-problem expansion land specifically here, where deliberate exposure to hard material under support makes sense, instead of being scattered arbitrarily across the plan.
 
 ### Day 43 — Full revision day
 1. **Python:** none new.
-2. **DSA:** none new — entirely revision, driven by the app's tracked weak topics rather than a fixed list, since by now weaknesses are personal and data-driven.
-3. **Why:** skills fade without deliberate revisit — a dedicated full sweep 2 days before mock interviews is the last chance to firm up shaky topics before they're tested under pressure.
-4. **Visual:** whichever visualizations correspond to the specific weak topics flagged — no two people's Day 43 looks the same.
-5. **Exercises:** re-solve one problem from each of the 6 block checkpoints (Days 7, 16, 24, 32, 38, 42) from scratch, without looking at old code, prioritizing whatever the tracker flags as weakest.
-6. **Recommended problems:** 6-8 problems, one per major topic, pulled from your weak-topics list. Fallback if no tracker data exists yet: Two Sum, sliding-window max, merge sort, binary search, reverse linked list, tree traversal, graph BFS, one DP problem.
+2. **DSA:** none new — entirely revision, driven by the app's tracked weak topics rather than a fixed list.
+3. **Why:** skills fade without deliberate revisit — a full sweep before the mock-interview days that follow.
+4. **Visual:** whichever visualizations correspond to your specific weak topics.
+5. **Exercises:** re-solve one problem from each of the 6 block checkpoints (Days 7, 16, 24, 32, 38, 42) from scratch, prioritizing your weakest topics per the dashboard.
+6. **Recommended problems:** none new — this day revisits Days 1-42's own checkpoint problems, not new material.
 7. **Difficulty:** Mixed Easy-Medium, matched to weak areas.
-8. **Number of problems:** 6-8.
-9. **Must explain:** for each revised topic, restate the core pattern/recurrence/invariant from memory, unaided, in your own words.
-10. **Common mistakes:** whatever the tracker has recorded most frequently for you personally — treated as the day's primary content.
+8. **Number of problems:** 6 (one per checkpoint).
+9. **Must explain:** for each revised topic, restate the core pattern/recurrence/invariant from memory.
+10. **Common mistakes:** whatever your tracker shows most frequently — treated as the day's content.
 11. **Revision:** the entire 42-day curriculum, filtered to weak topics.
 12. **Estimated time:** ~4h.
 
 ### Day 44 — Mock interviews 1 and 2
 1. **Python:** none new.
-2. **DSA:** none new — applying everything under interview conditions (timer, no hints, explain your approach out loud).
-3. **Why:** solving alone at your own pace is a different skill from solving under a clock while narrating your thinking — the first day that specifically trains that second skill, deliberately placed once the underlying DSA knowledge is solid.
-4. **Visual:** none new — mock-interview mode has a minimal, distraction-free UI (timer, problem statement, editor) by design.
-5. **Exercises:** two full mock interviews (30-45 min each), one Easy-Medium and one Medium, covering two different topic areas; complete the post-interview review after each (correctness, complexity, code clarity, edge cases, pattern recognition).
-6. **Recommended problems:** 2 problems, drawn from topics *not* already covered in Day 43's revision set where possible, to test breadth.
-7. **Difficulty:** Easy-Medium and Medium.
-8. **Number of problems:** 2.
-9. **Must explain:** after each mock interview, a full walkthrough of your approach as if speaking to an interviewer — this is graded as part of the exercise, not optional.
-10. **Common mistakes:** whatever the post-interview review surfaces — logged like any other day's mistakes.
+2. **DSA:** none new — interview conditions (self-set timer, no hints during the attempt).
+3. **Why:** solving under a clock while narrating your thinking is a different skill from solving alone.
+4. **Visual:** the Problem Workspace, used deliberately under real-interview conditions — pick a problem you haven't solved, start your own timer, don't open hints until time is up.
+5. **Exercises:** two full mock interviews (30-45 min each) using the Problem Workspace under self-imposed interview conditions, followed by an honest post-interview review each time.
+6. **Recommended problems:** a curated menu of 3 to pick two from — **Meeting Rooms II** (Medium, heaps) and **Gas Station** (Medium, greedy) as realistic single-session interview problems, plus **LRU Cache** (Hard, hashing/design) as a stretch option for a second, tougher session. Pick your own from the Problem Bank instead if you'd rather.
+7. **Difficulty:** Medium, with one Hard option.
+8. **Number of problems:** 2 attempted, from a menu of 3.
+9. **Must explain:** a full walkthrough of your approach after each interview, as if speaking to an interviewer.
+10. **Common mistakes:** whatever the post-interview review surfaces.
 11. **Revision:** none scheduled — this day is itself the revision mechanism for everything prior.
-12. **Estimated time:** ~4h (2 interviews + 2 reviews).
+12. **Estimated time:** ~4h.
 
-### Day 45 — Mock interview 3, final review, wrap-up
+### Day 45 — Mixed-problem interview practice
+1. **Python:** none new.
+2. **DSA:** none new — pattern recognition without a topic label as a hint.
+3. **Why:** real interviews don't announce the topic in advance — practicing on a mixed, unlabeled set builds actual pattern-recognition speed, not just topic recall.
+4. **Visual:** the Problem Bank's Difficulty sort view, used to pick problems without leaning on the Topic column as a hint.
+5. **Exercises:** pick 3-4 problems spanning different topics and solve each under a self-set timer, narrating your approach before writing code.
+6. **Recommended problems:** a curated menu spanning four different topics — **Rotate Image** (Medium, arrays/grid), **Word Search** (Medium, recursion/backtracking), **Remove K Digits** (Medium, stacks), **Course Schedule II** (Medium, graphs). Pick 3-4 of these, or substitute your own mixed set from the Problem Bank.
+7. **Difficulty:** Medium.
+8. **Number of problems:** 3-4.
+9. **Must explain:** for each problem, the moment you recognized which pattern applied and what tipped you off.
+10. **Common mistakes:** choosing problems from one familiar topic instead of genuinely mixing categories.
+11. **Revision:** none scheduled.
+12. **Estimated time:** ~3.5h.
+
+### Day 46 — Weak-area revision
+1. **Python:** none new.
+2. **DSA:** none new — targeted revision driven by tracked weak topics.
+3. **Why:** a second, more targeted revision pass — Day 43 covered everything broadly; this goes deep specifically on whatever the dashboard shows as weakest after two mock interviews' worth of fresh data.
+4. **Visual:** the dashboard's per-topic accuracy/attempt breakdown, sorted worst-first.
+5. **Exercises:** re-solve 2-3 problems from your single weakest topic from scratch, unassisted first, hints if stuck, then a second unassisted problem on the same topic to confirm it actually transferred.
+6. **Recommended problems:** three fresh-material options in case your weak topic matches one — **Decode Ways** (Medium, DP), **Binary Search Tree Iterator** (Medium, trees), **Non-overlapping Intervals** (Medium, arrays). Otherwise, pick from your own weak topic in the Problem Bank.
+7. **Difficulty:** Medium.
+8. **Number of problems:** 2-3.
+9. **Must explain:** the specific pattern/recurrence/invariant for your weakest topic, restated from memory, plus what specifically went wrong earlier.
+10. **Common mistakes:** re-solving a problem you already know well instead of genuinely targeting the weak topic; skipping the confirming second problem.
+11. **Revision:** Days 1-45, filtered to your single weakest topic.
+12. **Estimated time:** ~3h.
+
+### Day 47 — Advanced and Complex problem practice
+1. **Python:** none new.
+2. **DSA:** none new — deliberate exposure to Hard/Complex-tier problems.
+3. **Why:** the Complex difficulty tier and the Advanced tier's Hard problems are optional by design, but for anyone aiming past entry-level interviews, deliberate practice on genuinely hard problems now, with full support available, beats encountering one cold in a real interview. This is the plan's intended home for the 150-problem expansion's Hard/Complex material.
+4. **Visual:** the Problem Bank filtered to the Advanced tier, sorted by Difficulty (Hard, then Complex).
+5. **Exercises:** attempt 2 Hard or Complex problems, ideally outside your strongest topic. Full hint ladder and reveal-solution are both fair game — today's goal is exposure, not solving unaided.
+6. **Recommended problems:** a curated menu of 6, spanning 6 different topics — **Trapping Rain Water II** (Complex, arrays), **Split Array Largest Sum** (Complex, binary search), **Regular Expression Matching** (Complex, DP), **Alien Dictionary** (Complex, graphs), **Binary Tree Cameras** (Complex, trees), **Largest Rectangle in Histogram** (Hard, stacks). Pick 2, ideally outside your strongest topic.
+7. **Difficulty:** Hard/Complex.
+8. **Number of problems:** 2, from a menu of 6.
+9. **Must explain:** what made each problem hard specifically, and what would help you recognize it faster next time.
+10. **Common mistakes:** treating a Complex problem as only "counting" if solved unaided — for this optional advanced practice, using hints and the reference solution to actually learn the technique is the intended use.
+11. **Revision:** none scheduled.
+12. **Estimated time:** ~3.5h.
+
+### Day 48 — Mock interview 4
+1. **Python:** none new.
+2. **DSA:** none new — interview conditions, incorporating recent weak-area and advanced practice.
+3. **Why:** a fourth timed mock interview, now incorporating everything the weak-area and advanced-practice days surfaced.
+4. **Visual:** the same self-timed Problem Workspace setup as Days 44-45.
+5. **Exercises:** one full mock interview (Medium-Hard) under a strict self-set timer (35-45 min), followed by the same honest post-interview review as previous mock interviews.
+6. **Recommended problems:** two Medium-Hard options — **Candy** (Hard, greedy) or **Basic Calculator** (Hard, strings). Pick one, or substitute your own.
+7. **Difficulty:** Medium-Hard.
+8. **Number of problems:** 1, from a menu of 2.
+9. **Must explain:** a full spoken-style walkthrough of your approach, including the parts that didn't go smoothly.
+10. **Common mistakes:** skipping the post-interview review because the interview itself felt fine.
+11. **Revision:** none scheduled.
+12. **Estimated time:** ~3h.
+
+### Day 49 — Full-length final interview simulation
+1. **Python:** none new.
+2. **DSA:** none new — a full back-to-back interview loop simulation.
+3. **Why:** the closest approximation this curriculum can offer to a real interview loop: two back-to-back timed problems with no break, no hints, and no reference solution until both are fully attempted.
+4. **Visual:** the same Problem Workspace setup, run twice in immediate succession.
+5. **Exercises:** two consecutive mock interviews (30-40 min each, back to back, no break), covering two different topics chosen without looking ahead. No hints, no solution reveal until BOTH are attempted — then review both together.
+6. **Recommended problems:** a curated menu of 4 Complex-tier problems spanning 4 topics for the two slots — **Maximal Rectangle** (stacks), **Text Justification** (strings), **Constrained Subsequence Sum** (queues), **Course Schedule III** (greedy). Pick any two from different topics.
+7. **Difficulty:** Complex.
+8. **Number of problems:** 2, from a menu of 4.
+9. **Must explain:** for each of the two problems, your approach, its correctness, and its time/space complexity, stated the way you would out loud in a real interview.
+10. **Common mistakes:** taking a break between the two problems, or peeking at hints mid-attempt.
+11. **Revision:** none scheduled.
+12. **Estimated time:** ~4h.
+
+### Day 50 — Final review and wrap-up
 1. **Python:** none new.
 2. **DSA:** none new.
-3. **Why:** one final mock interview under realistic conditions, followed by an honest look back at the full 45-day arc — consolidating both the DSA knowledge and a clear-eyed, data-backed view of what's genuinely strong vs still developing.
-4. **Visual:** the app's final dashboard — total problems solved, independent-solve rate, topics mastered vs weak, mock-interview history — reviewed as data, not felt impression.
-5. **Exercises:** one final mock interview (Medium); then write a short self-assessment (a few paragraphs) of your 3 strongest topics and 2-3 you'd keep practicing post-Day-45, checked against the dashboard's actual recorded data.
-6. **Recommended problems:** 1 mock interview problem.
-7. **Difficulty:** Medium.
-8. **Number of problems:** 1.
-9. **Must explain:** an honest, data-backed self-assessment (not just gut feeling), and a concrete plan for what to keep practicing afterward — this curriculum ends at placement-readiness, not total mastery; continued practice afterward is normal and expected.
-10. **Common mistakes:** whatever the final mock interview surfaces.
-11. **Revision:** none scheduled — Day 45 is the terminal review.
-12. **Estimated time:** ~3-3.5h.
+3. **Why:** one final, honest, data-backed look back at the full curriculum before moving on to independent practice.
+4. **Visual:** the dashboard's final view — problems solved, independent-solve rate, topics mastered vs weak, across the entire 50-day path.
+5. **Exercises:** write a short self-assessment — your 3 strongest topics and 2-3 to keep practicing, checked against the dashboard's actual data — then set a concrete post-Day-50 practice plan (e.g. 2 problems/week from your weakest topics, revisited monthly).
+6. **Recommended problems:** none new — this day is assessment and planning, not new problems.
+7. **Difficulty:** n/a.
+8. **Number of problems:** 0.
+9. **Must explain:** an honest, data-backed self-assessment, and a concrete, specific post-Day-50 practice plan.
+10. **Common mistakes:** a vague plan ("keep practicing") instead of a specific, schedulable one; self-assessing from memory/feeling alone instead of checking the dashboard.
+11. **Revision:** none scheduled — Day 50 is the terminal review.
+12. **Estimated time:** ~3h.
 
 ---
 
 ## Coverage summary
 
-Python fundamentals (Days 1-7) → arrays/strings/hashing/two pointers/sliding window (8-16) → sorting/binary search/recursion (17-24) → linked lists/stacks/queues/trees (25-32) → heaps/graphs/BFS/DFS/Dijkstra (33-38) → intro DP, 1D and 2D (39-42) → revision + 3 mock interviews (43-45). Deliberately excluded as out-of-scope for 45 days: advanced DP (bitmask, digit DP, DP-on-trees), segment trees/Fenwick trees, tries, union-find/DSU, advanced graph algorithms (Bellman-Ford, Floyd-Warshall, MST, topological sort beyond a brief DFS-based mention if it comes up naturally in Day 37), and bit manipulation beyond what a couple of problems touch incidentally. These are excellent *next* topics after Day 45, not before it.
+Python fundamentals (Days 1-7) → arrays/strings/hashing/two pointers/sliding window (8-16) → sorting/binary search/recursion (17-24) → linked lists/stacks/queues/trees (25-32) → heaps/graphs/BFS/DFS/Dijkstra (33-38) → intro DP, 1D and 2D (39-42) → revision, mock interviews, weak-area/advanced practice, and a final simulation (43-50). Greedy is taught as a cross-curriculum concept lesson rather than its own block (see the Greedy note above) — its problem pool spans Easy through Complex.
+
+Deliberately excluded, matching the original 45-day scope and unchanged by the 50-day expansion: advanced DP (bitmask, digit DP, DP-on-trees), segment trees/Fenwick trees, tries, union-find/DSU, advanced graph algorithms (Bellman-Ford, Floyd-Warshall, MST, topological sort beyond a brief DFS-based mention if it comes up naturally in Day 37), and bit manipulation beyond what a couple of problems touch incidentally. These remain excellent *next* topics after Day 50, not before it — the additional 5 days and 41 problems went toward deeper practice and a genuine Complex difficulty tier within the existing 16 topics, not toward these excluded structures.

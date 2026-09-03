@@ -43,8 +43,8 @@ export default function CurriculumMap() {
       <div className="page-header">
         <h2>Curriculum</h2>
         <p className="muted">
-          A recommended path, not a locked course &mdash; jump to any day, mark what you
-          already know, and come back to anything anytime.
+          A 50-day, Python-only path to DSA and coding-interview readiness &mdash; not a locked
+          course. Jump to any day, mark what you already know, and come back to anything anytime.
         </p>
       </div>
 

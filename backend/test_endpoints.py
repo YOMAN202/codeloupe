@@ -25,7 +25,7 @@ check("GET /api/health -> 200", r.status_code == 200, r.text)
 
 # ---- lessons --------------------------------------------------------------
 r = requests.get(f"{BASE}/api/lessons")
-check("GET /api/lessons -> 200, 45 lessons", r.status_code == 200 and len(r.json()) == 45, r.text[:300])
+check("GET /api/lessons -> 200, 50 lessons (45 -> 50 approved expansion)", r.status_code == 200 and len(r.json()) == 50, r.text[:300])
 
 r = requests.get(f"{BASE}/api/lessons/1")
 d = r.json()
@@ -41,8 +41,8 @@ check("GET /api/lessons/999 -> 404", r.status_code == 404)
 # ---- problems ---------------------------------------------------------
 r = requests.get(f"{BASE}/api/problems")
 problems = r.json()
-check("GET /api/problems -> 200, 109 problems (76 + 33 second-expansion, deduplicated)",
-      r.status_code == 200 and len(problems) == 109, len(problems))
+check("GET /api/problems -> 200, 150 problems (109 + 41 approved coverage-matrix expansion)",
+      r.status_code == 200 and len(problems) == 150, len(problems))
 check("  every problem has interview_priority in Core/Important/Optional",
       all(p.get("interview_priority") in ("Core", "Important", "Optional") for p in problems),
       {p["slug"] for p in problems if p.get("interview_priority") not in ("Core", "Important", "Optional")})
@@ -54,17 +54,27 @@ check("  every problem has a valid path_tier",
 check("  core-tier problems all have a day assigned",
       all(p["day"] is not None for p in problems if p["path_tier"] == "core"),
       [p["slug"] for p in problems if p["path_tier"] == "core" and p["day"] is None])
-check("  extended/advanced-tier problems have no day assigned",
-      all(p["day"] is None for p in problems if p["path_tier"] in ("extended", "advanced")),
-      [p["slug"] for p in problems if p["path_tier"] in ("extended", "advanced") and p["day"] is not None])
-check("  no Hard problems outside the advanced tier (Hard must stay strictly optional)",
-      all(p["path_tier"] == "advanced" for p in problems if p["difficulty"] == "Hard"),
-      [p["slug"] for p in problems if p["difficulty"] == "Hard" and p["path_tier"] != "advanced"])
+check("  extended/advanced-tier problems with a day set are only the curated Days 44-49 revision/mock-interview picks (never required for Core Path completion, never placed inside the core 1-42 sequence)",
+      all(44 <= p["day"] <= 49 for p in problems if p["path_tier"] in ("extended", "advanced") and p["day"] is not None),
+      [(p["slug"], p["day"]) for p in problems if p["path_tier"] in ("extended", "advanced") and p["day"] is not None and not (44 <= p["day"] <= 49)])
+check("  every problem has a valid difficulty (Easy/Medium/Hard/Complex)",
+      all(p.get("difficulty") in ("Easy", "Medium", "Hard", "Complex") for p in problems),
+      {p["slug"] for p in problems if p.get("difficulty") not in ("Easy", "Medium", "Hard", "Complex")})
+check("  no Hard/Complex problems outside the advanced tier (Hard/Complex must stay strictly optional)",
+      all(p["path_tier"] == "advanced" for p in problems if p["difficulty"] in ("Hard", "Complex")),
+      [p["slug"] for p in problems if p["difficulty"] in ("Hard", "Complex") and p["path_tier"] != "advanced"])
 r = requests.get(f"{BASE}/api/problems?path_tier=advanced")
 advanced_problems = r.json()
-check("GET /api/problems?path_tier=advanced -> filters to exactly the 11 Hard challenges",
-      r.status_code == 200 and len(advanced_problems) == 11 and all(p["difficulty"] == "Hard" for p in advanced_problems),
+check("GET /api/problems?path_tier=advanced -> filters to exactly the 35 Hard/Complex challenges",
+      r.status_code == 200 and len(advanced_problems) == 35 and all(p["difficulty"] in ("Hard", "Complex") for p in advanced_problems),
       len(advanced_problems))
+check("  every problems.topic x difficulty cell has at least one problem (full coverage matrix)",
+      all(
+          any(p["topic"] == t and p["difficulty"] == d for p in problems)
+          for t in {p["topic"] for p in problems}
+          for d in ("Easy", "Medium", "Hard", "Complex")
+      ),
+      "see deliverables/EXPANSION_PLAN.md for the matrix this asserts")
 
 r = requests.get(f"{BASE}/api/problems/group-anagrams")
 ga = r.json()
@@ -115,7 +125,7 @@ check("  resume_lesson points at day 30 (the in_progress one)",
       prog2.get("resume_lesson", {}).get("day") == 30, prog2.get("resume_lesson"))
 check("  recommended_next_lesson is the lowest not_started day (day 2, since day 1 was marked known)",
       prog2.get("recommended_next_lesson", {}).get("day") == 2, prog2.get("recommended_next_lesson"))
-check("  lessons_overview has all 45 lessons with status", len(prog2.get("lessons_overview", [])) == 45,
+check("  lessons_overview has all 50 lessons with status", len(prog2.get("lessons_overview", [])) == 50,
       len(prog2.get("lessons_overview", [])))
 
 r = requests.get(f"{BASE}/api/problems?day=8")

@@ -28,11 +28,17 @@ CREATE TABLE IF NOT EXISTS problems (
     slug TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
     day INTEGER,                   -- curriculum day this belongs to; NULL for
-                                    -- extended-practice problems not tied to a
-                                    -- specific required day (see path_tier)
+                                    -- pool-only extended/advanced problems not
+                                    -- anchored to any specific day. A day CAN be
+                                    -- set on an 'extended'/'advanced' problem too
+                                    -- (e.g. Days 44-49's curated mock-interview and
+                                    -- advanced-practice picks) -- that only means
+                                    -- "recommended for this day", it does NOT make
+                                    -- the problem required; path_tier alone still
+                                    -- governs Core Path membership (see path_tier).
     topic TEXT NOT NULL,           -- e.g. "arrays", "hashing"
     pattern TEXT,                  -- e.g. "two-pointer", "sliding-window"
-    difficulty TEXT NOT NULL,      -- Easy / Medium / Hard
+    difficulty TEXT NOT NULL,      -- Easy / Medium / Hard / Complex
     description_markdown TEXT NOT NULL,
     constraints_markdown TEXT,
     function_signature TEXT NOT NULL,   -- e.g. "def two_sum(nums, target):"
@@ -74,7 +80,18 @@ CREATE TABLE IF NOT EXISTS problems (
     estimated_solve_minutes INTEGER,
     progression_stage TEXT,        -- 'core' | 'variation' -- whether this is a topic's primary problem or a follow-up building the same pattern
     canonical_reference TEXT,      -- e.g. "LeetCode 1: Two Sum" -- citation only, never copied problem text
-    path_tier TEXT NOT NULL DEFAULT 'core'  -- 'core' (required 45-day path, tied to a day) | 'extended' (optional Easy/Medium reinforcement, day is NULL) | 'advanced' (optional curated Hard problems, day is NULL, never required for Core Path completion)
+    secondary_concept_slugs TEXT,  -- comma-separated concept_lessons.slug values (same convention as
+                                    -- related_problem_slugs above and concept_lessons.prerequisite_slugs)
+                                    -- for a concept this problem genuinely demonstrates BESIDES its
+                                    -- primary topic -- e.g. jump-game keeps topic='arrays' (that's still
+                                    -- the right primary classification) but lists 'greedy' here so the
+                                    -- Greedy concept lesson can dynamically surface it too, without
+                                    -- reclassifying the problem or hardcoding its slug in the lesson.
+                                    -- Read by app.py's _related_problems_for_concept as a second,
+                                    -- additive match alongside the existing topic match. NULL for most
+                                    -- problems -- only set where a problem is a genuinely strong example
+                                    -- of a DIFFERENT concept than its primary topic teaches.
+    path_tier TEXT NOT NULL DEFAULT 'core'  -- 'core' (required 50-day path, always tied to a day) | 'extended' (optional Easy/Medium reinforcement; day is usually NULL, but MAY be set to recommend it for a specific revision/practice day -- e.g. Days 44-49 -- without making it required) | 'advanced' (optional curated Hard/Complex problems; same day-may-be-set rule as 'extended'; never required for Core Path completion regardless of whether a day is set)
 );
 
 -- Per-lesson learning status, independent of the recommended day order.

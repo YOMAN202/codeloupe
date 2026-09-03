@@ -31,7 +31,7 @@ export function DifficultyBadge({ difficulty }) {
 // two-accent system (teal/amber) untouched by metadata and avoids emoji
 // as a section marker (see docs/decisions.md's design-system notes).
 const TIER_META = {
-  core: { label: "Core 45-Day Path" },
+  core: { label: "Core 50-Day Path" },
   extended: { label: "Extended Practice" },
   advanced: { label: "Advanced Challenge" },
 };

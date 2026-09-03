@@ -195,7 +195,7 @@ def reverse_list(values):
         check("Resume callout also appears on the curriculum map directly",
               page.locator(".callout-resume").count() > 0)
 
-        # Problem bank tier structure (Core 45-Day Path / Extended Practice /
+        # Problem bank tier structure (Core 50-Day Path / Extended Practice /
         # Advanced Challenges) -- covers the path_tier expansion.
         page.goto(f"{BASE}/problems", wait_until="networkidle")
         page.wait_for_selector(".tier-section-heading", timeout=10000)
@@ -219,7 +219,7 @@ def reverse_list(values):
         page.goto(f"{BASE}/dashboard", wait_until="networkidle")
         page.wait_for_selector(".core-path-progress", timeout=10000)
         core_header = page.locator(".core-path-progress-header h3").inner_text()
-        check("Dashboard shows Core 45-Day Path completion", "Core 45-Day Path" in core_header, core_header)
+        check("Dashboard shows Core 50-Day Path completion", "Core 50-Day Path" in core_header, core_header)
 
         check("No console errors across the extended tier-structure checks", len(console_errors) == 0, console_errors)
 

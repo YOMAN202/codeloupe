@@ -92,7 +92,10 @@ export default function Dashboard() {
     <div className="page">
       <div className="page-header">
         <h2>Dashboard</h2>
-        <p className="muted">Where you actually stand -- no points, no streak badges, just data.</p>
+        <p className="muted">
+          Python DSA and coding-interview preparation -- where you actually stand, no points, no
+          streak badges, just data.
+        </p>
       </div>
 
       <div className="callout-row">
@@ -167,7 +170,7 @@ export default function Dashboard() {
         <section className="core-path-progress">
           <div className="core-path-progress-header">
             <h3>
-              Core 45-Day Path: {progress.path_tier_progress.core.solved} /{" "}
+              Core 50-Day Path: {progress.path_tier_progress.core.solved} /{" "}
               {progress.path_tier_progress.core.total} solved
             </h3>
             <span className="muted small">
@@ -193,7 +196,7 @@ export default function Dashboard() {
             <span>
               Advanced: {progress.path_tier_progress.advanced.solved} /{" "}
               {progress.path_tier_progress.advanced.total}{" "}
-              <span className="muted">(optional Hard challenges)</span>
+              <span className="muted">(optional Hard/Complex challenges)</span>
             </span>
           </div>
         </section>
@@ -228,22 +231,28 @@ export default function Dashboard() {
       <div className="dashboard-columns">
         <section className="lesson-section">
           <h3>Curriculum progress</h3>
-          <p className="muted small">The 45-day, day-by-day sequence.</p>
+          <p className="muted small">The 50-day, day-by-day sequence.</p>
           <div className="lesson-status-bar">
-            {["completed", "known", "in_progress", "skipped", "not_started"].map((s) => {
-              const count = progress.lesson_status_counts[s] || 0;
-              const width = pct(count, 45);
-              return (
-                width > 0 && (
-                  <div
-                    key={s}
-                    className={`lesson-status-segment status-${s}`}
-                    style={{ width: `${width}%` }}
-                    title={`${s}: ${count}`}
-                  />
-                )
-              );
-            })}
+            {(() => {
+              // Derived from the actual counts returned, never a hardcoded
+              // day total -- self-correcting if the curriculum's length
+              // ever changes again (it already did once, 45 -> 50 days).
+              const totalLessons = Object.values(progress.lesson_status_counts).reduce((a, b) => a + b, 0);
+              return ["completed", "known", "in_progress", "skipped", "not_started"].map((s) => {
+                const count = progress.lesson_status_counts[s] || 0;
+                const width = pct(count, totalLessons);
+                return (
+                  width > 0 && (
+                    <div
+                      key={s}
+                      className={`lesson-status-segment status-${s}`}
+                      style={{ width: `${width}%` }}
+                      title={`${s}: ${count}`}
+                    />
+                  )
+                );
+              });
+            })()}
           </div>
           <ul className="status-legend">
             {Object.entries(progress.lesson_status_counts).map(([s, c]) => (

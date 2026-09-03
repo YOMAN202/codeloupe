@@ -4,7 +4,7 @@ concept_lessons/concept_checkpoints/concept_practice_exercises tables).
 
 This is a PILOT: two lessons -- 'arrays' (topic) and 'two-pointers'
 (pattern) -- chosen because they're the curriculum's own first topic and
-first pattern (days 8, 13, 14; see docs/45-day-curriculum.md), so the
+first pattern (days 8, 13, 14; see docs/50-day-curriculum.md), so the
 teaching system plugs directly into an existing, already-taught sequence
 rather than sitting off to the side. Once reviewed, the same shape
 (CONCEPT_LESSONS / CONCEPT_CHECKPOINTS / CONCEPT_PRACTICE_EXERCISES, one
@@ -2901,6 +2901,110 @@ CONCEPT_LESSONS = [
             "exponential."
         ),
     ),
+
+    dict(
+        slug="greedy",
+        kind="topic",
+        topic="greedy",
+        pattern_family=None,
+        title="Greedy: local choices, global answers",
+        display_order=1,
+        estimated_minutes=20,
+        summary="What makes a greedy algorithm work, how to recognize when it's safe to use one instead of "
+                "DP, and the exchange-argument intuition behind why the locally-best choice can be globally optimal.",
+        prerequisite_slugs="arrays,sorting",
+        what_markdown=(
+            "A greedy algorithm builds a solution one step at a time, at each step making whatever choice "
+            "looks best RIGHT NOW -- and never revisiting or undoing that choice later. There's no "
+            "backtracking, no trying multiple branches, no remembering alternatives: once a greedy algorithm "
+            "commits to a choice, it moves on. That's what makes greedy algorithms fast (usually a single "
+            "pass, `O(n)` or `O(n log n)`) -- and also what makes them risky: a greedy choice is only "
+            "correct when the problem has a specific structural property that guarantees the locally-best "
+            "choice never closes off a globally-better path."
+        ),
+        why_markdown=(
+            "When a greedy approach genuinely applies, it's usually the simplest, fastest solution available "
+            "-- often dramatically simpler than the dynamic-programming or backtracking approach the same "
+            "problem might otherwise need. Interviewers use greedy problems specifically to test whether you "
+            "can tell the difference between 'this locally-obvious choice happens to also be globally "
+            "correct' and 'this locally-obvious choice is a trap' -- the second case is exactly where DP or "
+            "backtracking becomes necessary instead."
+        ),
+        recognize_markdown=(
+            "A few signals suggest greedy is worth trying: the problem asks for an optimal count/arrangement "
+            "built from a sequence of independent-ish choices; sorting the input by some key (deadline, "
+            "ratio, size, start/end time) exposes an obvious 'always take the best available option next' "
+            "rule; and, most importantly, you can articulate WHY taking the locally-best option now can never "
+            "make the final answer worse than some other choice would have (see the exchange argument below). "
+            "If you can't articulate that reason -- if it just 'feels like it should work' -- that's a signal "
+            "to test it against a small counterexample before committing, or to reach for DP instead. You've "
+            "actually already used greedy reasoning earlier in this curriculum without necessarily naming it "
+            "as such: Container With Most Water's shrink-the-shorter-wall rule, Jump Game's farthest-reachable "
+            "tracking, Boats to Save People's pair-the-lightest-with-the-heaviest rule, and Task Scheduler's "
+            "always-run-the-most-frequent-remaining-task rule are all genuinely greedy algorithms. Their "
+            "primary topic stays where it's always been (arrays, two-pointer, heaps) since that's still the "
+            "right home for them -- but you'll find all four listed below, alongside the dedicated Greedy "
+            "problems, worth revisiting through this lens."
+        ),
+        intuition_markdown=(
+            "The core idea worth internalizing is the difference between a LOCAL choice (what looks best "
+            "right at this step, given only what you've seen so far) and the GLOBAL answer (what's actually "
+            "optimal across the whole input). Greedy algorithms only work when every local choice can be "
+            "proven to never foreclose a better global outcome -- formally, this is usually shown with an "
+            "**exchange argument**: assume some optimal solution exists that DIDN'T make the greedy choice at "
+            "some step, then show you can always modify that optimal solution to make the greedy choice "
+            "instead, without making it any worse. If that swap is always possible, the greedy choice is "
+            "provably safe. This is exactly why Assign Cookies works (giving the least-greedy child the "
+            "smallest sufficient cookie never wastes a cookie a greedier child could have used instead) and "
+            "why plain greedy coin-making FAILS for arbitrary coin denominations (using a big coin now can "
+            "genuinely make the remaining amount impossible to complete with fewer total coins -- there's no "
+            "valid exchange argument, which is exactly the signal that DP is needed instead)."
+        ),
+        walkthrough_intro_markdown=(
+            "Assign Cookies is a clean first example: sort both the children's greed factors and the "
+            "cookies' sizes, then walk both with two pointers, always trying to satisfy the LEAST greedy "
+            "remaining child with the SMALLEST cookie that can do it."
+        ),
+        walkthrough_code=(
+            "def find_content_children(g, s):\n"
+            "    g = sorted(g)\n"
+            "    s = sorted(s)\n"
+            "    i = j = 0\n"
+            "    while i < len(g) and j < len(s):\n"
+            "        if s[j] >= g[i]:\n"
+            "            i += 1\n"
+            "        j += 1\n"
+            "    return i  # number of satisfied children"
+        ),
+        walkthrough_frames=[
+            dict(caption="g=[1,2,3] (sorted), s=[1,1] (sorted). i=0, j=0: does the smallest cookie (s[0]=1) satisfy the least-greedy child (g[0]=1)? Yes -- match.",
+                 locals={"g": [1, 2, 3], "s": [1, 1], "i": 0, "j": 0}),
+            dict(caption="Match found: i advances to 1 (child satisfied), j advances to 1 (cookie used either way).",
+                 locals={"g": [1, 2, 3], "s": [1, 1], "i": 1, "j": 1}),
+            dict(caption="i=1, j=1: does s[1]=1 satisfy g[1]=2? No -- this cookie is too small for ANY remaining child (they're all at least as greedy as g[1]). Only j advances; it's simply wasted.",
+                 locals={"g": [1, 2, 3], "s": [1, 1], "i": 1, "j": 1}),
+            dict(caption="j=2 now equals len(s) -- no cookies left. Loop ends. i=1, so exactly 1 child was satisfied.",
+                 locals={"g": [1, 2, 3], "s": [1, 1], "i": 1, "j": 2}),
+        ],
+        common_mistakes_markdown=(
+            "Applying a greedy rule without ever checking WHY it should work -- 'take the biggest/smallest/"
+            "closest option first' sounds greedy-shaped for almost any problem, but is only actually correct "
+            "for the ones where an exchange argument holds. A classic trap: greedily making change with the "
+            "fewest coins works for denominations like [1, 5, 10, 25] but silently gives a WRONG (non-minimal) "
+            "answer for denominations like [1, 3, 4] targeting 6 (greedy takes 4+1+1 = 3 coins; the true "
+            "optimal is 3+3 = 2 coins) -- this exact failure is why General Coin Change is a DP problem, not "
+            "a greedy one. Another common mistake: sorting by the wrong key (e.g. by start time when the "
+            "problem's exchange argument actually depends on END time, as in Non-overlapping Intervals / "
+            "Meeting Rooms II) -- greedy is extremely sensitive to which order you process elements in."
+        ),
+        complexity_markdown=(
+            "Most greedy algorithms are `O(n log n)` (dominated by an up-front sort) or `O(n)` (a single "
+            "pass, when no sort is needed) -- and O(1) or O(n) extra space, since there's no branching search "
+            "tree to track. That's the main practical payoff versus DP or backtracking on the same problem: "
+            "when greedy genuinely applies, it's almost always both simpler to implement AND asymptotically "
+            "faster."
+        ),
+    ),
 ]
 
 CONCEPT_CHECKPOINTS = {
@@ -4220,6 +4324,67 @@ CONCEPT_CHECKPOINTS = {
                                    "(and the space to store the table) scales with the total number of "
                                    "cells, rows * cols."),
     ],
+    "greedy": [
+        dict(kind="choose_pattern",
+             prompt_markdown="Given intervals representing meetings, you want the MINIMUM number of removals "
+                              "so none of the remaining meetings overlap. Which approach fits?",
+             code=None,
+             choices_json=[
+                 "Greedy: sort by end time, keep whichever interval ends earliest whenever it doesn't overlap the last kept one",
+                 "Greedy: sort by start time, keep the first interval you see at each step",
+                 "Dynamic programming over every possible subset of intervals",
+                 "Backtracking, trying every possible removal order",
+             ],
+             correct_answer="Greedy: sort by end time, keep whichever interval ends earliest whenever it doesn't overlap the last kept one",
+             explanation_markdown="This is the classic interval-scheduling exchange argument: the interval that "
+                                   "ends earliest can only ever leave AS MUCH OR MORE room for everything after "
+                                   "it as any other choice -- so it's always at least as good to keep, never "
+                                   "worse. Sorting by start time (instead of end time) breaks that argument."),
+        dict(kind="spot_bug",
+             prompt_markdown="This is meant to make change for `amount` using the fewest coins from `coins` "
+                              "(sorted descending), always taking the biggest coin that fits. What's wrong "
+                              "with this greedy approach?",
+             code=(
+                 "def min_coins_greedy(coins, amount):\n"
+                 "    coins = sorted(coins, reverse=True)\n"
+                 "    count = 0\n"
+                 "    for c in coins:\n"
+                 "        while amount >= c:\n"
+                 "            amount -= c\n"
+                 "            count += 1\n"
+                 "    return count if amount == 0 else -1"
+             ),
+             choices_json=None,
+             correct_answer="Greedy coin-making only works for certain coin systems (like US coins). For "
+                             "arbitrary denominations -- e.g. coins=[1,3,4], amount=6 -- greedily taking the "
+                             "biggest coin first (4) leaves 2, forcing 1+1 (3 coins total: 4+1+1), when 3+3 "
+                             "(2 coins) is actually optimal. There's no valid exchange argument here, which "
+                             "is exactly the signal this needs dynamic programming instead.",
+             explanation_markdown="This is the textbook counterexample for why greedy isn't universally safe: "
+                                   "it's not that the code has a bug in the usual sense, it's that the GREEDY "
+                                   "STRATEGY ITSELF is wrong for this input shape. Coin Change (general "
+                                   "denominations) needs DP specifically because no exchange argument can be "
+                                   "made to justify always taking the biggest coin first."),
+        dict(kind="predict_output",
+             prompt_markdown="Trace Jump Game II's greedy approach by hand on nums=[2,3,1,1,4] -- what does it return?",
+             code="def jump(nums):\n"
+                  "    jumps = 0\n"
+                  "    current_end = 0\n"
+                  "    farthest = 0\n"
+                  "    for i in range(len(nums) - 1):\n"
+                  "        farthest = max(farthest, i + nums[i])\n"
+                  "        if i == current_end:\n"
+                  "            jumps += 1\n"
+                  "            current_end = farthest\n"
+                  "    return jumps",
+             choices_json=None,
+             correct_answer="2",
+             explanation_markdown="i=0: farthest=max(0,0+2)=2. i==current_end(0) -> jumps=1, current_end=2. "
+                                   "i=1: farthest=max(2,1+3)=4. i=2: farthest=max(4,2+1)=4. i==current_end(2) -> "
+                                   "jumps=2, current_end=4. i=3: farthest=max(4,3+1)=4. Loop ends (range stops "
+                                   "before index 4). Returns 2 -- jump from index 0 to index 1 (or 2), then to "
+                                   "index 4."),
+    ],
 }
 
 CONCEPT_PRACTICE_EXERCISES = {
@@ -5058,5 +5223,35 @@ CONCEPT_PRACTICE_EXERCISES = {
                             "1-indexed but the strings are 0-indexed), that character extends the match "
                             "found without either of them: dp[i][j] = dp[i-1][j-1] + 1. Otherwise take the "
                             "best of skipping a character from EITHER string: max(dp[i-1][j], dp[i][j-1])."),
+    ],
+    "greedy": [
+        dict(prompt_markdown="Write `min_platforms(arrivals, departures)` that returns the minimum number of "
+                              "railway platforms needed so that no two trains scheduled to be at the station "
+                              "at the same time share a platform (this is the same shape as Meeting Rooms II "
+                              "-- reuse that idea).",
+             starter_code="def min_platforms(arrivals, departures):\n    # Sort arrivals and departures independently, then walk\n"
+                          "    # them together like merging two sorted lists -- track how many\n"
+                          "    # trains are currently 'at the station' as you go.\n    pass",
+             solution_code=(
+                 "def min_platforms(arrivals, departures):\n"
+                 "    arrivals = sorted(arrivals)\n"
+                 "    departures = sorted(departures)\n"
+                 "    platforms_needed = 0\n"
+                 "    max_platforms = 0\n"
+                 "    i = j = 0\n"
+                 "    while i < len(arrivals):\n"
+                 "        if arrivals[i] <= departures[j]:\n"
+                 "            platforms_needed += 1\n"
+                 "            max_platforms = max(max_platforms, platforms_needed)\n"
+                 "            i += 1\n"
+                 "        else:\n"
+                 "            platforms_needed -= 1\n"
+                 "            j += 1\n"
+                 "    return max_platforms"
+             ),
+             hint_markdown="Every arrival needs a platform (+1 currently in use) and every departure frees one "
+                            "(-1). Sort both lists independently and walk them together, always processing "
+                            "whichever event (an arrival or a departure) happens next -- the running count's "
+                            "peak is your answer."),
     ],
 }

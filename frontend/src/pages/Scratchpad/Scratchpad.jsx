@@ -1,10 +1,91 @@
 import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import CodeEditor from "../../components/Editor/CodeEditor";
 import TraceViewer from "../../components/TraceViewer/TraceViewer";
 import StdinInput from "../../components/StdinInput/StdinInput";
-import { runCode, traceCode } from "../../api/client";
+import { runCode, traceCode, fetchLesson, fetchConcept } from "../../api/client";
 
 const DEFAULT_CODE = "# Free scratchpad -- try exercises here, or trace any snippet.\n";
+
+// "Try in Scratchpad" handoff: LessonDetail/ConceptLesson link here with
+// ?from=lesson&day=N or ?from=concept-exercise&concept=SLUG&id=N. Both
+// branches fetch through the SAME endpoints the lesson/concept pages
+// already use (fetchLesson/fetchConcept) rather than duplicating any
+// problem/exercise content into this component -- this is purely a
+// read-only display of what those endpoints already return, plus (for
+// the concept-exercise case only, since that's the one place a single
+// canonical starter_code actually exists) a GUARDED prefill that never
+// fires once the editor holds anything other than the untouched default.
+function useScratchpadContext(code, setCode) {
+  const [searchParams] = useSearchParams();
+  const [banner, setBanner] = useState(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    const from = searchParams.get("from");
+    if (!from) return;
+    setDismissed(false);
+
+    let cancelled = false;
+
+    if (from === "lesson") {
+      const day = searchParams.get("day");
+      if (!day) return;
+      fetchLesson(day)
+        .then((lesson) => {
+          if (cancelled) return;
+          setBanner({
+            kind: "lesson",
+            day: lesson.day,
+            title: lesson.title,
+            exercises_markdown: lesson.exercises_markdown,
+            problems: lesson.problems || [],
+          });
+          // No single starter_code to prefill here -- a day can carry
+          // several problems, each with its own starter code, so this
+          // context is banner-only (never touches `code`).
+        })
+        .catch(() => {
+          /* Best-effort context -- a failed lookup just means no banner,
+             never an error state for the scratchpad itself. */
+        });
+    } else if (from === "concept-exercise") {
+      const conceptSlug = searchParams.get("concept");
+      const exerciseId = searchParams.get("id");
+      if (!conceptSlug || !exerciseId) return;
+      fetchConcept(conceptSlug)
+        .then((concept) => {
+          if (cancelled) return;
+          const exercise = (concept.practice_exercises || []).find(
+            (ex) => String(ex.id) === String(exerciseId)
+          );
+          if (!exercise) return;
+          setBanner({
+            kind: "concept-exercise",
+            conceptSlug,
+            conceptTitle: concept.title,
+            prompt_markdown: exercise.prompt_markdown,
+            hint_markdown: exercise.hint_markdown,
+          });
+          // Guarded prefill: only ever replace an editor that's still at
+          // the untouched default -- never overwrite code the learner
+          // has already started writing (whether from an earlier context
+          // handoff or their own typing).
+          if (exercise.starter_code) {
+            setCode((current) => (current === DEFAULT_CODE ? exercise.starter_code : current));
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  return { banner: dismissed ? null : banner, dismissBanner: () => setDismissed(true) };
+}
 
 export default function Scratchpad() {
   const [code, setCode] = useState(DEFAULT_CODE);
@@ -19,6 +100,7 @@ export default function Scratchpad() {
   // the default per the requested UX: split screen is an opt-in choice,
   // never something a first-time visitor is dropped into.
   const [viewMode, setViewMode] = useState("stacked");
+  const { banner, dismissBanner } = useScratchpadContext(code, setCode);
 
   // Run and Trace intentionally read the SAME `stdin` state -- one Input
   // box feeds whichever action the learner clicks, so a program that reads
@@ -85,6 +167,36 @@ export default function Scratchpad() {
           Free-form Python. Run it directly, or step through its execution line by line.
         </p>
       </div>
+
+      {banner && (
+        <div className="scratchpad-context-banner" role="note">
+          {banner.kind === "lesson" && (
+            <p className="muted small">
+              From <Link to={`/lessons/${banner.day}`}>Day {banner.day}: {banner.title}</Link>
+              {banner.problems.length > 0 && (
+                <>
+                  {" "}-- that day's problems:{" "}
+                  {banner.problems.map((p, i) => (
+                    <span key={p.slug}>
+                      {i > 0 && ", "}
+                      <Link to={`/problems/${p.slug}`}>{p.title}</Link>
+                    </span>
+                  ))}
+                </>
+              )}
+            </p>
+          )}
+          {banner.kind === "concept-exercise" && (
+            <p className="muted small">
+              Exercise from <Link to={`/learn/${banner.conceptSlug}`}>{banner.conceptTitle}</Link>
+              {banner.prompt_markdown && <> -- {banner.prompt_markdown}</>}
+            </p>
+          )}
+          <button type="button" className="scratchpad-context-dismiss" onClick={dismissBanner} aria-label="Dismiss">
+            &times;
+          </button>
+        </div>
+      )}
 
       <div className="scratchpad-toolbar" role="group" aria-label="Layout">
         <span className="scratchpad-toolbar-label">Layout:</span>
