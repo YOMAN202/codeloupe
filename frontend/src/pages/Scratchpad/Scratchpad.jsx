@@ -78,7 +78,7 @@ export default function Scratchpad() {
   }, [traceScrollToken]);
 
   return (
-    <div className="page workspace-page scratchpad-page">
+    <div className={`page workspace-page scratchpad-page ${viewMode === "split" ? "scratchpad-page-split" : ""}`}>
       <div className="page-header">
         <h2>Scratchpad &amp; Trace</h2>
         <p className="muted">

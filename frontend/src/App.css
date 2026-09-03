@@ -990,6 +990,64 @@ code:not(pre code) {
 .scratchpad-columns-split .scratchpad-trace-column .trace-viewer,
 .scratchpad-columns-split .scratchpad-trace-column .output-panel { flex: 1; }
 
+/* Real regression found live in Split screen mode (reported after the
+   vh-clamp fix below shipped): .scratchpad-columns-split's
+   `align-items: stretch` gives the editor column a height driven BY its
+   own content (the clamp()'d editor + the stdin box) -- there was never
+   an actual outer bound, so "stretch" only ever meant "match whatever the
+   tallest child wants." Below a certain viewport height the clamp()'s own
+   180px-640px range stopped mattering: confirmed via getBoundingClientRect
+   at 1366x500/450/400 that the stdin box's on-screen position stayed
+   fixed (the column simply doesn't shrink past its content's natural
+   size) while the fixed ribbon's absolute position rose to meet it,
+   swallowing it -- the exact "stdin sent as ''" failure again, just at a
+   shorter viewport than the first fix covered, because nothing here was
+   actually bounded by the real, available viewport height.
+   Fix: give .scratchpad-page-split (added to the page root only while
+   Split is selected -- see Scratchpad.jsx) a real 100dvh-driven flex
+   column, so the header and toolbar take whatever their own natural
+   height is (nothing here has to guess it) and .scratchpad-columns-split
+   receives exactly what's left via flex: 1 + min-height: 0. Desktop only:
+   Stacked mode already scrolls the whole page normally and was never the
+   broken case, and mobile forces Split back into a single stacked column
+   (see the 860px override below) where the existing mobile-tuned clamp()
+   already covers this. */
+@media (min-width: 861px) {
+  .scratchpad-page-split {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  .scratchpad-page-split .scratchpad-columns-split {
+    flex: 1;
+    min-height: 0;
+  }
+  .scratchpad-columns-split .scratchpad-editor-column,
+  .scratchpad-columns-split .scratchpad-trace-column {
+    min-height: 0;
+  }
+  /* Inside that now-real bound, the editor and the stdin box stop
+     guessing at percentages of the viewport and instead genuinely share
+     whatever space the column actually has. stdin's flex: 0 0 auto is
+     the actual guarantee that fixes the bug: it is never a participant
+     in the size fight, so it can never lose and disappear -- it always
+     renders at its own natural (label + textarea) height. The editor
+     gets everything left over, floored at 180px (still enough to see
+     several lines and use its own internal scrollbar) and capped at
+     640px (its original, pre-fix size, so a tall monitor looks exactly
+     as it did before any of this). */
+  .scratchpad-columns-split .scratchpad-editor-column .code-editor-wrap {
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 180px;
+    max-height: 640px;
+  }
+  .scratchpad-columns-split .scratchpad-editor-column .stdin-input {
+    flex: 0 0 auto;
+  }
+}
+
 /* Narrow viewports: split mode would squeeze the editor and trace/output
    into two columns too thin to be usable, so it's overridden back to a
    single stacked column regardless of which mode is selected -- the
