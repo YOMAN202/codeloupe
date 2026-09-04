@@ -534,12 +534,14 @@ select:focus-visible,
 .chip-danger:hover:not(:disabled) { border-color: var(--err); }
 .chip-small { padding: 0.18rem 0.6rem; font-size: 0.72rem; }
 
-/* LessonDetail's "Back to Curriculum" link -- a .chip like every other
-   pill control on this page (status buttons, prev/next day), just an <a>
-   (via Link) instead of a <button>, so it needs its own display/margin
-   rather than relying on .chip's plain default. Sits above .page-header
-   as a breadcrumb, hence the bottom margin instead of .chip's all-around
-   0.15rem. */
+/* Shared by LessonDetail's "Back to Curriculum" link and ConceptLesson's
+   "Back to Learn" link -- a .chip like every other pill control on these
+   pages (status buttons, prev/next day), just an <a> (via Link) instead of
+   a <button>, so it needs its own display/margin rather than relying on
+   .chip's plain default. Sits above .page-header as a breadcrumb, hence
+   the bottom margin instead of .chip's all-around 0.15rem. One shared
+   class, not a copy per page, so the two stay visually identical by
+   construction rather than by two rules kept in sync by hand. */
 .lesson-back-link { display: inline-flex; align-items: center; margin: 0 0 0.9rem; }
 
 .filter-row, .status-controls, .tab-row, .hint-buttons {

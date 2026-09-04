@@ -202,6 +202,32 @@ export default function LessonDetail() {
         )}
       </section>
 
+      {/* why_it_matters/visual_concept are fields 3-4 of every day's
+          documented 12-field lesson content (docs/50-day-curriculum.md's
+          "How to read each day"), authored for all 50 days in the DB and
+          already returned by GET /api/lessons/<day> (`SELECT l.*` -- no
+          backend change needed) -- but this page never rendered either
+          one. "Why it matters" mirrors ConceptLesson.jsx's own identically
+          named section (same heading, same MultilineText renderer) for
+          consistency between the two lesson types; "Visual concept" has
+          no prior UI anywhere in the app, so it's placed the same way --
+          same lesson-section/h3 shape as every other field on this page,
+          nothing new invented. Positioned right after Concept (fields
+          1-2) and before Example, matching the docs' own field order. */}
+      {lesson.why_it_matters && (
+        <section className="lesson-section">
+          <h3>Why it matters</h3>
+          <MultilineText text={lesson.why_it_matters} />
+        </section>
+      )}
+
+      {lesson.visual_concept && (
+        <section className="lesson-section">
+          <h3>Visual concept</h3>
+          <MultilineText text={lesson.visual_concept} />
+        </section>
+      )}
+
       {lesson.example_code && (
         <section className="lesson-section">
           <h3>Example</h3>

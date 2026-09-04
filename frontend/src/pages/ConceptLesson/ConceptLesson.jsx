@@ -75,6 +75,19 @@ export default function ConceptLesson() {
 
   return (
     <div className="page">
+      {/* Symmetric to LessonDetail.jsx's "Back to Curriculum" link -- same
+          .lesson-back-link/.chip class (identical styling/spacing), same
+          placement immediately above .page-header, same unconditional
+          "always shown, always the same destination" shape rather than
+          anything referrer/query-param-based. That's what makes this work
+          correctly on direct navigation and a hard refresh: it doesn't
+          depend on how this concept lesson was reached, exactly like
+          "Back to Curriculum" doesn't depend on how a day lesson was
+          reached either. Reuses the existing /learn route/component --
+          no new route. */}
+      <Link to="/learn" className="chip lesson-back-link">
+        &larr; Back to Learn
+      </Link>
       <div className="page-header">
         <div className="lesson-detail-title">
           <span className="viz-type-tag">{KIND_LABEL[concept.kind] || concept.kind}</span>
@@ -88,16 +101,33 @@ export default function ConceptLesson() {
       </div>
 
       <div className="status-controls">
-        {["in_progress", "completed", "known"].map((s) => (
-          <button
-            key={s}
-            className={`chip ${concept.status === s ? "chip-active" : ""}`}
-            disabled={savingStatus}
-            onClick={() => updateStatus(s)}
-          >
-            Mark {s.replace("_", " ")}
-          </button>
-        ))}
+        {["in_progress", "completed", "known"].map((s) => {
+          // Same toggle-off shape as LessonDetail's status-controls (see
+          // that file): "known" is the one status a learner reaches
+          // deliberately rather than by progressing through the material,
+          // so clicking it again while already known removes the known
+          // status (back to not_started) instead of just re-saving the
+          // same value. "in_progress"/"completed" stay one-way "mark X"
+          // buttons -- concept_lesson_progress has no "skipped" status
+          // (see schema.sql), so unlike LessonDetail there's no fourth
+          // button here; that's an intentional difference in the data
+          // model, not a gap in this control.
+          const isActive = concept.status === s;
+          const isKnownToggle = s === "known";
+          const label = isKnownToggle && isActive ? "Unmark known" : `Mark ${s.replace("_", " ")}`;
+          const targetStatus = isKnownToggle && isActive ? "not_started" : s;
+          return (
+            <button
+              key={s}
+              className={`chip ${isActive ? "chip-active" : ""}`}
+              disabled={savingStatus}
+              aria-pressed={isKnownToggle ? isActive : undefined}
+              onClick={() => updateStatus(targetStatus)}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {concept.prerequisites?.length > 0 && (
