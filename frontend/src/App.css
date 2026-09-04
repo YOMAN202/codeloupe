@@ -534,6 +534,14 @@ select:focus-visible,
 .chip-danger:hover:not(:disabled) { border-color: var(--err); }
 .chip-small { padding: 0.18rem 0.6rem; font-size: 0.72rem; }
 
+/* LessonDetail's "Back to Curriculum" link -- a .chip like every other
+   pill control on this page (status buttons, prev/next day), just an <a>
+   (via Link) instead of a <button>, so it needs its own display/margin
+   rather than relying on .chip's plain default. Sits above .page-header
+   as a breadcrumb, hence the bottom margin instead of .chip's all-around
+   0.15rem. */
+.lesson-back-link { display: inline-flex; align-items: center; margin: 0 0 0.9rem; }
+
 .filter-row, .status-controls, .tab-row, .hint-buttons {
   display: flex;
   align-items: center;
@@ -773,24 +781,42 @@ code:not(pre code) {
 
 /* ---- problem browser (responsive row list, not a table) --------------- */
 
-/* Six columns (title/topic/pattern/difficulty/priority/time) at their
-   natural content width can genuinely exceed the available desktop width
-   once the sidebar + main-content padding are accounted for -- 1fr/auto
-   grid tracks have an implicit min-width floor of their own content
-   (nothing here forces a shrink below a badge's or a nowrap time value's
-   own width). Without a scroll boundary somewhere, that overflow used to
-   escape .problem-list-rows entirely and widen the whole page (a genuine
-   page-level horizontal scrollbar, or content simply rendering past the
-   viewport edge depending on browser) rather than staying contained to
-   the table -- this element is that boundary: rows/header scroll
-   sideways together, WITHIN the Problem Bank region, whenever their
-   combined natural width is wider than what's actually available. On
-   wide-enough viewports nothing scrolls at all; every column stays fully
-   visible either way, never hidden or shortened. */
-.problem-list-rows { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; overflow-x: auto; }
+/* Header and every row are each their OWN independent CSS Grid container
+   (there is no single grid spanning the whole list) -- so even when their
+   grid-template-columns VALUES are textually identical, `auto`-sized
+   tracks (the old badge/time columns) size themselves from THAT row's own
+   content, and genuinely drift out of alignment with every other row's
+   version of the same track. --problem-grid-columns fixes this at the
+   root: it's defined ONCE, here, on the shared ancestor, and both
+   .problem-list-header and .problem-list-row below reference it via
+   var(...) instead of each spelling out their own copy of the track list
+   -- so header and every row are, structurally, always using the exact
+   same column widths, never independently-computed ones that merely look
+   the same. Title/Topic/Pattern get minmax(0, Nfr) tracks (allowed to
+   shrink to 0 and wrap their text, rather than the old 1fr/auto's
+   implicit min-content floor -- that floor is what let a long title or
+   "IMPORTANT"/"COMPLEX" force a track wider than its neighbors' idea of
+   the same column); Difficulty/Priority/Est. time get fixed px tracks
+   (sized for the widest real badge/label text: "Important"/"Complex" at
+   the badge font-size, "DIFFICULTY"/"EST. TIME" at the header label
+   font-size) so badge text can NEVER change that column's width or shove
+   a neighboring column -- satisfies both "same grid-template-columns
+   everywhere" and "don't rely on content-based auto-sizing" at once,
+   with the widths living in exactly one place rather than as per-cell
+   margin/padding patches. overflow-x on .problem-list-rows remains the
+   safety net at narrow widths: columns never squeeze past their fixed/
+   minmax(0,...) sizes, they scroll sideways together instead. */
+.problem-list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  overflow-x: auto;
+  --problem-grid-columns: minmax(0, 1.8fr) minmax(0, 1fr) minmax(0, 1fr) 96px 108px 84px;
+}
 .problem-list-row {
   display: grid;
-  grid-template-columns: 1.8fr 1fr 1fr auto auto auto;
+  grid-template-columns: var(--problem-grid-columns);
   align-items: center;
   gap: 0.6rem 1rem;
   background: var(--s1);
@@ -798,34 +824,50 @@ code:not(pre code) {
   border-radius: var(--radius);
   padding: 0.65rem 1rem;
   color: var(--text);
-  min-width: max-content;
 }
 .problem-list-row:hover { background: var(--s2); border-color: var(--border-strong); text-decoration: none; }
 .problem-list-row-title { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
 .problem-list-row-title span:first-child { color: var(--text); font-weight: 500; }
 .problem-list-row:hover .problem-list-row-title span:first-child { color: var(--teal); }
 .problem-list-row-meta { color: var(--text-faint); font-size: 0.74rem; }
-.problem-list-row-topic { color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; }
-.problem-list-row-pattern { color: var(--text-faint); font-size: 0.8rem; white-space: nowrap; }
+.problem-list-row-topic { color: var(--text-dim); font-size: 0.85rem; min-width: 0; }
+.problem-list-row-pattern { color: var(--text-faint); font-size: 0.8rem; min-width: 0; }
 .problem-list-row-time { color: var(--text-faint); font-size: 0.8rem; font-family: var(--font-mono); text-align: right; white-space: nowrap; }
 .problem-list-header {
   display: grid;
-  grid-template-columns: 1.8fr 1fr 1fr auto auto auto;
+  grid-template-columns: var(--problem-grid-columns);
   gap: 0.6rem 1rem;
   padding: 0 1rem;
+  /* Invisible left/right border, matching .problem-list-row's real 1px
+     border on those same two sides (top/bottom deliberately excluded --
+     this is only about horizontal space, and the header has no vertical
+     border to mirror). Both elements are box-sizing: border-box with an
+     otherwise-identical outer (border-box) width, so without this the
+     header's CONTENT box -- the space its fr/minmax tracks actually
+     resolve against -- would end up 2px wider than a row's, and the
+     shared --problem-grid-columns variable would resolve to two
+     genuinely different sets of pixel widths despite being the exact
+     same declared value. This is what was producing the fractional-pixel
+     column drift between the header and every row even after the shared
+     variable was introduced. */
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
   color: var(--text-faint);
   font-size: 0.7rem;
   font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  min-width: max-content;
 }
 
 @media (max-width: 760px) {
-  .problem-list-row, .problem-list-header { grid-template-columns: 1fr; min-width: 0; }
+  /* Redefined once, here, on the same shared ancestor -- .problem-list-row
+     and .problem-list-header both pick it up automatically via var(...),
+     so this stays a single-source-of-truth override too, not two
+     separate grid-template-columns overrides that could drift from each
+     other the way the pre-fix desktop rules did. */
+  .problem-list-rows { --problem-grid-columns: 1fr; overflow-x: visible; }
   .problem-list-header { display: none; }
   .problem-list-row-time { text-align: left; }
-  .problem-list-row-topic, .problem-list-row-pattern { white-space: normal; }
 }
 
 /* ---- problem workspace --------------------------------------------------- */

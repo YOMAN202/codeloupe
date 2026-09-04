@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { fetchLesson, setLessonProgress } from "../../api/client";
 import { StatusBadge, DifficultyBadge } from "../../components/Badges/Badges";
@@ -25,6 +25,16 @@ export default function LessonDetail() {
   const [error, setError] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
+  // `advancing` (state) drives what's rendered -- the disabled attribute
+  // and "Saving..." label. `advancingRef` (a ref, mutated synchronously)
+  // is the actual re-entrancy lock goToDay checks: React state updates
+  // are batched/async, so two goToDay(1) calls firing back-to-back in the
+  // same tick (a genuinely fast double-click, faster than a re-render)
+  // could otherwise both read the same pre-update `advancing` value and
+  // both go through. A ref has no such window -- it's visible to the very
+  // next synchronous call, immediately.
+  const advancingRef = useRef(false);
 
   function load() {
     setLoading(true);
@@ -49,12 +59,70 @@ export default function LessonDetail() {
     }
   }
 
+  // Prev/next day navigation. Advancing forward (delta > 0) through this
+  // control -- and ONLY through this control, never just opening a day and
+  // never jumping in from Curriculum's own lesson-card links -- is what
+  // "progressing normally" means: mark the CURRENT day completed first,
+  // using the exact same lesson-progress API/status the manual "Mark
+  // completed" button already uses (no second progress mechanism). Skips
+  // the write entirely when the current status is "known" or "skipped": a
+  // learner's deliberate manual choice must never be silently overwritten
+  // by just moving on to the next day. Already-"completed" also skips the
+  // write (nothing to change). Going backward never touches status at all,
+  // so it never sets/checks `advancing` either -- there's no request in
+  // flight to guard against on that path.
+  //
+  // `advancing` exists for two closely-related reasons rather than two
+  // separate mechanisms: (1) it disables the Day N+1 button and swaps its
+  // label to "Saving..." -- the same in-flight-label pattern Scratchpad's
+  // Run/Trace buttons already use -- so a slow completion write reads as
+  // "working", never as a dead button; (2) `advancingRef` is the actual
+  // re-entrancy fix -- see its declaration above for why a ref, not just
+  // the `advancing` state, is what's checked here -- so a rapid
+  // double-click can't fire two overlapping status writes or queue
+  // duplicate navigations.
+  async function goToDay(delta) {
+    const target = Number(day) + delta;
+    if (delta > 0) {
+      if (advancingRef.current) return;
+      advancingRef.current = true;
+      setAdvancing(true);
+    }
+    if (delta > 0 && lesson && (lesson.status === "not_started" || lesson.status === "in_progress")) {
+      try {
+        await setLessonProgress(day, "completed");
+      } catch {
+        // Best-effort, same as before: a failed write leaves the day
+        // genuinely not completed (never falsely marked completed) and
+        // doesn't trap the learner here over a network blip -- they can
+        // always mark it manually afterwards, same as any other status
+        // change. Consistent with how the rest of this app treats
+        // secondary background writes (e.g. Scratchpad's context-banner
+        // fetch) as best-effort rather than blocking.
+      }
+    }
+    navigate(`/lessons/${target}`);
+    if (delta > 0) {
+      advancingRef.current = false;
+      setAdvancing(false);
+    }
+  }
+
   if (loading) return <p className="muted">Loading lesson...</p>;
   if (error) return <p className="error">{error}</p>;
   if (!lesson) return null;
 
   return (
     <div className="page">
+      {/* Day lessons are part of Curriculum, not a separate section (see
+          App.jsx's sidebar active-state handling for the same relationship
+          expressed there) -- this reuses the existing /curriculum route/
+          component rather than a second one, and sits above the title as a
+          breadcrumb-style return path so it doesn't compete with the
+          prev/next day controls at the bottom of the page. */}
+      <Link to="/curriculum" className="chip lesson-back-link">
+        &larr; Back to Curriculum
+      </Link>
       <div className="page-header">
         <div className="lesson-detail-title">
           <h2>
@@ -211,11 +279,11 @@ export default function LessonDetail() {
       )}
 
       <div className="lesson-nav-buttons">
-        <button className="chip" onClick={() => navigate(`/lessons/${Number(day) - 1}`)} disabled={Number(day) <= 1}>
+        <button className="chip" onClick={() => goToDay(-1)} disabled={Number(day) <= 1}>
           &larr; Day {Number(day) - 1}
         </button>
-        <button className="chip" onClick={() => navigate(`/lessons/${Number(day) + 1}`)} disabled={Number(day) >= 50}>
-          Day {Number(day) + 1} &rarr;
+        <button className="chip" onClick={() => goToDay(1)} disabled={Number(day) >= 50 || advancing}>
+          {advancing ? "Saving..." : <>Day {Number(day) + 1} &rarr;</>}
         </button>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Routes, Route } from "react-router-dom";
+import { NavLink, Routes, Route, useLocation } from "react-router-dom";
 import CurriculumMap from "./pages/CurriculumMap/CurriculumMap";
 import LessonDetail from "./pages/LessonDetail/LessonDetail";
 import ProblemBrowser from "./pages/ProblemBrowser/ProblemBrowser";
@@ -87,10 +87,16 @@ function HeartIcon() {
 // a generic slice-the-first-N-characters rule producing something less
 // recognizable. The full label is still always available as a native
 // tooltip (title) and to screen readers (aria-label), collapsed or not.
+// `extraActivePaths` covers routes that conceptually belong to a nav item
+// but don't share its own URL prefix -- today just Curriculum, whose day
+// lesson pages live at /lessons/:day (see NavItem below for how this
+// combines with NavLink's own to-based matching, and CurriculumMap.jsx for
+// why lesson pages weren't just nested under /curriculum/:day instead:
+// each keeps its own simpler route).
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", end: true, short: "Da" },
   { to: "/learn", label: "Learn", short: "Le" },
-  { to: "/curriculum", label: "Curriculum", short: "Cu" },
+  { to: "/curriculum", label: "Curriculum", short: "Cu", extraActivePaths: ["/lessons"] },
   { to: "/problems", label: "Problems", short: "Pr" },
   { to: "/mistakes", label: "Mistake Journal", short: "MJ" },
   { to: "/scratchpad", label: "Scratchpad & Trace", short: "Sc" },
@@ -114,11 +120,21 @@ const SUPPORT_NAV_ITEM = { to: "/support", label: "Support Codeloupe", short: "â
 // dot/mono-initials the primary six use, styled pink via
 // .nav-link-heart / .nav-link-short-heart (color, sizing) in App.css.
 function NavItem({ item }) {
+  // Route-aware, not click-origin-aware: reads the current URL directly
+  // (works identically on a client-side nav, a hard refresh, or a direct
+  // link), rather than tracking "how the user got here" -- exactly what
+  // makes it reliable on refresh/direct navigation. Only Curriculum
+  // defines extraActivePaths, so this is a no-op for every other item.
+  const location = useLocation();
+  const extraActive = item.extraActivePaths?.some((p) => location.pathname.startsWith(p)) ?? false;
+
   return (
     <NavLink
       to={item.to}
       end={item.end}
-      className={`nav-link${item.heart ? " nav-link-support" : ""}`}
+      className={({ isActive }) =>
+        `nav-link${item.heart ? " nav-link-support" : ""}${isActive || extraActive ? " active" : ""}`
+      }
       title={item.label}
       aria-label={item.heart ? `${item.label} (support the project)` : item.label}
     >
