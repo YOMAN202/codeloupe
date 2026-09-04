@@ -16,11 +16,18 @@ adding a "Back to Learn" link to ConceptLesson:
       same unconditional (not referrer/query-param-based) shape, reusing
       the existing /learn route.
   1d. Mark/unmark known works the same way on both Curriculum's day
-      lessons (LessonDetail) and Learn's concept lessons (ConceptLesson).
+      lessons (LessonDetail) and Learn's concept lessons (ConceptLesson),
+      including persistence of the toggle across a hard refresh in both
+      directions (known -> unmarked).
   1e. LessonDetail now renders "Why it matters" and "Visual concept" --
       two of every day's documented 12 lesson-content fields, authored in
       the DB for all 50 days and already returned by the API, but never
       previously rendered anywhere in the app's history.
+  1f. ConceptLesson gets Previous/Next Learn-topic navigation, ordered by
+      the same canonical ordering GET /api/concepts and the Learn hub
+      already use (topic, kind, display_order) -- correct at the first
+      and last topic (boundary button disabled), on direct nav/refresh to
+      a middle topic, and never itself touching concept progress.
   2. Clicking "Day N+1 ->" auto-completes the CURRENT day via the existing
      lesson-progress API, without auto-completing on mere page load and
      without cascading to skipped days on a direct jump
@@ -33,12 +40,15 @@ adding a "Back to Learn" link to ConceptLesson:
 Run standalone against the live dev server + Flask API:
     python3 e2e_final_ui_fixes_test.py
 """
+import json
 import sys
 import threading
 import time
+import urllib.request
 from playwright.sync_api import sync_playwright
 
 BASE = "http://127.0.0.1:5173/#"
+API_BASE = "http://127.0.0.1:5001/api"
 console_errors = []
 failures = []
 
@@ -226,6 +236,133 @@ def run():
         page.wait_for_timeout(200)
         check(
             "Learn tab: 'Unmark known' works on a concept lesson (reverts to not started)",
+            page.locator(".lesson-detail-title .badge").inner_text().strip().lower() == "not started",
+        )
+
+        # ------------------------------------------------------------
+        # 1d continued: refresh persistence of the known toggle itself
+        # (not just the badge) -- re-mark known, hard refresh, confirm
+        # the button still reads "Unmark known" (not reverted to "Mark
+        # known"), unmark, hard refresh again, confirm it's back to
+        # "Mark known". Uses a different concept (binary-search) so this
+        # doesn't depend on / interact with the "arrays" state above.
+        # ------------------------------------------------------------
+        page.goto(f"{BASE}/learn/binary-search", wait_until="networkidle")
+        page.wait_for_selector(".status-controls", timeout=10000)
+        page.wait_for_timeout(300)
+        bs_controls = page.locator(".status-controls button")
+        check(
+            "Learn refresh-persistence: starts as 'Mark known'",
+            "Mark known" in bs_controls.all_inner_texts(),
+            bs_controls.all_inner_texts(),
+        )
+        bs_controls.filter(has_text="Mark known").click()
+        page.wait_for_timeout(200)
+        check(
+            "Learn refresh-persistence: becomes 'Unmark known' after clicking",
+            "Unmark known" in bs_controls.all_inner_texts(),
+        )
+        page.reload(wait_until="networkidle")
+        page.wait_for_selector(".status-controls", timeout=10000)
+        page.wait_for_timeout(300)
+        bs_controls = page.locator(".status-controls button")
+        check(
+            "Learn refresh-persistence: 'Unmark known' SURVIVES a hard refresh",
+            "Unmark known" in bs_controls.all_inner_texts(),
+            bs_controls.all_inner_texts(),
+        )
+        bs_controls.filter(has_text="Unmark known").click()
+        page.wait_for_timeout(200)
+        check(
+            "Learn refresh-persistence: clicking 'Unmark known' reverts to 'Mark known'",
+            "Mark known" in bs_controls.all_inner_texts(),
+        )
+        page.reload(wait_until="networkidle")
+        page.wait_for_selector(".status-controls", timeout=10000)
+        page.wait_for_timeout(300)
+        bs_controls = page.locator(".status-controls button")
+        check(
+            "Learn refresh-persistence: unmarked state SURVIVES a hard refresh too",
+            "Mark known" in bs_controls.all_inner_texts() and "Unmark known" not in bs_controls.all_inner_texts(),
+            bs_controls.all_inner_texts(),
+        )
+
+        # ==================================================================
+        # 1f. Previous/Next Learn topic navigation (ConceptLesson), using
+        # the canonical ordering already served by GET /api/concepts (the
+        # same ORDER BY topic, kind, display_order the Learn hub itself
+        # renders from -- see app.py's list_concepts and Learn.jsx). Pure
+        # navigation: never touches concept_lesson_progress.
+        # ==================================================================
+        concepts_order = json.loads(urllib.request.urlopen(f"{API_BASE}/concepts").read())
+        first_slug, second_slug = concepts_order[0]["slug"], concepts_order[1]["slug"]
+        last_slug, second_last_slug = concepts_order[-1]["slug"], concepts_order[-2]["slug"]
+        mid_index = len(concepts_order) // 2
+        mid_slug = concepts_order[mid_index]["slug"]
+
+        page.goto(f"{BASE}/learn/{first_slug}", wait_until="networkidle")
+        page.wait_for_selector(".lesson-nav-buttons", timeout=10000)
+        page.wait_for_timeout(300)
+        nav_btns = page.locator(".lesson-nav-buttons button")
+        check("Learn nav: first topic's Previous button is disabled", nav_btns.nth(0).is_disabled())
+        check("Learn nav: first topic's Next button is enabled", not nav_btns.nth(1).is_disabled())
+
+        nav_btns.nth(1).click()
+        page.wait_for_timeout(300)
+        check(
+            "Learn nav: clicking Next from the first topic lands on the second topic",
+            page.url.endswith(f"/learn/{second_slug}"),
+            page.url,
+        )
+
+        page.locator(".lesson-nav-buttons button").nth(0).click()
+        page.wait_for_timeout(300)
+        check(
+            "Learn nav: clicking Previous returns to the first topic",
+            page.url.endswith(f"/learn/{first_slug}"),
+            page.url,
+        )
+
+        page.goto(f"{BASE}/learn/{last_slug}", wait_until="networkidle")
+        page.wait_for_selector(".lesson-nav-buttons", timeout=10000)
+        page.wait_for_timeout(300)
+        last_nav_btns = page.locator(".lesson-nav-buttons button")
+        check("Learn nav: last topic's Next button is disabled", last_nav_btns.nth(1).is_disabled())
+        check("Learn nav: last topic's Previous button is enabled", not last_nav_btns.nth(0).is_disabled())
+        last_nav_btns.nth(0).click()
+        page.wait_for_timeout(300)
+        check(
+            "Learn nav: Previous from the last topic lands on the second-to-last topic",
+            page.url.endswith(f"/learn/{second_last_slug}"),
+            page.url,
+        )
+
+        # Direct navigation / hard refresh on a middle topic.
+        page.goto(f"{BASE}/learn/{mid_slug}", wait_until="networkidle")
+        page.wait_for_selector(".lesson-nav-buttons", timeout=10000)
+        page.wait_for_timeout(300)
+        check("Learn nav: middle topic shows both Previous and Next enabled (direct nav)",
+              not page.locator(".lesson-nav-buttons button").nth(0).is_disabled()
+              and not page.locator(".lesson-nav-buttons button").nth(1).is_disabled())
+        page.reload(wait_until="networkidle")
+        page.wait_for_selector(".lesson-nav-buttons", timeout=10000)
+        page.wait_for_timeout(300)
+        check("Learn nav: middle topic still shows both enabled after a hard refresh",
+              not page.locator(".lesson-nav-buttons button").nth(0).is_disabled()
+              and not page.locator(".lesson-nav-buttons button").nth(1).is_disabled())
+
+        # Navigating between topics must not touch progress: mid_slug starts
+        # not_started, we move to its neighbor and back, and it must still
+        # read not_started (no status was ever set on it in this test run).
+        page.locator(".status-controls button").first.wait_for()
+        neighbor_nav = page.locator(".lesson-nav-buttons button")
+        neighbor_nav.nth(1).click()
+        page.wait_for_timeout(300)
+        neighbor_nav = page.locator(".lesson-nav-buttons button")
+        neighbor_nav.nth(0).click()
+        page.wait_for_timeout(300)
+        check(
+            "Learn nav: moving Next then Previous does not alter the topic's progress status",
             page.locator(".lesson-detail-title .badge").inner_text().strip().lower() == "not started",
         )
 

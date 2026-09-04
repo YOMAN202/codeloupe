@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { fetchConcept, setConceptProgress } from "../../api/client";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { fetchConcept, fetchConcepts, setConceptProgress } from "../../api/client";
 import { StatusBadge, DifficultyBadge } from "../../components/Badges/Badges";
 import { renderInlineCode } from "../../components/MultilineText/MultilineText";
 import ConceptWalkthrough from "../../components/ConceptWalkthrough/ConceptWalkthrough";
@@ -42,10 +42,22 @@ function PracticeExercise({ exercise, index, conceptSlug }) {
 
 export default function ConceptLesson() {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const [concept, setConcept] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [savingStatus, setSavingStatus] = useState(false);
+  // Canonical Learn ordering for Previous/Next topic nav, straight from
+  // the same /api/concepts list the Learn hub itself renders from (see
+  // Learn.jsx and app.py's list_concepts: ORDER BY topic, kind, then
+  // display_order) -- not a second, hand-picked ordering. Fetched once on
+  // mount (empty dep array), independent of `slug`: the set of all 29
+  // concepts and their order never changes as you move between them, so
+  // this doesn't re-fetch on every Previous/Next click, and it's already
+  // in place on a direct nav or hard refresh to any single concept page.
+  // Best-effort, same spirit as the rest of this page's error handling --
+  // if it fails, the page still works, it just won't offer prev/next nav.
+  const [conceptOrder, setConceptOrder] = useState([]);
 
   function load() {
     setLoading(true);
@@ -56,6 +68,12 @@ export default function ConceptLesson() {
   }
 
   useEffect(load, [slug]);
+
+  useEffect(() => {
+    fetchConcepts()
+      .then((list) => setConceptOrder(list.map((c) => ({ slug: c.slug, title: c.title }))))
+      .catch(() => {});
+  }, []);
 
   async function updateStatus(status) {
     setSavingStatus(true);
@@ -72,6 +90,15 @@ export default function ConceptLesson() {
   if (loading) return <p className="muted">Loading lesson...</p>;
   if (error) return <p className="error">{error}</p>;
   if (!concept) return null;
+
+  // Position of the currently-open concept within the canonical order.
+  // -1 (not found -- e.g. conceptOrder hasn't loaded yet) disables both
+  // buttons via the null checks below, same as an out-of-range index at
+  // either end of the list would.
+  const orderIndex = conceptOrder.findIndex((c) => c.slug === slug);
+  const prevConcept = orderIndex > 0 ? conceptOrder[orderIndex - 1] : null;
+  const nextConcept =
+    orderIndex >= 0 && orderIndex < conceptOrder.length - 1 ? conceptOrder[orderIndex + 1] : null;
 
   return (
     <div className="page">
@@ -225,6 +252,42 @@ export default function ConceptLesson() {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Previous/Next Learn topic -- same logical spot and same
+          .lesson-nav-buttons/.chip shape as LessonDetail's Day
+          prev/next controls, at the very end of the page, after all
+          lesson content. Pure navigation only: unlike LessonDetail's
+          goToDay, this never calls setConceptProgress -- moving between
+          Learn topics has no completion side effect. Rendered only once
+          conceptOrder has loaded, so there's no flash of a wrongly
+          enabled/disabled button before the canonical order is known. */}
+      {conceptOrder.length > 0 && (
+        <div className="lesson-nav-buttons">
+          <button
+            className="chip"
+            onClick={() => prevConcept && navigate(`/learn/${prevConcept.slug}`)}
+            disabled={!prevConcept}
+          >
+            &larr; {prevConcept ? prevConcept.title : "First topic"}
+          </button>
+          {/* Boundary label deliberately avoids the bare word "Next" --
+              ConceptWalkthrough's own step control (rendered on this same
+              page, in "Worked example" above) has its own unrelated
+              "Next ->" button, and the two would otherwise collide as
+              ambiguous matches for anything selecting a button by that
+              name (see e2e_teaching_test.py's walkthrough-stepping check,
+              which does exactly that). Every other state here shows the
+              actual destination topic's title instead, which never
+              collides. */}
+          <button
+            className="chip"
+            onClick={() => nextConcept && navigate(`/learn/${nextConcept.slug}`)}
+            disabled={!nextConcept}
+          >
+            {nextConcept ? nextConcept.title : "Last topic"} &rarr;
+          </button>
+        </div>
       )}
     </div>
   );
